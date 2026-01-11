@@ -1,24 +1,29 @@
-﻿using ConsoleProto;
+﻿using System.Runtime.InteropServices;
+using ConsoleProto;
 using Microsoft.Graph;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Broker;
 
 var scopes = new[] { "User.Read", "Calendars.ReadWrite" };
 
-BrokerOptions options = new(BrokerOptions.OperatingSystems.Windows)
-{
-    Title = "My Awesome Application"
-};
+BrokerOptions options;
+    options = new(BrokerOptions.OperatingSystems.Windows)
+    {
+        Title = "My Awesome Application"
+    };
 
-IPublicClientApplication app =
-    PublicClientApplicationBuilder.Create("0b4dbe1b-b67c-4ce1-b46b-d66832dc80b0")
+Func<IntPtr> getParentWindowFunc = Native.GetConsoleOrTerminalWindow;
+
+PublicClientApplicationBuilder appBuilder = PublicClientApplicationBuilder.Create("0b4dbe1b-b67c-4ce1-b46b-d66832dc80b0")
     .WithAuthority("https://login.microsoftonline.com/consumers", validateAuthority: true)
-    .WithDefaultRedirectUri()
-    .WithParentActivityOrWindow(Native.GetConsoleOrTerminalWindow)
-    .WithBroker(options)
-    .Build();
-
-// AuthenticationResult? result = null;
+    .WithDefaultRedirectUri();
+ 
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+{
+    appBuilder = appBuilder.WithParentActivityOrWindow(getParentWindowFunc)
+        .WithBroker(options);
+}
+IPublicClientApplication app = appBuilder.Build();
 
 // Try to use the previously signed-in account from the cache
 IEnumerable<IAccount> accounts = await app.GetAccountsAsync();
@@ -28,29 +33,6 @@ foreach (var acct in accounts)
 }
 
 IAccount? existingAccount = accounts.FirstOrDefault();
-
-// try
-// {
-//     if (existingAccount != null)
-//     {
-//         result = await app.AcquireTokenSilent(scopes, existingAccount).ExecuteAsync();
-//     }
-//     // Next, try to sign in silently with the account that the user is signed into Windows
-//     else
-//     {
-//         result = await app.AcquireTokenSilent(scopes, PublicClientApplication.OperatingSystemAccount)
-//                             .ExecuteAsync();
-//     }
-
-// }
-// // Can't get a token silently, go interactive
-// catch (Exception ex)
-// {
-//     result = await app.AcquireTokenInteractive(scopes).ExecuteAsync().ConfigureAwait(false);
-// }
-
-// Console.WriteLine($"Access token:\n{result.AccessToken}");
-// Console.WriteLine($"Signed in user: {result.Account.Username} ({result.Account.HomeAccountId?.Identifier}), env: {result.Account.Environment}");
 
 // Create GraphServiceClient with MSAL authentication
 var authProvider = new MsalAuthenticationProvider(app, scopes, existingAccount);
