@@ -41,6 +41,39 @@ export async function getCalendars(accessToken: string): Promise<Calendar[]> {
 }
 
 /**
+ * Creates a new calendar for the authenticated user
+ */
+export async function createCalendar(accessToken: string, name: string): Promise<Calendar> {
+  const client = createGraphClient(accessToken);
+  
+  try {
+    const calendar = {
+      name: name
+    };
+    
+    const response = await client.api('/me/calendars').post(calendar);
+    return response;
+  } catch (error) {
+    console.error('Error creating calendar:', error);
+    throw error;
+  }
+}
+
+/**
+ * Deletes a calendar by ID
+ */
+export async function deleteCalendar(accessToken: string, calendarId: string): Promise<void> {
+  const client = createGraphClient(accessToken);
+  
+  try {
+    await client.api(`/me/calendars/${calendarId}`).delete();
+  } catch (error) {
+    console.error('Error deleting calendar:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetches user information
  */
 export async function getUserInfo(accessToken: string) {

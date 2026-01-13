@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
-import { getCalendars, getUserInfo, Calendar } from '@/lib/graphService';
+import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
 import CalendarList from '@/components/CalendarList';
+import CreateCalendar from '@/components/CreateCalendar';
 
 export default function Home() {
   const { instance, accounts, inProgress } = useMsal();
@@ -75,6 +76,42 @@ export default function Home() {
     }
   };
 
+  const handleCreateCalendar = async (name: string) => {
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await createCalendar(response.accessToken, name);
+      
+      // Refresh the calendar list after creating
+      await fetchCalendars();
+    } catch (error: any) {
+      console.error('Error creating calendar:', error);
+      throw new Error(error.message || 'Failed to create calendar');
+    }
+  };
+
+  const handleDeleteCalendar = async (calendarId: string) => {
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await deleteCalendar(response.accessToken, calendarId);
+      
+      // Refresh the calendar list after deleting
+      await fetchCalendars();
+    } catch (error: any) {
+      console.error('Error deleting calendar:', error);
+      throw new Error(error.message || 'Failed to delete calendar');
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated && inProgress === 'none') {
       fetchCalendars();
@@ -103,6 +140,10 @@ export default function Home() {
                 </button>
               ) : (
                 <div className="flex gap-2">
+                  <CreateCalendar 
+                    onCreateCalendar={handleCreateCalendar}
+                    disabled={loading}
+                  />
                   <button
                     onClick={fetchCalendars}
                     disabled={loading}
@@ -124,7 +165,12 @@ export default function Home() {
 
         {isAuthenticated ? (
           <div className="bg-white rounded-lg shadow-lg p-6">
-            <CalendarList calendars={calendars} loading={loading} error={error} />
+            <CalendarList 
+              calendars={calendars} 
+              loading={loading} 
+              error={error}
+              onDeleteCalendar={handleDeleteCalendar}
+            />
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
