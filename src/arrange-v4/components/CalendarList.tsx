@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
 
 interface CalendarListProps {
@@ -12,6 +13,13 @@ interface CalendarListProps {
 
 export default function CalendarList({ calendars, loading, error, onDeleteCalendar }: CalendarListProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const router = useRouter();
+
+  const handleCalendarClick = (calendar: Calendar) => {
+    if (calendar.id) {
+      router.push(`/matrix?bookId=${calendar.id}`);
+    }
+  };
 
   const handleDelete = async (calendar: Calendar) => {
     if (!calendar.id) return;
@@ -67,7 +75,11 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-2">
+                <h3 
+                  className="font-semibold text-lg mb-2 text-blue-600 hover:text-blue-800 cursor-pointer hover:cursor-pointer transition-colors"
+                  onClick={() => handleCalendarClick(calendar)}
+                  style={{ cursor: 'pointer' }}
+                >
                   {calendar.name?.replace(/ by arrange$/i, '') || calendar.name}
                 </h3>
                 {calendar.owner && (
