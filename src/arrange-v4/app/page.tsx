@@ -4,6 +4,7 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
 import { getCalendars } from '@/lib/graphService';
+import { useState, useEffect } from 'react';
 
 /**
  * Determines the appropriate landing page after user authentication
@@ -19,8 +20,8 @@ async function getPostLoginRoute(accessToken: string): Promise<string> {
     );
     
     // If there's exactly 1 calendar ending with " by arrange", go to matrix
-    if (arrangeCalendars.length === 1) {
-      return '/matrix';
+    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
+      return `/matrix?bookId=${arrangeCalendars[0].id}`;
     }
   } catch (error) {
     console.error('Error fetching calendars for route decision:', error);
@@ -30,11 +31,54 @@ async function getPostLoginRoute(accessToken: string): Promise<string> {
   return '/books';
 }
 
+/**
+ * Checks if the matrix view should be available
+ */
+async function shouldShowMatrixButton(accessToken: string): Promise<{ show: boolean; bookId?: string }> {
+  try {
+    const calendars = await getCalendars(accessToken);
+    
+    // Filter calendars that end with " by arrange"
+    const arrangeCalendars = calendars.filter(cal => 
+      cal.name?.endsWith(' by arrange')
+    );
+    
+    // Show matrix button if there's exactly 1 calendar ending with " by arrange"
+    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
+      return { show: true, bookId: arrangeCalendars[0].id };
+    }
+  } catch (error) {
+    console.error('Error checking matrix availability:', error);
+  }
+  
+  return { show: false };
+}
+
 export default function Home() {
   const { instance, accounts, inProgress } = useMsal();
   const router = useRouter();
+  const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
 
   const isAuthenticated = accounts.length > 0;
+
+  useEffect(() => {
+    const checkMatrixAvailability = async () => {
+      if (isAuthenticated && accounts[0]) {
+        try {
+          const response = await instance.acquireTokenSilent({
+            ...loginRequest,
+            account: accounts[0],
+          });
+          const result = await shouldShowMatrixButton(response.accessToken);
+          setMatrixAvailable(result);
+        } catch (error) {
+          console.error('Error checking matrix availability:', error);
+        }
+      }
+    };
+
+    checkMatrixAvailability();
+  }, [isAuthenticated, accounts, instance]);
 
   const handleLogin = async () => {
     try {
@@ -49,6 +93,12 @@ export default function Home() {
 
   const handleNavigateToBooks = () => {
     router.push('/books');
+  };
+
+  const handleNavigateToMatrix = () => {
+    if (matrixAvailable.bookId) {
+      router.push(`/matrix?bookId=${matrixAvailable.bookId}`);
+    }
   };
 
   return (
@@ -73,12 +123,22 @@ export default function Home() {
                 {inProgress !== 'none' ? 'Signing in...' : 'Get Started - Sign In'}
               </button>
             ) : (
-              <button
-                onClick={handleNavigateToBooks}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition-colors text-lg"
-              >
-                Go to My Books
-              </button>
+              <div className="space-x-4">
+                <button
+                  onClick={handleNavigateToBooks}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition-colors text-lg"
+                >
+                  Go to My Books
+                </button>
+                {matrixAvailable.show && (
+                  <button
+                    onClick={handleNavigateToMatrix}
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-lg transition-colors text-lg"
+                  >
+                    Go to Matrix
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
