@@ -96,7 +96,36 @@
   * Not all the properties are useful in our case. Reduce the columns by applying `$select` filter:
 
     ```
-    GET https://graph.microsoft.com/v1.0/me/calendars/AQMkADAwATZiZmYAZC05NTUAZC04ZGMzLTAwAi0wMAoARgAAAxiUx9gP5a5Ck6qCcWu4NBoHANf50sm_U-lFqc80B-Z79qYAAAIBBgAAANf50sm_U-lFqc80B-Z79qYACJeoozQAAAA=/calendarView?startdatetime=2026-01-14T19:57:27.062Z&enddatetime=2026-01-21T19:57:27.062Z&$select=id,createdDateTime,lastModifiedDateTime,categories,subject,importance,isAllDay,isCancelled,showAs,type,isDraft,body,start,end
+    GET https://graph.microsoft.com/v1.0/me/calendars/AQMkADAwATZiZmYAZC05NTUAZC04ZGMzLTAwAi0wMAoARgAAAxiUx9gP5a5Ck6qCcWu4NBoHANf50sm_U-lFqc80B-Z79qYAAAIBBgAAANf50sm_U-lFqc80B-Z79qYACJeoozQAAAA=/calendarView?startdatetime=2026-01-14T19:57:27.062Z&enddatetime=2026-01-21T19:57:27.062Z&$select=id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end
+    ```
+
+    Respnose:
+    ```json
+    {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('xiaomi7732%40hotmail.com')/calendars('AQMkADAwATZiZmYAZC05NTUAZC04ZGMzLTAwAi0wMAoARgAAAxiUx9gP5a5Ck6qCcWu4NBoHANf50sm_U-lFqc80B-Z79qYAAAIBBgAAANf50sm_U-lFqc80B-Z79qYACJeoozQAAAA%3D')/calendarView(id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end)",
+        "value": [
+            {
+                "@odata.etag": "W/\"1/nSyb5T+UWpzzQH9nv2pgAIll6veQ==\"",
+                "id": "AQMkADAwATZiZmYAZC05NTUAZC04ZGMzLTAwAi0wMAoARgAAAxiUx9gP5a5Ck6qCcWu4NBoHANf50sm_U-lFqc80B-Z79qYACJeolXsAAADX_dLJvlP5RanPNAf2e-amAAiXqQI5AAAA",
+                "createdDateTime": "2026-01-14T18:44:47.4998815Z",
+                "lastModifiedDateTime": "2026-01-14T18:44:55.5432672Z",
+                "categories": [],
+                "subject": "First test event",
+                "body": {
+                    "contentType": "html",
+                    "content": ""
+                },
+                "start": {
+                    "dateTime": "2026-01-14T19:00:00.0000000",
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": "2026-01-15T19:30:00.0000000",
+                    "timeZone": "UTC"
+                }
+            }
+        ]
+    }
     ```
 
 * Create an new event
