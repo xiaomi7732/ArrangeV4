@@ -4,6 +4,10 @@
     * The title of the task
     * Maps to `subject` in an event.
 
+* categories: inherit
+    * The cateogries (like tags)
+    * Maps to `categories` in an event.
+
 * startDatetime: date
     * UTC time to the start of the task.
     * Stores in body, set upon changing of status to `inProgress`.
