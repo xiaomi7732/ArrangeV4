@@ -1,17 +1,197 @@
-interface MatrixPageProps {
-  searchParams: Promise<{
-    bookId?: string;
-  }>;
-}
+'use client';
 
-export default async function MatrixPage({ searchParams }: MatrixPageProps) {
-  const { bookId } = await searchParams;
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useMsal } from '@azure/msal-react';
+import { loginRequest } from '@/lib/msalConfig';
+import { createTodoItem, TodoItem, CalendarEvent, getCalendarEvents } from '@/lib/graphService';
+import AddTodoItem from '@/components/AddTodoItem';
+
+export default function MatrixPage() {
+  const searchParams = useSearchParams();
+  const bookId = searchParams.get('bookId');
+  
+  const { instance, accounts, inProgress } = useMsal();
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isAuthenticated = accounts.length > 0;
+
+  const fetchEvents = async () => {
+    if (!isAuthenticated || !bookId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      // Fetch events for the next 7 days
+      const now = new Date();
+      const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      
+      const eventsData = await getCalendarEvents(
+        response.accessToken,
+        bookId,
+        now.toISOString(),
+        endDate.toISOString()
+      );
+      setEvents(eventsData);
+    } catch (error: any) {
+      console.error('Error fetching events:', error);
+      setError(error.message || 'Failed to fetch events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddTodo = async (todoItem: TodoItem) => {
+    if (!bookId) {
+      throw new Error('No calendar selected');
+    }
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await createTodoItem(response.accessToken, bookId, todoItem);
+      
+      // Refresh the events list after creating
+      await fetchEvents();
+    } catch (error: any) {
+      console.error('Error creating TODO item:', error);
+      throw new Error(error.message || 'Failed to create TODO item');
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      await instance.loginPopup(loginRequest);
+    } catch (error) {
+      console.error('Login failed:', error);
+      setError('Login failed. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && inProgress === 'none' && bookId) {
+      fetchEvents();
+    }
+  }, [isAuthenticated, inProgress, bookId]);
+
+  if (!bookId) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="container mx-auto">
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+            No calendar selected. Please select a calendar from the <a href="/books" className="text-blue-600 hover:underline">Books page</a>.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h1>Matrix View</h1>
-      <p>Matrix view placeholder - coming soon</p>
-      {bookId && <p>Book ID: {bookId}</p>}
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Matrix View</h1>
+              <p className="text-gray-600 mt-1 text-sm font-mono">Calendar: {bookId}</p>
+            </div>
+            <div className="flex gap-2">
+              {!isAuthenticated ? (
+                <button
+                  onClick={handleLogin}
+                  disabled={inProgress !== 'none'}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+                </button>
+              ) : (
+                <>
+                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} />
+                  <button
+                    onClick={fetchEvents}
+                    disabled={loading}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {loading ? 'Loading...' : 'Refresh'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" role="alert">
+              <strong className="font-bold">Error: </strong>
+              <span>{error}</span>
+            </div>
+          )}
+
+          {loading && (
+            <div className="flex justify-center items-center p-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+          )}
+
+          {!loading && isAuthenticated && events.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No TODO items found. Click "Add TODO" to create one.
+            </div>
+          )}
+
+          {!loading && isAuthenticated && events.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold text-gray-800">TODO Items ({events.length})</h2>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow bg-white"
+                  >
+                    <h3 className="font-semibold text-lg mb-2 text-gray-900">
+                      {event.subject}
+                    </h3>
+                    {event.start && (
+                      <p className="text-sm text-gray-600">
+                        Start: {new Date(event.start.dateTime).toLocaleString()}
+                      </p>
+                    )}
+                    {event.end && (
+                      <p className="text-sm text-gray-600">
+                        End: {new Date(event.end.dateTime).toLocaleString()}
+                      </p>
+                    )}
+                    {event.categories && event.categories.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {event.categories.map((cat, idx) => (
+                          <span
+                            key={idx}
+                            className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+                          >
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
