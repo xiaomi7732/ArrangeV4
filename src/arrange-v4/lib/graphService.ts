@@ -89,29 +89,6 @@ export async function getUserInfo(accessToken: string) {
 }
 
 /**
- * TODO Item status values
- */
-export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
-
-/**
- * TODO Item interface based on the spec
- */
-export interface TodoItem {
-  subject: string;
-  categories?: string[];
-  etsDateTime?: string; // Estimated start time - maps to event start
-  etaDateTime?: string; // Estimated end time - maps to event end
-  urgent?: boolean;
-  important?: boolean;
-  status?: TodoStatus;
-  checklist?: string[];
-  remarks?: {
-    type: 'text' | 'markdown';
-    content: string;
-  };
-}
-
-/**
  * Event response from Graph API
  */
 export interface CalendarEvent {
@@ -135,64 +112,7 @@ export interface CalendarEvent {
 }
 
 /**
- * Creates a TODO item as an event in the specified calendar
- * Based on TODO Item Spec - stores custom fields in body JSON
- */
-export async function createTodoItem(
-  accessToken: string,
-  calendarId: string,
-  todoItem: TodoItem
-): Promise<CalendarEvent> {
-  const client = createGraphClient(accessToken);
-
-  // Build body content with TODO-specific data stored as JSON
-  const todoBodyData = {
-    status: todoItem.status || 'new',
-    urgent: todoItem.urgent || false,
-    important: todoItem.important || false,
-    checklist: todoItem.checklist || [],
-    remarks: todoItem.remarks || null,
-    startDateTime: null, // Set when status changes to inProgress
-    finishDateTime: null, // Set when status changes to finished
-  };
-
-  const bodyContent = `<div data-todo="${encodeURIComponent(JSON.stringify(todoBodyData))}"></div>`;
-
-  // Default to 1 hour from now if no times specified
-  const now = new Date();
-  const startTime = todoItem.etsDateTime ? new Date(todoItem.etsDateTime) : new Date(now.getTime() + 60 * 60 * 1000);
-  const endTime = todoItem.etaDateTime ? new Date(todoItem.etaDateTime) : new Date(startTime.getTime() + 30 * 60 * 1000);
-
-  const event = {
-    subject: todoItem.subject,
-    body: {
-      contentType: 'html',
-      content: bodyContent,
-    },
-    start: {
-      dateTime: startTime.toISOString(),
-      timeZone: 'UTC',
-    },
-    end: {
-      dateTime: endTime.toISOString(),
-      timeZone: 'UTC',
-    },
-    categories: todoItem.categories || [],
-    reminderMinutesBeforeStart: 0,
-    isReminderOn: false,
-  };
-
-  try {
-    const response = await client.api(`/me/calendars/${calendarId}/events`).post(event);
-    return response;
-  } catch (error) {
-    console.error('Error creating TODO item:', error);
-    throw error;
-  }
-}
-
-/**
- * Fetches events (TODO items) from a calendar within a given time range
+ * Fetches events from a calendar within a given time range
  */
 export async function getCalendarEvents(
   accessToken: string,

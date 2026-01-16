@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { TodoItem, TodoStatus } from '@/lib/graphService';
+import { TodoItem, TodoStatus } from '@/lib/todoDataService';
 
 interface AddTodoItemProps {
   onAddTodo: (todoItem: TodoItem) => Promise<void>;

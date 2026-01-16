@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
-import { createTodoItem, TodoItem, CalendarEvent, getCalendarEvents } from '@/lib/graphService';
+import { CalendarEvent, getCalendarEvents } from '@/lib/graphService';
+import { createTodoItem, TodoItem } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 
 export default function MatrixPage() {
@@ -52,7 +53,7 @@ export default function MatrixPage() {
 
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) {
-      throw new Error('No calendar selected');
+      throw new Error('No book selected');
     }
 
     try {
