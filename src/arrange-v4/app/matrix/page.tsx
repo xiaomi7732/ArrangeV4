@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
-import { CalendarEvent, getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, TodoItem } from '@/lib/todoDataService';
+import { getCalendarEvents } from '@/lib/graphService';
+import { createTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 
 export default function MatrixPage() {
@@ -13,7 +13,7 @@ export default function MatrixPage() {
   const bookId = searchParams.get('bookId');
   
   const { instance, accounts, inProgress } = useMsal();
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +42,10 @@ export default function MatrixPage() {
         now.toISOString(),
         endDate.toISOString()
       );
-      setEvents(eventsData);
+      
+      // Parse events to TodoItems
+      const todos = eventsData.map(event => parseTodoData(event));
+      setTodoItems(todos);
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
@@ -146,37 +149,61 @@ export default function MatrixPage() {
             </div>
           )}
 
-          {!loading && isAuthenticated && events.length === 0 && (
+          {!loading && isAuthenticated && todoItems.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               No TODO items found. Click "Add TODO" to create one.
             </div>
           )}
 
-          {!loading && isAuthenticated && events.length > 0 && (
+          {!loading && isAuthenticated && todoItems.length > 0 && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800">TODO Items ({events.length})</h2>
+              <h2 className="text-xl font-semibold text-gray-800">TODO Items ({todoItems.length})</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {events.map((event) => (
+                {todoItems.map((todo) => (
                   <div
-                    key={event.id}
+                    key={todo.id}
                     className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow bg-white"
                   >
-                    <h3 className="font-semibold text-lg mb-2 text-gray-900">
-                      {event.subject}
-                    </h3>
-                    {event.start && (
-                      <p className="text-sm text-gray-600">
-                        Start: {new Date(event.start.dateTime).toLocaleString()}
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-lg text-gray-900 flex-1">
+                        {todo.subject}
+                      </h3>
+                      {(todo.urgent || todo.important) && (
+                        <div className="flex gap-1 ml-2">
+                          {todo.urgent && (
+                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
+                              Urgent
+                            </span>
+                          )}
+                          {todo.important && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-semibold">
+                              Important
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {todo.status && (
+                      <p className="text-sm text-gray-600 mb-2">
+                        Status: <span className="font-medium">{todo.status}</span>
                       </p>
                     )}
-                    {event.end && (
+                    
+                    {todo.etsDateTime && (
                       <p className="text-sm text-gray-600">
-                        End: {new Date(event.end.dateTime).toLocaleString()}
+                        Start: {new Date(todo.etsDateTime).toLocaleString()}
                       </p>
                     )}
-                    {event.categories && event.categories.length > 0 && (
+                    {todo.etaDateTime && (
+                      <p className="text-sm text-gray-600">
+                        End: {new Date(todo.etaDateTime).toLocaleString()}
+                      </p>
+                    )}
+                    
+                    {todo.categories && todo.categories.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {event.categories.map((cat, idx) => (
+                        {todo.categories.map((cat, idx) => (
                           <span
                             key={idx}
                             className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
@@ -184,6 +211,19 @@ export default function MatrixPage() {
                             {cat}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    
+                    {todo.checklist && todo.checklist.length > 0 && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        <p className="font-medium">Checklist:</p>
+                        <ul className="list-none pl-0">
+                          {todo.checklist.map((item, idx) => (
+                            <li key={idx} className="text-xs">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
