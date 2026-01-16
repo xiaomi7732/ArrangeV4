@@ -32,14 +32,16 @@ export default function MatrixPage() {
         account: account,
       });
 
-      // Fetch events for the next 7 days
-      const now = new Date();
-      const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      // Fetch events from last 30 days to next 30 days
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
       
       const eventsData = await getCalendarEvents(
         response.accessToken,
         bookId,
-        now.toISOString(),
+        startDate.toISOString(),
         endDate.toISOString()
       );
       
