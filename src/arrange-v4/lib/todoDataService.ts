@@ -1,6 +1,12 @@
 import { createGraphClient, CalendarEvent } from './graphService';
 
 /**
+ * Constants for TODO data markers
+ */
+const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
+const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
+
+/**
  * TODO Item status values
  */
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
@@ -45,7 +51,9 @@ export async function createTodoItem(
     finishDateTime: null, // Set when status changes to finished
   };
 
-  const bodyContent = `<div data-todo="${encodeURIComponent(JSON.stringify(todoBodyData))}"></div>`;
+  const bodyContent = `${ARRANGE_DATA_START_MARKER}
+${JSON.stringify(todoBodyData)}
+${ARRANGE_DATA_END_MARKER}`;
 
   // Default to 1 hour from now if no times specified
   const now = new Date();
@@ -55,7 +63,7 @@ export async function createTodoItem(
   const event = {
     subject: todoItem.subject,
     body: {
-      contentType: 'html',
+      contentType: 'text',
       content: bodyContent,
     },
     start: {
@@ -94,10 +102,13 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
 
   // Extract TODO data from body if present
   if (event.body?.content) {
-    const match = event.body.content.match(/data-todo="([^"]+)"/);
-    if (match) {
+    const startIndex = event.body.content.indexOf(ARRANGE_DATA_START_MARKER);
+    const endIndex = event.body.content.indexOf(ARRANGE_DATA_END_MARKER);
+    
+    if (startIndex !== -1 && endIndex !== -1) {
       try {
-        const todoData = JSON.parse(decodeURIComponent(match[1]));
+        const jsonContent = event.body.content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
+        const todoData = JSON.parse(jsonContent);
         todoItem.status = todoData.status;
         todoItem.urgent = todoData.urgent;
         todoItem.important = todoData.important;
@@ -140,10 +151,13 @@ export async function updateTodoItem(
   };
 
   if (existingEvent.body?.content) {
-    const match = existingEvent.body.content.match(/data-todo="([^"]+)"/);
-    if (match) {
+    const startIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_START_MARKER);
+    const endIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_END_MARKER);
+    
+    if (startIndex !== -1 && endIndex !== -1) {
       try {
-        existingTodoData = JSON.parse(decodeURIComponent(match[1]));
+        const jsonContent = existingEvent.body.content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
+        existingTodoData = JSON.parse(jsonContent);
       } catch (error) {
         console.error('Error parsing existing TODO data:', error);
       }
@@ -168,11 +182,13 @@ export async function updateTodoItem(
     updatedTodoData.finishDateTime = new Date().toISOString();
   }
 
-  const bodyContent = `<div data-todo="${encodeURIComponent(JSON.stringify(updatedTodoData))}"></div>`;
+  const bodyContent = `${ARRANGE_DATA_START_MARKER}
+${JSON.stringify(updatedTodoData)}
+${ARRANGE_DATA_END_MARKER}`;
 
   const updateData: any = {
     body: {
-      contentType: 'html',
+      contentType: 'text',
       content: bodyContent,
     },
   };
