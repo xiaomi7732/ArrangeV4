@@ -19,6 +19,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   const [important, setImportant] = useState(false);
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
+  const [etaDateTime, setEtaDateTime] = useState('');
 
   const resetForm = () => {
     setSubject('');
@@ -26,6 +27,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
     setImportant(false);
     setStatus('new');
     setRemarks('');
+    setEtaDateTime('');
     setError(null);
   };
 
@@ -46,6 +48,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
         urgent,
         important,
         status,
+        etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? {
           type: 'text',
           content: remarks.trim(),
@@ -133,7 +136,6 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               <span className="text-sm font-medium text-gray-700">Important</span>
             </label>
           </div>
-
           {/* Status */}
           <div>
             <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
@@ -154,6 +156,22 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
             </select>
           </div>
 
+          {/* ETA DateTime */}
+          <div>
+            <label htmlFor="etaDateTime" className="block text-sm font-medium text-gray-700 mb-1">
+              ETA (Estimated Time of Accomplishment)
+            </label>
+            <input
+              type="datetime-local"
+              id="etaDateTime"
+              value={etaDateTime}
+              onChange={(e) => setEtaDateTime(e.target.value)}
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+            />
+          </div>
+
+          {/* Remarks */}
           {/* Remarks */}
           <div>
             <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 mb-1">
