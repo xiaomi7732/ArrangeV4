@@ -13,6 +13,17 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper function to format current datetime for input
+  const getCurrentDateTimeString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   // Form state
   const [subject, setSubject] = useState('');
   const [urgent, setUrgent] = useState(false);
@@ -20,6 +31,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
   const [etaDateTime, setEtaDateTime] = useState('');
+  const [etsDateTime, setEtsDateTime] = useState(() => getCurrentDateTimeString());
 
   const resetForm = () => {
     setSubject('');
@@ -28,6 +40,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
     setStatus('new');
     setRemarks('');
     setEtaDateTime('');
+    setEtsDateTime(getCurrentDateTimeString());
     setError(null);
   };
 
@@ -48,6 +61,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
         urgent,
         important,
         status,
+        etsDateTime: etsDateTime ? new Date(etsDateTime).toISOString() : undefined,
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? {
           type: 'text',
@@ -136,6 +150,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               <span className="text-sm font-medium text-gray-700">Important</span>
             </label>
           </div>
+
           {/* Status */}
           <div>
             <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
@@ -156,6 +171,21 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
             </select>
           </div>
 
+          {/* ETS DateTime */}
+          <div>
+            <label htmlFor="etsDateTime" className="block text-sm font-medium text-gray-700 mb-1">
+              ETS (Estimated Start Time)
+            </label>
+            <input
+              type="datetime-local"
+              id="etsDateTime"
+              value={etsDateTime}
+              onChange={(e) => setEtsDateTime(e.target.value)}
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+            />
+          </div>
+
           {/* ETA DateTime */}
           <div>
             <label htmlFor="etaDateTime" className="block text-sm font-medium text-gray-700 mb-1">
@@ -171,7 +201,6 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
             />
           </div>
 
-          {/* Remarks */}
           {/* Remarks */}
           <div>
             <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 mb-1">
