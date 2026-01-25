@@ -90,6 +90,35 @@ ${ARRANGE_DATA_END_MARKER}`;
 }
 
 /**
+ * Converts a Graph API datetime object to ISO string
+ * The Graph API returns datetime in a specific timezone, we need to convert it properly
+ */
+function convertGraphDateTimeToISO(dateTimeObj?: { dateTime: string; timeZone: string }): string | undefined {
+  if (!dateTimeObj?.dateTime) return undefined;
+  
+  // If timezone is UTC, append 'Z'
+  if (dateTimeObj.timeZone === 'UTC') {
+    return `${dateTimeObj.dateTime}Z`;
+  }
+  
+  // For other timezones, we need to handle them properly
+  // The dateTime string from Graph API is in the specified timezone
+  // We'll treat it as a local time string and create a Date object
+  // Note: This is a simplified approach. For production, consider using a library like date-fns-tz
+  try {
+    const date = new Date(dateTimeObj.dateTime);
+    // If the parsing succeeded, return ISO string
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  } catch (error) {
+    console.error('Error parsing datetime:', error);
+  }
+  
+  return undefined;
+}
+
+/**
  * Parses TODO-specific data from an event body
  */
 export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } {
@@ -97,8 +126,8 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
     id: event.id,
     subject: event.subject || '',
     categories: event.categories || [],
-    etsDateTime: event.start?.dateTime,
-    etaDateTime: event.end?.dateTime,
+    etsDateTime: convertGraphDateTimeToISO(event.start),
+    etaDateTime: convertGraphDateTimeToISO(event.end),
   };
 
   // Extract TODO data from body if present

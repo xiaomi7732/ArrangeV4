@@ -192,12 +192,18 @@ export default function MatrixPage() {
                     
                     {todo.etsDateTime && (
                       <p className={styles.todoDate}>
-                        Start: {new Date(todo.etsDateTime).toLocaleString()}
+                        Start: {new Date(todo.etsDateTime).toLocaleString(undefined, { 
+                          dateStyle: 'short', 
+                          timeStyle: 'short' 
+                        })}
                       </p>
                     )}
                     {todo.etaDateTime && (
                       <p className={styles.todoDate}>
-                        End: {new Date(todo.etaDateTime).toLocaleString()}
+                        End: {new Date(todo.etaDateTime).toLocaleString(undefined, { 
+                          dateStyle: 'short', 
+                          timeStyle: 'short' 
+                        })}
                       </p>
                     )}
                     
