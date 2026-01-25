@@ -7,6 +7,7 @@ import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
 import { createTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
+import styles from './page.module.css';
 
 export default function MatrixPage() {
   const searchParams = useSearchParams();
@@ -95,10 +96,10 @@ export default function MatrixPage() {
 
   if (!bookId) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="container mx-auto">
-          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-            No calendar selected. Please select a calendar from the <a href="/books" className="text-blue-600 hover:underline">Books page</a>.
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <div className={styles.warning}>
+            No calendar selected. Please select a calendar from the <a href="/books" className={styles.warningLink}>Books page</a>.
           </div>
         </div>
       </div>
@@ -106,20 +107,20 @@ export default function MatrixPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Matrix View</h1>
-              <p className="text-gray-600 mt-1 text-sm font-mono">Calendar: {bookId}</p>
+    <div className={styles.container}>
+      <div className={styles.inner}>
+        <div className={styles.card}>
+          <div className={styles.header}>
+            <div className={styles.headerInfo}>
+              <h1 className={styles.title}>Matrix View</h1>
+              <p className={styles.subtitle}>Calendar: {bookId}</p>
             </div>
-            <div className="flex gap-2">
+            <div className={styles.actions}>
               {!isAuthenticated ? (
                 <button
                   onClick={handleLogin}
                   disabled={inProgress !== 'none'}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={`${styles.button} ${styles.buttonPrimary}`}
                 >
                   {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
                 </button>
@@ -129,7 +130,7 @@ export default function MatrixPage() {
                   <button
                     onClick={fetchEvents}
                     disabled={loading}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className={`${styles.button} ${styles.buttonSecondary}`}
                   >
                     {loading ? 'Loading...' : 'Refresh'}
                   </button>
@@ -139,46 +140,43 @@ export default function MatrixPage() {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" role="alert">
-              <strong className="font-bold">Error: </strong>
+            <div className={styles.error} role="alert">
+              <span className={styles.errorTitle}>Error: </span>
               <span>{error}</span>
             </div>
           )}
 
           {loading && (
-            <div className="flex justify-center items-center p-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className={styles.loading}>
+              <div className={styles.spinner}></div>
             </div>
           )}
 
           {!loading && isAuthenticated && todoItems.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className={styles.empty}>
               No TODO items found. Click "Add TODO" to create one.
             </div>
           )}
 
           {!loading && isAuthenticated && todoItems.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-800">TODO Items ({todoItems.length})</h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className={styles.section}>
+              <h2 className={styles.sectionTitle}>TODO Items ({todoItems.length})</h2>
+              <div className={styles.grid}>
                 {todoItems.map((todo) => (
-                  <div
-                    key={todo.id}
-                    className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow bg-white"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-lg text-gray-900 flex-1">
+                  <div key={todo.id} className={styles.todoCard}>
+                    <div className={styles.todoHeader}>
+                      <h3 className={styles.todoTitle}>
                         {todo.subject}
                       </h3>
                       {(todo.urgent || todo.important) && (
-                        <div className="flex gap-1 ml-2">
+                        <div className={styles.todoBadges}>
                           {todo.urgent && (
-                            <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">
+                            <span className={`${styles.badge} ${styles.badgeUrgent}`}>
                               Urgent
                             </span>
                           )}
                           {todo.important && (
-                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded font-semibold">
+                            <span className={`${styles.badge} ${styles.badgeImportant}`}>
                               Important
                             </span>
                           )}
@@ -187,28 +185,28 @@ export default function MatrixPage() {
                     </div>
                     
                     {todo.status && (
-                      <p className="text-sm text-gray-600 mb-2">
-                        Status: <span className="font-medium">{todo.status}</span>
+                      <p className={styles.todoStatus}>
+                        Status: <span className={styles.todoStatusValue}>{todo.status}</span>
                       </p>
                     )}
                     
                     {todo.etsDateTime && (
-                      <p className="text-sm text-gray-600">
+                      <p className={styles.todoDate}>
                         Start: {new Date(todo.etsDateTime).toLocaleString()}
                       </p>
                     )}
                     {todo.etaDateTime && (
-                      <p className="text-sm text-gray-600">
+                      <p className={styles.todoDate}>
                         End: {new Date(todo.etaDateTime).toLocaleString()}
                       </p>
                     )}
                     
                     {todo.categories && todo.categories.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
+                      <div className={styles.todoCategories}>
                         {todo.categories.map((cat, idx) => (
                           <span
                             key={idx}
-                            className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+                            className={`${styles.badge} ${styles.badgeCategory}`}
                           >
                             {cat}
                           </span>
@@ -217,11 +215,11 @@ export default function MatrixPage() {
                     )}
                     
                     {todo.checklist && todo.checklist.length > 0 && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        <p className="font-medium">Checklist:</p>
-                        <ul className="list-none pl-0">
+                      <div className={styles.todoChecklist}>
+                        <p className={styles.todoChecklistTitle}>Checklist:</p>
+                        <ul className={styles.todoChecklistItems}>
                           {todo.checklist.map((item, idx) => (
-                            <li key={idx} className="text-xs">
+                            <li key={idx} className={styles.todoChecklistItem}>
                               {item}
                             </li>
                           ))}
