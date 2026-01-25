@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/todoDataService';
+import styles from './AddTodoItem.module.css';
 
 interface AddTodoItemProps {
   onAddTodo: (todoItem: TodoItem) => Promise<void>;
@@ -53,6 +54,16 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
       return;
     }
 
+    // Validate ETS <= ETA
+    if (etsDateTime && etaDateTime) {
+      const etsDate = new Date(etsDateTime);
+      const etaDate = new Date(etaDateTime);
+      if (etsDate > etaDate) {
+        setError('Estimated Start Time must be before or equal to Estimated Time of Accomplishment');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -90,9 +101,9 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
       <button
         onClick={() => setIsOpen(true)}
         disabled={disabled}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        className={styles.addButton}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" className={styles.icon} viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
         </svg>
         Add TODO
@@ -101,20 +112,20 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-xl font-bold mb-4 text-gray-900">Add New TODO Item</h2>
+    <div className={styles.overlay}>
+      <div className={styles.modal}>
+        <h2 className={styles.title}>Add New TODO Item</h2>
         
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4" role="alert">
+          <div className={styles.error} role="alert">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className={styles.form}>
           {/* Subject */}
-          <div>
-            <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className={styles.formGroup}>
+            <label htmlFor="subject" className={styles.label}>
               Subject *
             </label>
             <input
@@ -123,38 +134,38 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Enter task title"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className={styles.input}
               disabled={isSubmitting}
             />
           </div>
 
           {/* Urgency & Importance */}
-          <div className="grid grid-cols-2 gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <div className={styles.checkboxGrid}>
+            <label className={styles.checkboxLabel}>
               <input
                 type="checkbox"
                 checked={urgent}
                 onChange={(e) => setUrgent(e.target.checked)}
                 disabled={isSubmitting}
-                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                className={styles.checkbox}
               />
-              <span className="text-sm font-medium text-gray-700">Urgent</span>
+              <span className={styles.checkboxText}>Urgent</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className={styles.checkboxLabel}>
               <input
                 type="checkbox"
                 checked={important}
                 onChange={(e) => setImportant(e.target.checked)}
                 disabled={isSubmitting}
-                className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                className={styles.checkbox}
               />
-              <span className="text-sm font-medium text-gray-700">Important</span>
+              <span className={styles.checkboxText}>Important</span>
             </label>
           </div>
 
           {/* Status */}
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className={styles.formGroup}>
+            <label htmlFor="status" className={styles.label}>
               Status
             </label>
             <select
@@ -162,7 +173,7 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               value={status}
               onChange={(e) => setStatus(e.target.value as TodoStatus)}
               disabled={isSubmitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className={styles.select}
             >
               <option value="new">New</option>
               <option value="inProgress">In Progress</option>
@@ -173,8 +184,8 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
           </div>
 
           {/* ETS DateTime */}
-          <div>
-            <label htmlFor="etsDateTime" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className={styles.formGroup}>
+            <label htmlFor="etsDateTime" className={styles.label}>
               ETS (Estimated Start Time)
             </label>
             <input
@@ -183,13 +194,13 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               value={etsDateTime}
               onChange={(e) => setEtsDateTime(e.target.value)}
               disabled={isSubmitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className={styles.input}
             />
           </div>
 
           {/* ETA DateTime */}
-          <div>
-            <label htmlFor="etaDateTime" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className={styles.formGroup}>
+            <label htmlFor="etaDateTime" className={styles.label}>
               ETA (Estimated Time of Accomplishment)
             </label>
             <input
@@ -198,13 +209,13 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               value={etaDateTime}
               onChange={(e) => setEtaDateTime(e.target.value)}
               disabled={isSubmitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+              className={styles.input}
             />
           </div>
 
           {/* Remarks */}
-          <div>
-            <label htmlFor="remarks" className="block text-sm font-medium text-gray-700 mb-1">
+          <div className={styles.formGroup}>
+            <label htmlFor="remarks" className={styles.label}>
               Remarks
             </label>
             <textarea
@@ -214,15 +225,15 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
               placeholder="Add any notes or remarks..."
               rows={3}
               disabled={isSubmitting}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors resize-none"
+              className={styles.textarea}
             />
           </div>
 
           {/* Matrix Quadrant Preview */}
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-sm text-gray-600">
+          <div className={styles.preview}>
+            <p className={styles.previewText}>
               Matrix Quadrant: {' '}
-              <span className="font-semibold">
+              <span className={styles.previewLabel}>
                 {urgent && important && '🔴 Do First (Urgent & Important)'}
                 {!urgent && important && '🟡 Schedule (Important, Not Urgent)'}
                 {urgent && !important && '🟠 Delegate (Urgent, Not Important)'}
@@ -232,19 +243,19 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className={styles.actions}>
             <button
               type="button"
               onClick={handleCancel}
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`${styles.button} ${styles.buttonSecondary}`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`${styles.button} ${styles.buttonPrimary}`}
             >
               {isSubmitting ? 'Creating...' : 'Create TODO'}
             </button>
