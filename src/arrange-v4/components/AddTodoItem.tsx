@@ -13,9 +13,10 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper function to format current datetime for input
-  const getCurrentDateTimeString = () => {
+  // Helper function to format datetime for input (accepts optional hours offset)
+  const getDateTimeString = (hoursOffset: number = 0) => {
     const now = new Date();
+    now.setHours(now.getHours() + hoursOffset);
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
@@ -30,8 +31,8 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
   const [important, setImportant] = useState(false);
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
-  const [etaDateTime, setEtaDateTime] = useState('');
-  const [etsDateTime, setEtsDateTime] = useState(() => getCurrentDateTimeString());
+  const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
+  const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
 
   const resetForm = () => {
     setSubject('');
@@ -39,8 +40,8 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
     setImportant(false);
     setStatus('new');
     setRemarks('');
-    setEtaDateTime('');
-    setEtsDateTime(getCurrentDateTimeString());
+    setEtaDateTime(getDateTimeString(24)); // 24 hours from now
+    setEtsDateTime(getDateTimeString());
     setError(null);
   };
 
