@@ -41,13 +41,14 @@ export async function createTodoItem(
   const client = createGraphClient(accessToken);
 
   // Build body content with TODO-specific data stored as JSON
+  const status = todoItem.status || 'new';
   const todoBodyData = {
-    status: todoItem.status || 'new',
+    status: status,
     urgent: todoItem.urgent || false,
     important: todoItem.important || false,
     checklist: todoItem.checklist || [],
     remarks: todoItem.remarks || null,
-    startDateTime: null, // Set when status changes to inProgress
+    startDateTime: status === 'inProgress' ? new Date().toISOString() : null, // Set when status is inProgress
     finishDateTime: null, // Set when status changes to finished
   };
 
