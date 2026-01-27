@@ -7,9 +7,13 @@ import styles from './AddTodoItem.module.css';
 interface AddTodoItemProps {
   onAddTodo: (todoItem: TodoItem) => Promise<void>;
   disabled?: boolean;
+  defaultUrgent?: boolean;
+  defaultImportant?: boolean;
+  buttonText?: string;
+  compact?: boolean;
 }
 
-export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
+export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +32,8 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
 
   // Form state
   const [subject, setSubject] = useState('');
-  const [urgent, setUrgent] = useState(false);
-  const [important, setImportant] = useState(false);
+  const [urgent, setUrgent] = useState(defaultUrgent);
+  const [important, setImportant] = useState(defaultImportant);
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
@@ -37,8 +41,8 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
 
   const resetForm = () => {
     setSubject('');
-    setUrgent(false);
-    setImportant(false);
+    setUrgent(defaultUrgent);
+    setImportant(defaultImportant);
     setStatus('new');
     setRemarks('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
@@ -101,12 +105,14 @@ export default function AddTodoItem({ onAddTodo, disabled }: AddTodoItemProps) {
       <button
         onClick={() => setIsOpen(true)}
         disabled={disabled}
-        className={styles.addButton}
+        className={compact ? styles.addButtonCompact : styles.addButton}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" className={styles.icon} viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-        </svg>
-        Add TODO
+        {!compact && (
+          <svg xmlns="http://www.w3.org/2000/svg" className={styles.icon} viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+          </svg>
+        )}
+        {compact ? '+' : buttonText}
       </button>
     );
   }

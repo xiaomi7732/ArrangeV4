@@ -197,3 +197,28 @@
   width: 20px;
   height: 20px;
 }
+
+.addButtonCompact {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: inherit;
+  font-weight: 700;
+  font-size: 1.5rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 2px solid currentColor;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+  min-width: 36px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.addButtonCompact:hover:not(:disabled) {
+  transform: scale(1.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.addButtonCompact:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

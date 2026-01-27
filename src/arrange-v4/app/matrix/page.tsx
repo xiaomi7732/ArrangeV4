@@ -225,8 +225,17 @@ export default function MatrixPage() {
                 {/* Top-left: Urgent & Important */}
                 <div className={`${styles.quadrant} ${styles.quadrantUrgentImportant}`}>
                   <div className={styles.quadrantHeader}>
-                    <h3 className={styles.quadrantTitle}>Do First</h3>
-                    <p className={styles.quadrantSubtitle}>Urgent & Important</p>
+                    <div>
+                      <h3 className={styles.quadrantTitle}>Do First</h3>
+                      <p className={styles.quadrantSubtitle}>Urgent & Important</p>
+                    </div>
+                    <AddTodoItem 
+                      onAddTodo={handleAddTodo} 
+                      disabled={loading}
+                      defaultUrgent={true}
+                      defaultImportant={true}
+                      compact={true}
+                    />
                   </div>
                   <div className={styles.quadrantContent}>
                     {todoItems
@@ -243,8 +252,17 @@ export default function MatrixPage() {
                 {/* Top-right: Important but not Urgent */}
                 <div className={`${styles.quadrant} ${styles.quadrantImportant}`}>
                   <div className={styles.quadrantHeader}>
-                    <h3 className={styles.quadrantTitle}>Schedule</h3>
-                    <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
+                    <div>
+                      <h3 className={styles.quadrantTitle}>Schedule</h3>
+                      <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
+                    </div>
+                    <AddTodoItem 
+                      onAddTodo={handleAddTodo} 
+                      disabled={loading}
+                      defaultUrgent={false}
+                      defaultImportant={true}
+                      compact={true}
+                    />
                   </div>
                   <div className={styles.quadrantContent}>
                     {todoItems
@@ -261,8 +279,17 @@ export default function MatrixPage() {
                 {/* Bottom-left: Urgent but not Important */}
                 <div className={`${styles.quadrant} ${styles.quadrantUrgent}`}>
                   <div className={styles.quadrantHeader}>
-                    <h3 className={styles.quadrantTitle}>Delegate</h3>
-                    <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
+                    <div>
+                      <h3 className={styles.quadrantTitle}>Delegate</h3>
+                      <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
+                    </div>
+                    <AddTodoItem 
+                      onAddTodo={handleAddTodo} 
+                      disabled={loading}
+                      defaultUrgent={true}
+                      defaultImportant={false}
+                      compact={true}
+                    />
                   </div>
                   <div className={styles.quadrantContent}>
                     {todoItems
@@ -279,8 +306,17 @@ export default function MatrixPage() {
                 {/* Bottom-right: Neither Urgent nor Important */}
                 <div className={`${styles.quadrant} ${styles.quadrantNeither}`}>
                   <div className={styles.quadrantHeader}>
-                    <h3 className={styles.quadrantTitle}>Eliminate</h3>
-                    <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
+                    <div>
+                      <h3 className={styles.quadrantTitle}>Eliminate</h3>
+                      <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
+                    </div>
+                    <AddTodoItem 
+                      onAddTodo={handleAddTodo} 
+                      disabled={loading}
+                      defaultUrgent={false}
+                      defaultImportant={false}
+                      compact={true}
+                    />
                   </div>
                   <div className={styles.quadrantContent}>
                     {todoItems

@@ -207,6 +207,10 @@
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .quadrantTitle {
@@ -253,6 +257,11 @@
   color: #b91c1c;
 }
 
+.quadrantUrgentImportant button {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
 /* Important but not Urgent - Yellow/Amber */
 .quadrantImportant {
   background-color: #fffbeb;
@@ -265,6 +274,11 @@
 
 .quadrantImportant .quadrantSubtitle {
   color: #b45309;
+}
+
+.quadrantImportant button {
+  color: #d97706;
+  border-color: #d97706;
 }
 
 /* Urgent but not Important - Blue */
@@ -281,6 +295,11 @@
   color: #2563eb;
 }
 
+.quadrantUrgent button {
+  color: #2563eb;
+  border-color: #2563eb;
+}
+
 /* Neither Urgent nor Important - Gray */
 .quadrantNeither {
   background-color: #f9fafb;
@@ -288,11 +307,16 @@
 }
 
 .quadrantNeither .quadrantTitle {
-  color: #4b5563;
+  color: #1f2937;
 }
 
 .quadrantNeither .quadrantSubtitle {
-  color: #6b7280;
+  color: #4b5563;
+}
+
+.quadrantNeither button {
+  color: #1f2937;
+  border-color: #1f2937;
 }
 
 .todoCard {
