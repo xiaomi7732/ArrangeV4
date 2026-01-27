@@ -183,6 +183,7 @@
   .matrix {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
+    height: calc(100vh - 280px);
   }
 }
 
@@ -192,6 +193,14 @@
   display: flex;
   flex-direction: column;
   min-height: 250px;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .quadrant {
+    min-height: 0;
+    max-height: 100%;
+  }
 }
 
 .quadrantHeader {
@@ -215,9 +224,11 @@
 .quadrantContent {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 
 .quadrantEmpty {
