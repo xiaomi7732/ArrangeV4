@@ -161,6 +161,17 @@ export default function MatrixPage() {
       return;
     }
 
+    // Optimistic update - update UI immediately
+    const previousItems = [...todoItems];
+    setTodoItems(items => 
+      items.map(item => 
+        item.id === draggedItem.id 
+          ? { ...item, urgent, important }
+          : item
+      )
+    );
+    setDraggedItem(null);
+
     try {
       const account = accounts[0];
       const response = await instance.acquireTokenSilent({
@@ -172,14 +183,11 @@ export default function MatrixPage() {
         urgent,
         important,
       });
-
-      // Refresh the events list after updating
-      await fetchEvents();
     } catch (error: any) {
       console.error('Error updating TODO item:', error);
+      // Revert on error
+      setTodoItems(previousItems);
       setError(error.message || 'Failed to update TODO item');
-    } finally {
-      setDraggedItem(null);
     }
   };
 
