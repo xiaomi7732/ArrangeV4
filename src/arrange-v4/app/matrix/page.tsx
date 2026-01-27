@@ -5,14 +5,18 @@ import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
+import { createTodoItem, updateTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import styles from './page.module.css';
 
 // TodoCard component for rendering individual todo items
-function TodoCard({ todo }: { todo: TodoItem & { id?: string } }) {
+function TodoCard({ todo, onDragStart }: { todo: TodoItem & { id?: string }, onDragStart?: (todo: TodoItem & { id?: string }) => void }) {
   return (
-    <div className={styles.todoCard}>
+    <div 
+      className={styles.todoCard}
+      draggable={!!todo.id}
+      onDragStart={() => onDragStart?.(todo)}
+    >
       <div className={styles.todoHeader}>
         <h4 className={styles.todoTitle}>{todo.subject}</h4>
       </div>
@@ -77,6 +81,7 @@ export default function MatrixPage() {
   const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
 
   const isAuthenticated = accounts.length > 0;
 
@@ -136,6 +141,45 @@ export default function MatrixPage() {
     } catch (error: any) {
       console.error('Error creating TODO item:', error);
       throw new Error(error.message || 'Failed to create TODO item');
+    }
+  };
+
+  const handleDragStart = (todo: TodoItem & { id?: string }) => {
+    setDraggedItem(todo);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (urgent: boolean, important: boolean) => {
+    if (!draggedItem || !draggedItem.id || !bookId) return;
+
+    // Don't update if already in correct quadrant
+    if (draggedItem.urgent === urgent && draggedItem.important === important) {
+      setDraggedItem(null);
+      return;
+    }
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await updateTodoItem(response.accessToken, bookId, draggedItem.id, {
+        urgent,
+        important,
+      });
+
+      // Refresh the events list after updating
+      await fetchEvents();
+    } catch (error: any) {
+      console.error('Error updating TODO item:', error);
+      setError(error.message || 'Failed to update TODO item');
+    } finally {
+      setDraggedItem(null);
     }
   };
 
@@ -223,7 +267,11 @@ export default function MatrixPage() {
               <h2 className={styles.sectionTitle}>Eisenhower Matrix ({todoItems.length} items)</h2>
               <div className={styles.matrix}>
                 {/* Top-left: Urgent & Important */}
-                <div className={`${styles.quadrant} ${styles.quadrantUrgentImportant}`}>
+                <div 
+                  className={`${styles.quadrant} ${styles.quadrantUrgentImportant} ${draggedItem ? styles.quadrantDropZone : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(true, true)}
+                >
                   <div className={styles.quadrantHeader}>
                     <div>
                       <h3 className={styles.quadrantTitle}>Do First</h3>
@@ -241,7 +289,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -250,7 +298,11 @@ export default function MatrixPage() {
                 </div>
 
                 {/* Top-right: Important but not Urgent */}
-                <div className={`${styles.quadrant} ${styles.quadrantImportant}`}>
+                <div 
+                  className={`${styles.quadrant} ${styles.quadrantImportant} ${draggedItem ? styles.quadrantDropZone : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(false, true)}
+                >
                   <div className={styles.quadrantHeader}>
                     <div>
                       <h3 className={styles.quadrantTitle}>Schedule</h3>
@@ -268,7 +320,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent !== true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
                       ))}
                     {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -277,7 +329,11 @@ export default function MatrixPage() {
                 </div>
 
                 {/* Bottom-left: Urgent but not Important */}
-                <div className={`${styles.quadrant} ${styles.quadrantUrgent}`}>
+                <div 
+                  className={`${styles.quadrant} ${styles.quadrantUrgent} ${draggedItem ? styles.quadrantDropZone : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(true, false)}
+                >
                   <div className={styles.quadrantHeader}>
                     <div>
                       <h3 className={styles.quadrantTitle}>Delegate</h3>
@@ -295,7 +351,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -304,7 +360,11 @@ export default function MatrixPage() {
                 </div>
 
                 {/* Bottom-right: Neither Urgent nor Important */}
-                <div className={`${styles.quadrant} ${styles.quadrantNeither}`}>
+                <div 
+                  className={`${styles.quadrant} ${styles.quadrantNeither} ${draggedItem ? styles.quadrantDropZone : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(false, false)}
+                >
                   <div className={styles.quadrantHeader}>
                     <div>
                       <h3 className={styles.quadrantTitle}>Eliminate</h3>
@@ -320,9 +380,9 @@ export default function MatrixPage() {
                   </div>
                   <div className={styles.quadrantContent}>
                     {todoItems
-                      .filter(todo => !todo.urgent && !todo.important)
+                      .filter(todo => todo.urgent !== true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
                       ))}
                     {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
