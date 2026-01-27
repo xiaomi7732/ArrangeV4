@@ -9,6 +9,66 @@ import { createTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import styles from './page.module.css';
 
+// TodoCard component for rendering individual todo items
+function TodoCard({ todo }: { todo: TodoItem & { id?: string } }) {
+  return (
+    <div className={styles.todoCard}>
+      <div className={styles.todoHeader}>
+        <h4 className={styles.todoTitle}>{todo.subject}</h4>
+      </div>
+      
+      {todo.status && (
+        <p className={styles.todoStatus}>
+          Status: <span className={styles.todoStatusValue}>{todo.status}</span>
+        </p>
+      )}
+      
+      {todo.etsDateTime && (
+        <p className={styles.todoDate}>
+          Start: {new Date(todo.etsDateTime).toLocaleString(undefined, { 
+            dateStyle: 'short', 
+            timeStyle: 'short' 
+          })}
+        </p>
+      )}
+      {todo.etaDateTime && (
+        <p className={styles.todoDate}>
+          End: {new Date(todo.etaDateTime).toLocaleString(undefined, { 
+            dateStyle: 'short', 
+            timeStyle: 'short' 
+          })}
+        </p>
+      )}
+      
+      {todo.categories && todo.categories.length > 0 && (
+        <div className={styles.todoCategories}>
+          {todo.categories.map((cat, idx) => (
+            <span
+              key={idx}
+              className={`${styles.badge} ${styles.badgeCategory}`}
+            >
+              {cat}
+            </span>
+          ))}
+        </div>
+      )}
+      
+      {todo.checklist && todo.checklist.length > 0 && (
+        <div className={styles.todoChecklist}>
+          <p className={styles.todoChecklistTitle}>Checklist:</p>
+          <ul className={styles.todoChecklistItems}>
+            {todo.checklist.map((item, idx) => (
+              <li key={idx} className={styles.todoChecklistItem}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MatrixPage() {
   const searchParams = useSearchParams();
   const bookId = searchParams.get('bookId');
@@ -159,81 +219,80 @@ export default function MatrixPage() {
           )}
 
           {!loading && isAuthenticated && todoItems.length > 0 && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>TODO Items ({todoItems.length})</h2>
-              <div className={styles.grid}>
-                {todoItems.map((todo) => (
-                  <div key={todo.id} className={styles.todoCard}>
-                    <div className={styles.todoHeader}>
-                      <h3 className={styles.todoTitle}>
-                        {todo.subject}
-                      </h3>
-                      {(todo.urgent || todo.important) && (
-                        <div className={styles.todoBadges}>
-                          {todo.urgent && (
-                            <span className={`${styles.badge} ${styles.badgeUrgent}`}>
-                              Urgent
-                            </span>
-                          )}
-                          {todo.important && (
-                            <span className={`${styles.badge} ${styles.badgeImportant}`}>
-                              Important
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {todo.status && (
-                      <p className={styles.todoStatus}>
-                        Status: <span className={styles.todoStatusValue}>{todo.status}</span>
-                      </p>
-                    )}
-                    
-                    {todo.etsDateTime && (
-                      <p className={styles.todoDate}>
-                        Start: {new Date(todo.etsDateTime).toLocaleString(undefined, { 
-                          dateStyle: 'short', 
-                          timeStyle: 'short' 
-                        })}
-                      </p>
-                    )}
-                    {todo.etaDateTime && (
-                      <p className={styles.todoDate}>
-                        End: {new Date(todo.etaDateTime).toLocaleString(undefined, { 
-                          dateStyle: 'short', 
-                          timeStyle: 'short' 
-                        })}
-                      </p>
-                    )}
-                    
-                    {todo.categories && todo.categories.length > 0 && (
-                      <div className={styles.todoCategories}>
-                        {todo.categories.map((cat, idx) => (
-                          <span
-                            key={idx}
-                            className={`${styles.badge} ${styles.badgeCategory}`}
-                          >
-                            {cat}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {todo.checklist && todo.checklist.length > 0 && (
-                      <div className={styles.todoChecklist}>
-                        <p className={styles.todoChecklistTitle}>Checklist:</p>
-                        <ul className={styles.todoChecklistItems}>
-                          {todo.checklist.map((item, idx) => (
-                            <li key={idx} className={styles.todoChecklistItem}>
-                              {item}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+            <div className={styles.matrixSection}>
+              <h2 className={styles.sectionTitle}>Eisenhower Matrix ({todoItems.length} items)</h2>
+              <div className={styles.matrix}>
+                {/* Top-left: Urgent & Important */}
+                <div className={`${styles.quadrant} ${styles.quadrantUrgentImportant}`}>
+                  <div className={styles.quadrantHeader}>
+                    <h3 className={styles.quadrantTitle}>Do First</h3>
+                    <p className={styles.quadrantSubtitle}>Urgent & Important</p>
+                  </div>
+                  <div className={styles.quadrantContent}>
+                    {todoItems
+                      .filter(todo => todo.urgent === true && todo.important === true)
+                      .map((todo) => (
+                        <TodoCard key={todo.id} todo={todo} />
+                      ))}
+                    {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
+                      <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
-                ))}
+                </div>
+
+                {/* Top-right: Important but not Urgent */}
+                <div className={`${styles.quadrant} ${styles.quadrantImportant}`}>
+                  <div className={styles.quadrantHeader}>
+                    <h3 className={styles.quadrantTitle}>Schedule</h3>
+                    <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
+                  </div>
+                  <div className={styles.quadrantContent}>
+                    {todoItems
+                      .filter(todo => todo.urgent !== true && todo.important === true)
+                      .map((todo) => (
+                        <TodoCard key={todo.id} todo={todo} />
+                      ))}
+                    {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
+                      <p className={styles.quadrantEmpty}>No items</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom-left: Urgent but not Important */}
+                <div className={`${styles.quadrant} ${styles.quadrantUrgent}`}>
+                  <div className={styles.quadrantHeader}>
+                    <h3 className={styles.quadrantTitle}>Delegate</h3>
+                    <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
+                  </div>
+                  <div className={styles.quadrantContent}>
+                    {todoItems
+                      .filter(todo => todo.urgent === true && todo.important !== true)
+                      .map((todo) => (
+                        <TodoCard key={todo.id} todo={todo} />
+                      ))}
+                    {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
+                      <p className={styles.quadrantEmpty}>No items</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom-right: Neither Urgent nor Important */}
+                <div className={`${styles.quadrant} ${styles.quadrantNeither}`}>
+                  <div className={styles.quadrantHeader}>
+                    <h3 className={styles.quadrantTitle}>Eliminate</h3>
+                    <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
+                  </div>
+                  <div className={styles.quadrantContent}>
+                    {todoItems
+                      .filter(todo => !todo.urgent && !todo.important)
+                      .map((todo) => (
+                        <TodoCard key={todo.id} todo={todo} />
+                      ))}
+                    {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
+                      <p className={styles.quadrantEmpty}>No items</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

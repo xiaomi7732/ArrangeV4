@@ -166,6 +166,124 @@
   }
 }
 
+/* Eisenhower Matrix Layout */
+.matrixSection {
+  margin-top: 16px;
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto;
+  gap: 16px;
+  min-height: 600px;
+}
+
+@media (min-width: 768px) {
+  .matrix {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+}
+
+.quadrant {
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 250px;
+}
+
+.quadrantHeader {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.quadrantTitle {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+}
+
+.quadrantSubtitle {
+  font-size: 0.75rem;
+  margin: 0;
+  opacity: 0.8;
+}
+
+.quadrantContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quadrantEmpty {
+  color: rgba(0, 0, 0, 0.4);
+  font-style: italic;
+  font-size: 0.875rem;
+  text-align: center;
+  margin-top: 16px;
+}
+
+/* Urgent & Important - Red */
+.quadrantUrgentImportant {
+  background-color: #fef2f2;
+  border: 2px solid #fecaca;
+}
+
+.quadrantUrgentImportant .quadrantTitle {
+  color: #991b1b;
+}
+
+.quadrantUrgentImportant .quadrantSubtitle {
+  color: #b91c1c;
+}
+
+/* Important but not Urgent - Yellow/Amber */
+.quadrantImportant {
+  background-color: #fffbeb;
+  border: 2px solid #fde68a;
+}
+
+.quadrantImportant .quadrantTitle {
+  color: #92400e;
+}
+
+.quadrantImportant .quadrantSubtitle {
+  color: #b45309;
+}
+
+/* Urgent but not Important - Blue */
+.quadrantUrgent {
+  background-color: #eff6ff;
+  border: 2px solid #bfdbfe;
+}
+
+.quadrantUrgent .quadrantTitle {
+  color: #1e40af;
+}
+
+.quadrantUrgent .quadrantSubtitle {
+  color: #2563eb;
+}
+
+/* Neither Urgent nor Important - Gray */
+.quadrantNeither {
+  background-color: #f9fafb;
+  border: 2px solid #e5e7eb;
+}
+
+.quadrantNeither .quadrantTitle {
+  color: #4b5563;
+}
+
+.quadrantNeither .quadrantSubtitle {
+  color: #6b7280;
+}
+
 .todoCard {
   border: 1px solid #e5e7eb;
   border-radius: 8px;

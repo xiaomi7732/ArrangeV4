@@ -90,6 +90,24 @@ ${ARRANGE_DATA_END_MARKER}`;
 }
 
 /**
+ * Decodes HTML entities in a string
+ */
+function decodeHtmlEntities(text: string): string {
+  const textArea = document.createElement('textarea');
+  textArea.innerHTML = text;
+  return textArea.value;
+}
+
+/**
+ * Strips HTML tags and extracts plain text
+ */
+function stripHtmlTags(html: string): string {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
+}
+
+/**
  * Parses TODO-specific data from an event body
  */
 export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } {
@@ -103,12 +121,19 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
 
   // Extract TODO data from body if present
   if (event.body?.content) {
-    const startIndex = event.body.content.indexOf(ARRANGE_DATA_START_MARKER);
-    const endIndex = event.body.content.indexOf(ARRANGE_DATA_END_MARKER);
+    let content = event.body.content;
+    
+    // If content is HTML, strip HTML tags to get plain text
+    if (event.body.contentType === 'html') {
+      content = stripHtmlTags(content);
+    }
+    
+    const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
+    const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
     
     if (startIndex !== -1 && endIndex !== -1) {
       try {
-        const jsonContent = event.body.content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
+        const jsonContent = content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
         const todoData = JSON.parse(jsonContent);
         todoItem.status = todoData.status;
         todoItem.urgent = todoData.urgent;
@@ -117,6 +142,7 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
         todoItem.remarks = todoData.remarks;
       } catch (error) {
         console.error('Error parsing TODO data:', error);
+        console.error('Failed JSON content:', content.substring(startIndex, endIndex + ARRANGE_DATA_END_MARKER.length));
       }
     }
   }
