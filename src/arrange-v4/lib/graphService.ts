@@ -142,6 +142,7 @@ export function convertGraphDateTimeToISO(dateTimeObj?: { dateTime: string; time
 
 /**
  * Fetches events from a calendar within a given time range
+ * Handles pagination to fetch all events
  */
 export async function getCalendarEvents(
   accessToken: string,
@@ -150,17 +151,28 @@ export async function getCalendarEvents(
   endDateTime: string
 ): Promise<CalendarEvent[]> {
   const client = createGraphClient(accessToken);
+  const allEvents: CalendarEvent[] = [];
 
   try {
-    const response = await client
+    let response = await client
       .api(`/me/calendars/${calendarId}/calendarView`)
       .query({
         startDateTime,
         endDateTime,
       })
+      .top(100)
       .select('id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
       .get();
-    return response.value || [];
+    
+    allEvents.push(...(response.value || []));
+
+    // Handle pagination
+    while (response['@odata.nextLink']) {
+      response = await client.api(response['@odata.nextLink']).get();
+      allEvents.push(...(response.value || []));
+    }
+
+    return allEvents;
   } catch (error) {
     console.error('Error fetching calendar events:', error);
     throw error;
