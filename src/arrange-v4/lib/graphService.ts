@@ -27,13 +27,23 @@ export function createGraphClient(accessToken: string): Client {
 
 /**
  * Fetches all calendars for the authenticated user
+ * Handles pagination to fetch all calendars
  */
 export async function getCalendars(accessToken: string): Promise<Calendar[]> {
   const client = createGraphClient(accessToken);
+  const allCalendars: Calendar[] = [];
   
   try {
-    const response = await client.api('/me/calendars').get();
-    return response.value || [];
+    let response = await client.api('/me/calendars').top(100).get();
+    allCalendars.push(...(response.value || []));
+
+    // Handle pagination
+    while (response['@odata.nextLink']) {
+      response = await client.api(response['@odata.nextLink']).get();
+      allCalendars.push(...(response.value || []));
+    }
+
+    return allCalendars;
   } catch (error) {
     console.error('Error fetching calendars:', error);
     throw error;
