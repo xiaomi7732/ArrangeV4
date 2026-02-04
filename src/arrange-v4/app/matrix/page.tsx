@@ -7,15 +7,22 @@ import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
+import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
 
 // TodoCard component for rendering individual todo items
-function TodoCard({ todo, onDragStart }: { todo: TodoItem & { id?: string }, onDragStart?: (todo: TodoItem & { id?: string }) => void }) {
+function TodoCard({ todo, onDragStart, onClick }: { 
+  todo: TodoItem & { id?: string }, 
+  onDragStart?: (todo: TodoItem & { id?: string }) => void,
+  onClick?: (todo: TodoItem & { id?: string }) => void 
+}) {
   return (
     <div 
       className={styles.todoCard}
       draggable={!!todo.id}
       onDragStart={() => onDragStart?.(todo)}
+      onClick={() => onClick?.(todo)}
+      style={{ cursor: 'pointer' }}
     >
       <div className={styles.todoHeader}>
         <h4 className={styles.todoTitle}>{todo.subject}</h4>
@@ -82,6 +89,7 @@ export default function MatrixPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
 
   const isAuthenticated = accounts.length > 0;
 
@@ -297,7 +305,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -328,7 +336,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent !== true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
                       ))}
                     {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -359,7 +367,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -390,7 +398,7 @@ export default function MatrixPage() {
                     {todoItems
                       .filter(todo => todo.urgent !== true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
                       ))}
                     {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -399,6 +407,14 @@ export default function MatrixPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* View Todo Dialog */}
+          {selectedTodo && (
+            <ViewTodoItem 
+              todo={selectedTodo} 
+              onClose={() => setSelectedTodo(null)} 
+            />
           )}
         </div>
       </div>
