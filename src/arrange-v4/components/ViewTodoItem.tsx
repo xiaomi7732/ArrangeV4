@@ -41,38 +41,42 @@ export default function ViewTodoItem({ todo, onClose }: ViewTodoItemProps) {
           {/* Status */}
           <div className={styles.formGroup}>
             <span className={styles.label}>Status</span>
-            <span>{statusLabels[todo.status || 'new']}</span>
+            <span className={styles.value}>{statusLabels[todo.status || 'new']}</span>
           </div>
 
           {/* Urgency & Importance */}
           <div className={styles.checkboxGrid}>
             <div className={styles.formGroup}>
               <span className={styles.label}>Urgent</span>
-              <span>{todo.urgent ? '✓ Yes' : '✗ No'}</span>
+              <span className={todo.urgent ? styles.valuePositive : styles.valueNegative}>
+                {todo.urgent ? '✓ Yes' : '✗ No'}
+              </span>
             </div>
             <div className={styles.formGroup}>
               <span className={styles.label}>Important</span>
-              <span>{todo.important ? '✓ Yes' : '✗ No'}</span>
+              <span className={todo.important ? styles.valuePositive : styles.valueNegative}>
+                {todo.important ? '✓ Yes' : '✗ No'}
+              </span>
             </div>
           </div>
 
           {/* ETS DateTime */}
           <div className={styles.formGroup}>
             <span className={styles.label}>ETS (Estimated Start Time)</span>
-            <span>{formatDateTime(todo.etsDateTime)}</span>
+            <span className={styles.value}>{formatDateTime(todo.etsDateTime)}</span>
           </div>
 
           {/* ETA DateTime */}
           <div className={styles.formGroup}>
             <span className={styles.label}>ETA (Estimated Time of Accomplishment)</span>
-            <span>{formatDateTime(todo.etaDateTime)}</span>
+            <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
           </div>
 
           {/* Categories */}
           {todo.categories && todo.categories.length > 0 && (
             <div className={styles.formGroup}>
               <span className={styles.label}>Categories</span>
-              <span>{todo.categories.join(', ')}</span>
+              <span className={styles.value}>{todo.categories.join(', ')}</span>
             </div>
           )}
 
@@ -80,7 +84,7 @@ export default function ViewTodoItem({ todo, onClose }: ViewTodoItemProps) {
           {todo.remarks?.content && (
             <div className={styles.formGroup}>
               <span className={styles.label}>Remarks</span>
-              <span>{todo.remarks.content}</span>
+              <div className={styles.remarksBox}>{todo.remarks.content}</div>
             </div>
           )}
 
@@ -88,7 +92,7 @@ export default function ViewTodoItem({ todo, onClose }: ViewTodoItemProps) {
           {todo.checklist && todo.checklist.length > 0 && (
             <div className={styles.formGroup}>
               <span className={styles.label}>Checklist</span>
-              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              <ul className={styles.checklistBox}>
                 {todo.checklist.map((item, idx) => (
                   <li key={idx}>{item}</li>
                 ))}
