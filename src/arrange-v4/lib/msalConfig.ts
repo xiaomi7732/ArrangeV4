@@ -5,11 +5,16 @@ import { Configuration, PopupRequest } from '@azure/msal-browser';
  * For a full list of MSAL.js configuration parameters, visit:
  * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/configuration.md 
  */
+// Get the base path - this will be '/ArrangeV4' in production (GitHub Pages)
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+
 export const msalConfig: Configuration = {
   auth: {
     clientId: process.env.NEXT_PUBLIC_AZURE_CLIENT_ID || '0b4dbe1b-b67c-4ce1-b46b-d66832dc80b0',
     authority: 'https://login.microsoftonline.com/consumers',
-    redirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
+    redirectUri: typeof window !== 'undefined' 
+      ? `${window.location.origin}${basePath}`
+      : 'http://localhost:3000',
   },
   cache: {
     cacheLocation: 'sessionStorage', // This configures where your cache will be stored
