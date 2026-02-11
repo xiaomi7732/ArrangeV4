@@ -5,21 +5,10 @@ import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus } from '@/lib/todoDataService';
+import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
-
-// All possible status values
-const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
-
-const statusLabels: Record<TodoStatus, string> = {
-  new: 'New',
-  inProgress: 'In Progress',
-  blocked: 'Blocked',
-  finished: 'Finished',
-  cancelled: 'Cancelled',
-};
 
 // TodoCard component for rendering individual todo items
 function TodoCard({ todo, onDragStart, onClick, onStatusChange }: { 
@@ -55,9 +44,9 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
             key={status}
             className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
             onClick={(e) => handleStatusClick(e, status)}
-            title={`Set status to ${statusLabels[status]}`}
+            title={`Set status to ${STATUS_LABELS[status]}`}
           >
-            {statusLabels[status]}
+            {STATUS_LABELS[status]}
           </button>
         ))}
       </div>

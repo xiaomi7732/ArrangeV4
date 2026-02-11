@@ -1,20 +1,12 @@
 'use client';
 
-import { TodoItem, TodoStatus } from '@/lib/todoDataService';
+import { TodoItem, STATUS_LABELS } from '@/lib/todoDataService';
 import styles from './AddTodoItem.module.css';
 
 interface ViewTodoItemProps {
   todo: TodoItem & { id?: string };
   onClose: () => void;
 }
-
-const statusLabels: Record<TodoStatus, string> = {
-  new: 'New',
-  inProgress: 'In Progress',
-  blocked: 'Blocked',
-  finished: 'Finished',
-  cancelled: 'Cancelled',
-};
 
 export default function ViewTodoItem({ todo, onClose }: ViewTodoItemProps) {
   const getQuadrantLabel = () => {
@@ -41,7 +33,7 @@ export default function ViewTodoItem({ todo, onClose }: ViewTodoItemProps) {
           {/* Status */}
           <div className={styles.formGroup}>
             <span className={styles.label}>Status</span>
-            <span className={styles.value}>{statusLabels[todo.status || 'new']}</span>
+            <span className={styles.value}>{STATUS_LABELS[todo.status || 'new']}</span>
           </div>
 
           {/* Urgency & Importance */}

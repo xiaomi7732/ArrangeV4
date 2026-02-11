@@ -12,6 +12,22 @@ const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
 
 /**
+ * All possible status values
+ */
+export const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
+
+/**
+ * Human-readable labels for each status
+ */
+export const STATUS_LABELS: Record<TodoStatus, string> = {
+  new: 'New',
+  inProgress: 'In Progress',
+  blocked: 'Blocked',
+  finished: 'Finished',
+  cancelled: 'Cancelled',
+};
+
+/**
  * TODO Item interface based on the spec
  */
 export interface TodoItem {
