@@ -178,12 +178,19 @@ export async function updateTodoItem(
   };
 
   if (existingEvent.body?.content) {
-    const startIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_START_MARKER);
-    const endIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_END_MARKER);
+    let content = existingEvent.body.content;
+    
+    // If content is HTML, strip HTML tags to get plain text
+    if (existingEvent.body.contentType === 'html') {
+      content = stripHtmlTags(content);
+    }
+    
+    const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
+    const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
     
     if (startIndex !== -1 && endIndex !== -1) {
       try {
-        const jsonContent = existingEvent.body.content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
+        const jsonContent = content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
         existingTodoData = JSON.parse(jsonContent);
       } catch (error) {
         console.error('Error parsing existing TODO data:', error);

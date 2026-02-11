@@ -5,17 +5,38 @@ import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
+import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
 
+// All possible status values
+const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
+
+const statusLabels: Record<TodoStatus, string> = {
+  new: 'New',
+  inProgress: 'In Progress',
+  blocked: 'Blocked',
+  finished: 'Finished',
+  cancelled: 'Cancelled',
+};
+
 // TodoCard component for rendering individual todo items
-function TodoCard({ todo, onDragStart, onClick }: { 
+function TodoCard({ todo, onDragStart, onClick, onStatusChange }: { 
   todo: TodoItem & { id?: string }, 
   onDragStart?: (todo: TodoItem & { id?: string }) => void,
-  onClick?: (todo: TodoItem & { id?: string }) => void 
+  onClick?: (todo: TodoItem & { id?: string }) => void,
+  onStatusChange?: (todo: TodoItem & { id?: string }, newStatus: TodoStatus) => void 
 }) {
+  const currentStatus = todo.status || 'new';
+
+  const handleStatusClick = (e: React.MouseEvent, status: TodoStatus) => {
+    e.stopPropagation(); // Prevent card click when clicking status
+    if (status !== currentStatus && onStatusChange) {
+      onStatusChange(todo, status);
+    }
+  };
+
   return (
     <div 
       className={styles.todoCard}
@@ -28,11 +49,18 @@ function TodoCard({ todo, onDragStart, onClick }: {
         <h4 className={styles.todoTitle}>{todo.subject}</h4>
       </div>
       
-      {todo.status && (
-        <p className={styles.todoStatus}>
-          Status: <span className={styles.todoStatusValue}>{todo.status}</span>
-        </p>
-      )}
+      <div className={styles.statusContainer}>
+        {ALL_STATUSES.map((status) => (
+          <button
+            key={status}
+            className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
+            onClick={(e) => handleStatusClick(e, status)}
+            title={`Set status to ${statusLabels[status]}`}
+          >
+            {statusLabels[status]}
+          </button>
+        ))}
+      </div>
       
       {todo.etsDateTime && (
         <p className={styles.todoDate}>
@@ -215,6 +243,37 @@ function MatrixPageContent() {
     }
   };
 
+  const handleStatusChange = async (todo: TodoItem & { id?: string }, newStatus: TodoStatus) => {
+    if (!todo.id || !bookId) return;
+
+    // Optimistic update - update UI immediately
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item =>
+        item.id === todo.id
+          ? { ...item, status: newStatus }
+          : item
+      )
+    );
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await updateTodoItem(response.accessToken, bookId, todo.id, {
+        status: newStatus,
+      });
+    } catch (error: any) {
+      console.error('Error updating TODO status:', error);
+      // Revert on error
+      setTodoItems(previousItems);
+      setError(error.message || 'Failed to update status');
+    }
+  };
+
   const handleLogin = async () => {
     try {
       await instance.loginPopup(loginRequest);
@@ -321,7 +380,7 @@ function MatrixPageContent() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -352,7 +411,7 @@ function MatrixPageContent() {
                     {todoItems
                       .filter(todo => todo.urgent !== true && todo.important === true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
                     {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -383,7 +442,7 @@ function MatrixPageContent() {
                     {todoItems
                       .filter(todo => todo.urgent === true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
                     {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
@@ -414,7 +473,7 @@ function MatrixPageContent() {
                     {todoItems
                       .filter(todo => todo.urgent !== true && todo.important !== true)
                       .map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} />
+                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
                     {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
