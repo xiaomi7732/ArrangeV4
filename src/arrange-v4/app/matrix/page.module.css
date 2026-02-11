@@ -418,9 +418,40 @@
   font-weight: 500;
 }
 
-.todoDate {
-  font-size: 0.875rem;
+.todoDates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+  font-size: 0.7rem;
+}
+
+.todoDateRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7280;
+}
+
+.todoDateLabel {
+  font-weight: 600;
+  color: #9ca3af;
+  min-width: 48px;
+}
+
+.todoDateValue {
   color: #4b5563;
+  cursor: help;
+  border-bottom: 1px dotted #d1d5db;
+}
+
+.todoDateValue:hover {
+  color: #1f2937;
+  border-bottom-color: #9ca3af;
+}
+
+.todoDateSep {
+  color: #d1d5db;
 }
 
 .todoCategories {

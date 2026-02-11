@@ -62,21 +62,56 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
         ))}
       </div>
       
-      {todo.etsDateTime && (
-        <p className={styles.todoDate}>
-          Start: {new Date(todo.etsDateTime).toLocaleString(undefined, { 
-            dateStyle: 'short', 
-            timeStyle: 'short' 
-          })}
-        </p>
-      )}
-      {todo.etaDateTime && (
-        <p className={styles.todoDate}>
-          End: {new Date(todo.etaDateTime).toLocaleString(undefined, { 
-            dateStyle: 'short', 
-            timeStyle: 'short' 
-          })}
-        </p>
+      {/* Dates section - compact layout */}
+      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime) && (
+        <div className={styles.todoDates}>
+          {/* Planned times */}
+          {(todo.etsDateTime || todo.etaDateTime) && (
+            <div className={styles.todoDateRow}>
+              <span className={styles.todoDateLabel}>Planned:</span>
+              {todo.etsDateTime && (
+                <span 
+                  className={styles.todoDateValue}
+                  title={`ETS: ${new Date(todo.etsDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
+                >
+                  {new Date(todo.etsDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
+              {todo.etaDateTime && (
+                <span 
+                  className={styles.todoDateValue}
+                  title={`ETA: ${new Date(todo.etaDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
+                >
+                  {new Date(todo.etaDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+            </div>
+          )}
+          {/* Actual times */}
+          {(todo.startDateTime || todo.finishDateTime) && (
+            <div className={styles.todoDateRow}>
+              <span className={styles.todoDateLabel}>Actual:</span>
+              {todo.startDateTime && (
+                <span 
+                  className={styles.todoDateValue}
+                  title={`Started: ${new Date(todo.startDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
+                >
+                  {new Date(todo.startDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+              {todo.startDateTime && todo.finishDateTime && <span className={styles.todoDateSep}>→</span>}
+              {todo.finishDateTime && (
+                <span 
+                  className={styles.todoDateValue}
+                  title={`Finished: ${new Date(todo.finishDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
+                >
+                  {new Date(todo.finishDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       )}
       
       {todo.categories && todo.categories.length > 0 && (
@@ -246,12 +281,45 @@ function MatrixPageContent() {
   const handleStatusChange = async (todo: TodoItem & { id?: string }, newStatus: TodoStatus) => {
     if (!todo.id || !bookId) return;
 
+    const currentStatus = todo.status || 'new';
+    const now = new Date().toISOString();
+
+    // Calculate timestamp changes based on status transition
+    let updatedTimestamps: Partial<TodoItem> = {};
+    
+    // Set startDateTime when status changes to inProgress (if not already set)
+    if (newStatus === 'inProgress' && !todo.startDateTime) {
+      updatedTimestamps.startDateTime = now;
+    }
+    
+    // Remove startDateTime when status changes to new
+    if (newStatus === 'new') {
+      updatedTimestamps.startDateTime = undefined;
+    }
+    
+    // Set timestamps when status changes to finished
+    if (newStatus === 'finished') {
+      // Set startDateTime if not already set (direct new → finished)
+      if (!todo.startDateTime) {
+        updatedTimestamps.startDateTime = now;
+      }
+      // Set finishDateTime if not already set
+      if (!todo.finishDateTime) {
+        updatedTimestamps.finishDateTime = now;
+      }
+    }
+    
+    // Remove finishDateTime when status changes from finished to anything else
+    if (newStatus !== 'finished' && currentStatus === 'finished') {
+      updatedTimestamps.finishDateTime = undefined;
+    }
+
     // Optimistic update - update UI immediately
     const previousItems = [...todoItems];
     setTodoItems(items =>
       items.map(item =>
         item.id === todo.id
-          ? { ...item, status: newStatus }
+          ? { ...item, status: newStatus, ...updatedTimestamps }
           : item
       )
     );
