@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
@@ -81,6 +81,22 @@ function TodoCard({ todo, onDragStart, onClick }: {
 }
 
 export default function MatrixPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <div className={styles.loading}>
+            <div className={styles.spinner}></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <MatrixPageContent />
+    </Suspense>
+  );
+}
+
+function MatrixPageContent() {
   const searchParams = useSearchParams();
   const bookId = searchParams.get('bookId');
   
