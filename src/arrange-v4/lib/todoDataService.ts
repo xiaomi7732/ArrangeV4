@@ -17,11 +17,13 @@ export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancel
 export interface TodoItem {
   subject: string;
   categories?: string[];
-  etsDateTime?: string; // Estimated start time - maps to event start
-  etaDateTime?: string; // Estimated end time - maps to event end
+  etsDateTime?: string; // ETS: Estimated Time to Start - the planned/scheduled start time (calendar event start)
+  etaDateTime?: string; // ETA: Estimated Time of Accomplishment - the planned/scheduled end time (calendar event end)
   urgent?: boolean;
   important?: boolean;
   status?: TodoStatus;
+  startDateTime?: string; // Actual start time - set when status changes to 'inProgress'
+  finishDateTime?: string; // Actual finish time - set when status changes to 'finished'
   checklist?: string[];
   remarks?: {
     type: 'text' | 'markdown';
@@ -140,6 +142,8 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
         todoItem.important = todoData.important;
         todoItem.checklist = todoData.checklist;
         todoItem.remarks = todoData.remarks;
+        todoItem.startDateTime = todoData.startDateTime;
+        todoItem.finishDateTime = todoData.finishDateTime;
       } catch (error) {
         console.error('Error parsing TODO data:', error);
         console.error('Failed JSON content:', content.substring(startIndex, endIndex + ARRANGE_DATA_END_MARKER.length));
@@ -178,12 +182,19 @@ export async function updateTodoItem(
   };
 
   if (existingEvent.body?.content) {
-    const startIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_START_MARKER);
-    const endIndex = existingEvent.body.content.indexOf(ARRANGE_DATA_END_MARKER);
+    let content = existingEvent.body.content;
+    
+    // If content is HTML, strip HTML tags to get plain text
+    if (existingEvent.body.contentType === 'html') {
+      content = stripHtmlTags(content);
+    }
+    
+    const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
+    const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
     
     if (startIndex !== -1 && endIndex !== -1) {
       try {
-        const jsonContent = existingEvent.body.content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
+        const jsonContent = content.substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex).trim();
         existingTodoData = JSON.parse(jsonContent);
       } catch (error) {
         console.error('Error parsing existing TODO data:', error);
@@ -202,11 +213,30 @@ export async function updateTodoItem(
   };
 
   // Update timestamps based on status changes
-  if (todoItem.status === 'inProgress' && !existingTodoData.startDateTime) {
-    updatedTodoData.startDateTime = new Date().toISOString();
-  }
-  if (todoItem.status === 'finished' && !existingTodoData.finishDateTime) {
-    updatedTodoData.finishDateTime = new Date().toISOString();
+  if (todoItem.status !== undefined) {
+    // Set startDateTime when status changes to inProgress
+    if (todoItem.status === 'inProgress' && !existingTodoData.startDateTime) {
+      updatedTodoData.startDateTime = new Date().toISOString();
+    }
+    // Remove startDateTime when status changes to new
+    if (todoItem.status === 'new') {
+      updatedTodoData.startDateTime = null;
+    }
+    // Set finishDateTime when status changes to finished
+    if (todoItem.status === 'finished') {
+      const now = new Date().toISOString();
+      // Also set startDateTime if not already set (for direct new → finished transitions)
+      if (!existingTodoData.startDateTime) {
+        updatedTodoData.startDateTime = now;
+      }
+      if (!existingTodoData.finishDateTime) {
+        updatedTodoData.finishDateTime = now;
+      }
+    }
+    // Remove finishDateTime when status changes from finished to anything else
+    if (todoItem.status !== 'finished' && existingTodoData.status === 'finished') {
+      updatedTodoData.finishDateTime = null;
+    }
   }
 
   const bodyContent = `${ARRANGE_DATA_START_MARKER}
