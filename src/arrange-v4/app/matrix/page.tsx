@@ -444,7 +444,7 @@ function MatrixPageContent() {
         <div className={styles.card}>
           <div className={styles.header}>
             <div className={styles.headerInfo}>
-              <h1 className={styles.title}>Matrix View {todoItems.length > 0 ? `(${filteredTodoItems.length} of ${todoItems.length})` : ''}</h1>
+              <h1 className={styles.title}>Matrix View</h1>
               {calendars.length > 1 ? (
                 <select
                   className={styles.bookSwitcher}
@@ -501,6 +501,7 @@ function MatrixPageContent() {
           {!loading && isAuthenticated && (
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
+                <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
                 <button
                   className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                   onClick={() => setShowFilters(prev => !prev)}

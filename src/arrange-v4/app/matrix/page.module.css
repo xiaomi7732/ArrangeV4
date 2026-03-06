@@ -196,8 +196,9 @@
 
 .matrixHeader {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -208,6 +209,11 @@
 .filterToggle {
   font-size: 0.75rem;
   padding: 4px 12px;
+}
+
+.filterCount {
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .filterBar {
