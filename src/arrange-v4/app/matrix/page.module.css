@@ -42,6 +42,29 @@
   font-family: monospace;
 }
 
+.bookSwitcher {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  font-family: monospace;
+  color: #4b5563;
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  max-width: 300px;
+}
+
+.bookSwitcher:hover {
+  border-color: #9ca3af;
+}
+
+.bookSwitcher:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .actions {
   display: flex;
   gap: 8px;

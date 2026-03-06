@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
-import { getCalendarEvents } from '@/lib/graphService';
+import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
@@ -183,6 +183,7 @@ export default function MatrixPage() {
 
 function MatrixPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const bookId = searchParams.get('bookId');
   
   const { instance, accounts, inProgress } = useMsal();
@@ -193,6 +194,7 @@ function MatrixPageContent() {
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
 
   const isAuthenticated = accounts.length > 0;
 
@@ -203,6 +205,28 @@ function MatrixPageContent() {
     if (mode === 'todayOnly') return passesTodayFilter(todo);
     return true;
   });
+
+  const currentCalendarName = calendars.find(c => c.id === bookId)?.name?.replace(/ by arrange$/i, '') || bookId;
+
+  const fetchCalendars = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const all = await getCalendars(response.accessToken);
+      setCalendars(all.filter(c => c.name?.toLowerCase().endsWith(' by arrange')));
+    } catch (error) {
+      console.error('Error fetching calendars:', error);
+    }
+  }, [isAuthenticated, accounts, instance]);
+
+  useEffect(() => {
+    fetchCalendars();
+  }, [fetchCalendars]);
+
+  const handleCalendarSwitch = (calendarId: string) => {
+    router.push(`/matrix?bookId=${calendarId}`);
+  };
 
   const fetchEvents = async () => {
     if (!isAuthenticated || !bookId) return;
@@ -421,7 +445,21 @@ function MatrixPageContent() {
           <div className={styles.header}>
             <div className={styles.headerInfo}>
               <h1 className={styles.title}>Matrix View {todoItems.length > 0 ? `(${filteredTodoItems.length} of ${todoItems.length})` : ''}</h1>
-              <p className={styles.subtitle}>Calendar: {bookId}</p>
+              {calendars.length > 1 ? (
+                <select
+                  className={styles.bookSwitcher}
+                  value={bookId || ''}
+                  onChange={(e) => handleCalendarSwitch(e.target.value)}
+                >
+                  {calendars.map(cal => (
+                    <option key={cal.id} value={cal.id}>
+                      {cal.name?.replace(/ by arrange$/i, '')}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className={styles.subtitle}>{currentCalendarName}</p>
+              )}
             </div>
             <div className={styles.actions}>
               {!isAuthenticated ? (
@@ -460,13 +498,7 @@ function MatrixPageContent() {
             </div>
           )}
 
-          {!loading && isAuthenticated && todoItems.length === 0 && (
-            <div className={styles.empty}>
-              No TODO items found. Click "Add TODO" to create one.
-            </div>
-          )}
-
-          {!loading && isAuthenticated && todoItems.length > 0 && (
+          {!loading && isAuthenticated && (
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
                 <button
