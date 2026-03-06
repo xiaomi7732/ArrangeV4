@@ -42,6 +42,29 @@
   font-family: monospace;
 }
 
+.bookSwitcher {
+  margin-top: 4px;
+  font-size: 0.875rem;
+  font-family: monospace;
+  color: #4b5563;
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  max-width: 300px;
+}
+
+.bookSwitcher:hover {
+  border-color: #9ca3af;
+}
+
+.bookSwitcher:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -169,6 +192,87 @@
 /* Eisenhower Matrix Layout */
 .matrixSection {
   margin-top: 16px;
+}
+
+.matrixHeader {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.matrixHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+.filterToggle {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+}
+
+.filterCount {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filterLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.filterModes {
+  display: flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filterMode {
+  font-size: 0.625rem;
+  padding: 2px 8px;
+  border: none;
+  background-color: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.filterMode:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+
+.filterMode:hover {
+  background-color: #f3f4f6;
+}
+
+.filterModeActive {
+  background-color: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+.filterModeActive:hover {
+  background-color: #1d4ed8;
 }
 
 .matrix {

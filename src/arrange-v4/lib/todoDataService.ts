@@ -12,6 +12,22 @@ const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
 
 /**
+ * All possible status values
+ */
+export const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
+
+/**
+ * Human-readable labels for each status
+ */
+export const STATUS_LABELS: Record<TodoStatus, string> = {
+  new: 'New',
+  inProgress: 'In Progress',
+  blocked: 'Blocked',
+  finished: 'Finished',
+  cancelled: 'Cancelled',
+};
+
+/**
  * TODO Item interface based on the spec
  */
 export interface TodoItem {
@@ -24,10 +40,53 @@ export interface TodoItem {
   status?: TodoStatus;
   startDateTime?: string; // Actual start time - set when status changes to 'inProgress'
   finishDateTime?: string; // Actual finish time - set when status changes to 'finished'
+  originalEtsDateTime?: string | null; // Original planned start time, preserved when dates are bumped forward
+  originalEtaDateTime?: string | null; // Original planned end time, preserved when dates are bumped forward
   checklist?: string[];
   remarks?: {
     type: 'text' | 'markdown';
     content: string;
+  };
+}
+
+const NON_TERMINAL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked'];
+
+export function isNonTerminalStatus(status: TodoStatus | undefined): boolean {
+  return NON_TERMINAL_STATUSES.includes(status || 'new');
+}
+
+/**
+ * Computes bumped dates for a stale TODO item.
+ * Moves the date to today while preserving the original time-of-day and duration.
+ * Returns null if no bump is needed (dates are already today or in the future).
+ */
+export function computeBumpedDates(
+  etsDateTime: string | undefined,
+  etaDateTime: string | undefined,
+  now: Date = new Date()
+): { etsDateTime: string; etaDateTime: string } | null {
+  if (!etsDateTime || !etaDateTime) return null;
+
+  const ets = new Date(etsDateTime);
+  const eta = new Date(etaDateTime);
+
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+
+  // No bump needed if the event start is today or in the future
+  if (ets >= todayStart) return null;
+
+  const duration = eta.getTime() - ets.getTime();
+
+  // Move to today, preserving the original time-of-day (UTC)
+  const bumpedEts = new Date(todayStart);
+  bumpedEts.setUTCHours(ets.getUTCHours(), ets.getUTCMinutes(), ets.getUTCSeconds(), ets.getUTCMilliseconds());
+
+  const bumpedEta = new Date(bumpedEts.getTime() + duration);
+
+  return {
+    etsDateTime: bumpedEts.toISOString(),
+    etaDateTime: bumpedEta.toISOString(),
   };
 }
 
@@ -52,11 +111,11 @@ export async function createTodoItem(
     remarks: todoItem.remarks || null,
     startDateTime: status === 'inProgress' ? new Date().toISOString() : null, // Set when status is inProgress
     finishDateTime: null, // Set when status changes to finished
+    originalEtsDateTime: null,
+    originalEtaDateTime: null,
   };
 
-  const bodyContent = `${ARRANGE_DATA_START_MARKER}
-${JSON.stringify(todoBodyData)}
-${ARRANGE_DATA_END_MARKER}`;
+  const bodyContent = buildBodyHtml(todoBodyData);
 
   // Default to 1 hour from now if no times specified
   const now = new Date();
@@ -66,7 +125,7 @@ ${ARRANGE_DATA_END_MARKER}`;
   const event = {
     subject: todoItem.subject,
     body: {
-      contentType: 'text',
+      contentType: 'html',
       content: bodyContent,
     },
     start: {
@@ -92,21 +151,34 @@ ${ARRANGE_DATA_END_MARKER}`;
 }
 
 /**
- * Decodes HTML entities in a string
- */
-function decodeHtmlEntities(text: string): string {
-  const textArea = document.createElement('textarea');
-  textArea.innerHTML = text;
-  return textArea.value;
-}
-
-/**
- * Strips HTML tags and extracts plain text
+ * Strips HTML tags and extracts plain text (used for backward compat with old plain-text bodies)
  */
 function stripHtmlTags(html: string): string {
   const div = document.createElement('div');
   div.innerHTML = html;
   return div.textContent || div.innerText || '';
+}
+
+/**
+ * Builds the HTML body content for a calendar event, wrapping the TODO JSON data
+ * in a <pre> tag between markers for easy extraction and human-readable display.
+ */
+function buildBodyHtml(todoData: object): string {
+  const json = JSON.stringify(todoData, null, 2);
+  return `<pre>${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+}
+
+/**
+ * Extracts the raw text content from an event body, handling both HTML and plain text.
+ */
+function extractBodyText(body: { contentType?: string; content?: string }): string {
+  if (!body?.content) return '';
+
+  let content = body.content;
+  if (body.contentType === 'html') {
+    content = stripHtmlTags(content);
+  }
+  return content;
 }
 
 /**
@@ -123,12 +195,7 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
 
   // Extract TODO data from body if present
   if (event.body?.content) {
-    let content = event.body.content;
-    
-    // If content is HTML, strip HTML tags to get plain text
-    if (event.body.contentType === 'html') {
-      content = stripHtmlTags(content);
-    }
+    const content = extractBodyText(event.body);
     
     const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
     const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
@@ -144,6 +211,8 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
         todoItem.remarks = todoData.remarks;
         todoItem.startDateTime = todoData.startDateTime;
         todoItem.finishDateTime = todoData.finishDateTime;
+        todoItem.originalEtsDateTime = todoData.originalEtsDateTime || null;
+        todoItem.originalEtaDateTime = todoData.originalEtaDateTime || null;
       } catch (error) {
         console.error('Error parsing TODO data:', error);
         console.error('Failed JSON content:', content.substring(startIndex, endIndex + ARRANGE_DATA_END_MARKER.length));
@@ -182,12 +251,7 @@ export async function updateTodoItem(
   };
 
   if (existingEvent.body?.content) {
-    let content = existingEvent.body.content;
-    
-    // If content is HTML, strip HTML tags to get plain text
-    if (existingEvent.body.contentType === 'html') {
-      content = stripHtmlTags(content);
-    }
+    const content = extractBodyText(existingEvent.body);
     
     const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
     const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
@@ -239,13 +303,37 @@ export async function updateTodoItem(
     }
   }
 
-  const bodyContent = `${ARRANGE_DATA_START_MARKER}
-${JSON.stringify(updatedTodoData)}
-${ARRANGE_DATA_END_MARKER}`;
+  // Date-bump logic: move stale non-terminal items to today
+  const effectiveStatus = updatedTodoData.status || 'new';
+  const callerSetDates = todoItem.etsDateTime !== undefined || todoItem.etaDateTime !== undefined;
+
+  if (isNonTerminalStatus(effectiveStatus) && !callerSetDates) {
+    const currentEts = convertGraphDateTimeToISO(existingEvent.start);
+    const currentEta = convertGraphDateTimeToISO(existingEvent.end);
+    const bumped = computeBumpedDates(currentEts, currentEta);
+
+    if (bumped) {
+      // Preserve original planned dates (only on first bump)
+      if (!updatedTodoData.originalEtsDateTime) {
+        updatedTodoData.originalEtsDateTime = currentEts;
+      }
+      if (!updatedTodoData.originalEtaDateTime) {
+        updatedTodoData.originalEtaDateTime = currentEta;
+      }
+
+      todoItem = {
+        ...todoItem,
+        etsDateTime: bumped.etsDateTime,
+        etaDateTime: bumped.etaDateTime,
+      };
+    }
+  }
+
+  const bodyContent = buildBodyHtml(updatedTodoData);
 
   const updateData: any = {
     body: {
-      contentType: 'text',
+      contentType: 'html',
       content: bodyContent,
     },
   };
@@ -278,6 +366,37 @@ ${ARRANGE_DATA_END_MARKER}`;
     console.error('Error updating TODO item:', error);
     throw error;
   }
+}
+
+/**
+ * Sweeps stale non-terminal TODO items by bumping their calendar dates forward.
+ * Returns the IDs of items that were bumped so the caller can refresh.
+ */
+export async function sweepStaleTodos(
+  accessToken: string,
+  calendarId: string,
+  todoItems: (TodoItem & { id?: string })[]
+): Promise<string[]> {
+  const staleItems = todoItems.filter(item =>
+    item.id &&
+    isNonTerminalStatus(item.status) &&
+    computeBumpedDates(item.etsDateTime, item.etaDateTime) !== null
+  );
+
+  if (staleItems.length === 0) return [];
+
+  const bumpedIds: string[] = [];
+  for (const item of staleItems) {
+    try {
+      // An empty update triggers the built-in date-bump logic in updateTodoItem
+      await updateTodoItem(accessToken, calendarId, item.id!, {});
+      bumpedIds.push(item.id!);
+    } catch (error) {
+      console.error(`Error bumping stale TODO ${item.id}:`, error);
+    }
+  }
+
+  return bumpedIds;
 }
 
 /**

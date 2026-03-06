@@ -1,25 +1,47 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
-import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus } from '@/lib/todoDataService';
+import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
+import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
 
-// All possible status values
-const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
+type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
 
-const statusLabels: Record<TodoStatus, string> = {
-  new: 'New',
-  inProgress: 'In Progress',
-  blocked: 'Blocked',
-  finished: 'Finished',
-  cancelled: 'Cancelled',
+const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
+  showAll: 'All',
+  todayOnly: 'Today',
+  hide: 'Hide',
 };
+
+const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
+  new: 'showAll',
+  inProgress: 'showAll',
+  blocked: 'showAll',
+  finished: 'todayOnly',
+  cancelled: 'todayOnly',
+};
+
+const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
+
+function isToday(dateStr: string | undefined | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate();
+}
+
+function passesTodayFilter(todo: TodoItem): boolean {
+  const status = todo.status || 'new';
+  if (status === 'finished') return isToday(todo.finishDateTime);
+  return isToday(todo.etsDateTime);
+}
 
 // TodoCard component for rendering individual todo items
 function TodoCard({ todo, onDragStart, onClick, onStatusChange }: { 
@@ -55,9 +77,9 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
             key={status}
             className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
             onClick={(e) => handleStatusClick(e, status)}
-            title={`Set status to ${statusLabels[status]}`}
+            title={`Set status to ${STATUS_LABELS[status]}`}
           >
-            {statusLabels[status]}
+            {STATUS_LABELS[status]}
           </button>
         ))}
       </div>
@@ -161,6 +183,7 @@ export default function MatrixPage() {
 
 function MatrixPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const bookId = searchParams.get('bookId');
   
   const { instance, accounts, inProgress } = useMsal();
@@ -169,8 +192,41 @@ function MatrixPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
 
   const isAuthenticated = accounts.length > 0;
+
+  const filteredTodoItems = todoItems.filter(todo => {
+    const status = todo.status || 'new';
+    const mode = statusFilters[status];
+    if (mode === 'hide') return false;
+    if (mode === 'todayOnly') return passesTodayFilter(todo);
+    return true;
+  });
+
+  const currentCalendarName = calendars.find(c => c.id === bookId)?.name?.replace(/ by arrange$/i, '') || bookId;
+
+  const fetchCalendars = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const all = await getCalendars(response.accessToken);
+      setCalendars(all.filter(c => c.name?.toLowerCase().endsWith(' by arrange')));
+    } catch (error) {
+      console.error('Error fetching calendars:', error);
+    }
+  }, [isAuthenticated, accounts, instance]);
+
+  useEffect(() => {
+    fetchCalendars();
+  }, [fetchCalendars]);
+
+  const handleCalendarSwitch = (calendarId: string) => {
+    router.push(`/matrix?bookId=${calendarId}`);
+  };
 
   const fetchEvents = async () => {
     if (!isAuthenticated || !bookId) return;
@@ -201,6 +257,19 @@ function MatrixPageContent() {
       // Parse events to TodoItems
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
+
+      // Sweep stale non-terminal items (bump their calendar dates to today)
+      const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
+      if (bumpedIds.length > 0) {
+        // Re-fetch to get the updated event data
+        const refreshedEvents = await getCalendarEvents(
+          response.accessToken,
+          bookId,
+          startDate.toISOString(),
+          endDate.toISOString()
+        );
+        setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+      }
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
@@ -376,7 +445,21 @@ function MatrixPageContent() {
           <div className={styles.header}>
             <div className={styles.headerInfo}>
               <h1 className={styles.title}>Matrix View</h1>
-              <p className={styles.subtitle}>Calendar: {bookId}</p>
+              {calendars.length > 1 ? (
+                <select
+                  className={styles.bookSwitcher}
+                  value={bookId || ''}
+                  onChange={(e) => handleCalendarSwitch(e.target.value)}
+                >
+                  {calendars.map(cal => (
+                    <option key={cal.id} value={cal.id}>
+                      {cal.name?.replace(/ by arrange$/i, '')}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className={styles.subtitle}>{currentCalendarName}</p>
+              )}
             </div>
             <div className={styles.actions}>
               {!isAuthenticated ? (
@@ -415,15 +498,37 @@ function MatrixPageContent() {
             </div>
           )}
 
-          {!loading && isAuthenticated && todoItems.length === 0 && (
-            <div className={styles.empty}>
-              No TODO items found. Click "Add TODO" to create one.
-            </div>
-          )}
-
-          {!loading && isAuthenticated && todoItems.length > 0 && (
+          {!loading && isAuthenticated && (
             <div className={styles.matrixSection}>
-              <h2 className={styles.sectionTitle}>Eisenhower Matrix ({todoItems.length} items)</h2>
+              <div className={styles.matrixHeader}>
+                <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
+                <button
+                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                  onClick={() => setShowFilters(prev => !prev)}
+                >
+                  {showFilters ? '▲ Filters' : '▼ Filters'}
+                </button>
+              </div>
+              {showFilters && (
+                <div className={styles.filterBar}>
+                  {ALL_STATUSES.map(status => (
+                    <div key={status} className={styles.filterGroup}>
+                      <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
+                      <div className={styles.filterModes}>
+                        {FILTER_MODES.map(mode => (
+                          <button
+                            key={mode}
+                            className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                            onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
+                          >
+                            {FILTER_MODE_LABELS[mode]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className={styles.matrix}>
                 {/* Top-left: Urgent & Important */}
                 <div 
@@ -445,12 +550,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent === true && todo.important === true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -476,12 +581,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent !== true && todo.important === true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -507,12 +612,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent === true && todo.important !== true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -538,12 +643,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent !== true && todo.important !== true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
+                    {filteredTodoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
