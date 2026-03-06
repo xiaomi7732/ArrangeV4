@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
+import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
@@ -190,6 +190,19 @@ function MatrixPageContent() {
       // Parse events to TodoItems
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
+
+      // Sweep stale non-terminal items (bump their calendar dates to today)
+      const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
+      if (bumpedIds.length > 0) {
+        // Re-fetch to get the updated event data
+        const refreshedEvents = await getCalendarEvents(
+          response.accessToken,
+          bookId,
+          startDate.toISOString(),
+          endDate.toISOString()
+        );
+        setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+      }
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
