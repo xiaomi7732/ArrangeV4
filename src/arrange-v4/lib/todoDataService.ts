@@ -115,9 +115,7 @@ export async function createTodoItem(
     originalEtaDateTime: null,
   };
 
-  const bodyContent = `${ARRANGE_DATA_START_MARKER}
-${JSON.stringify(todoBodyData)}
-${ARRANGE_DATA_END_MARKER}`;
+  const bodyContent = buildBodyHtml(todoBodyData);
 
   // Default to 1 hour from now if no times specified
   const now = new Date();
@@ -127,7 +125,7 @@ ${ARRANGE_DATA_END_MARKER}`;
   const event = {
     subject: todoItem.subject,
     body: {
-      contentType: 'text',
+      contentType: 'html',
       content: bodyContent,
     },
     start: {
@@ -153,21 +151,34 @@ ${ARRANGE_DATA_END_MARKER}`;
 }
 
 /**
- * Decodes HTML entities in a string
- */
-function decodeHtmlEntities(text: string): string {
-  const textArea = document.createElement('textarea');
-  textArea.innerHTML = text;
-  return textArea.value;
-}
-
-/**
- * Strips HTML tags and extracts plain text
+ * Strips HTML tags and extracts plain text (used for backward compat with old plain-text bodies)
  */
 function stripHtmlTags(html: string): string {
   const div = document.createElement('div');
   div.innerHTML = html;
   return div.textContent || div.innerText || '';
+}
+
+/**
+ * Builds the HTML body content for a calendar event, wrapping the TODO JSON data
+ * in a <pre> tag between markers for easy extraction and human-readable display.
+ */
+function buildBodyHtml(todoData: object): string {
+  const json = JSON.stringify(todoData, null, 2);
+  return `<pre>${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+}
+
+/**
+ * Extracts the raw text content from an event body, handling both HTML and plain text.
+ */
+function extractBodyText(body: { contentType?: string; content?: string }): string {
+  if (!body?.content) return '';
+
+  let content = body.content;
+  if (body.contentType === 'html') {
+    content = stripHtmlTags(content);
+  }
+  return content;
 }
 
 /**
@@ -184,12 +195,7 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
 
   // Extract TODO data from body if present
   if (event.body?.content) {
-    let content = event.body.content;
-    
-    // If content is HTML, strip HTML tags to get plain text
-    if (event.body.contentType === 'html') {
-      content = stripHtmlTags(content);
-    }
+    const content = extractBodyText(event.body);
     
     const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
     const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
@@ -245,12 +251,7 @@ export async function updateTodoItem(
   };
 
   if (existingEvent.body?.content) {
-    let content = existingEvent.body.content;
-    
-    // If content is HTML, strip HTML tags to get plain text
-    if (existingEvent.body.contentType === 'html') {
-      content = stripHtmlTags(content);
-    }
+    const content = extractBodyText(existingEvent.body);
     
     const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
     const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
@@ -328,13 +329,11 @@ export async function updateTodoItem(
     }
   }
 
-  const bodyContent = `${ARRANGE_DATA_START_MARKER}
-${JSON.stringify(updatedTodoData)}
-${ARRANGE_DATA_END_MARKER}`;
+  const bodyContent = buildBodyHtml(updatedTodoData);
 
   const updateData: any = {
     body: {
-      contentType: 'text',
+      contentType: 'html',
       content: bodyContent,
     },
   };
