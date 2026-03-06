@@ -171,6 +171,81 @@
   margin-top: 16px;
 }
 
+.matrixHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.matrixHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+.filterToggle {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filterLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.filterModes {
+  display: flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filterMode {
+  font-size: 0.625rem;
+  padding: 2px 8px;
+  border: none;
+  background-color: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.filterMode:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+
+.filterMode:hover {
+  background-color: #f3f4f6;
+}
+
+.filterModeActive {
+  background-color: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+.filterModeActive:hover {
+  background-color: #1d4ed8;
+}
+
 .matrix {
   display: grid;
   grid-template-columns: 1fr;

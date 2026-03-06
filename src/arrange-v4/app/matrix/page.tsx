@@ -10,6 +10,39 @@ import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
 
+type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+
+const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
+  showAll: 'All',
+  todayOnly: 'Today',
+  hide: 'Hide',
+};
+
+const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
+  new: 'showAll',
+  inProgress: 'showAll',
+  blocked: 'showAll',
+  finished: 'todayOnly',
+  cancelled: 'todayOnly',
+};
+
+const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
+
+function isToday(dateStr: string | undefined | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate();
+}
+
+function passesTodayFilter(todo: TodoItem): boolean {
+  const status = todo.status || 'new';
+  if (status === 'finished') return isToday(todo.finishDateTime);
+  return isToday(todo.etsDateTime);
+}
+
 // TodoCard component for rendering individual todo items
 function TodoCard({ todo, onDragStart, onClick, onStatusChange }: { 
   todo: TodoItem & { id?: string }, 
@@ -158,8 +191,18 @@ function MatrixPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
 
   const isAuthenticated = accounts.length > 0;
+
+  const filteredTodoItems = todoItems.filter(todo => {
+    const status = todo.status || 'new';
+    const mode = statusFilters[status];
+    if (mode === 'hide') return false;
+    if (mode === 'todayOnly') return passesTodayFilter(todo);
+    return true;
+  });
 
   const fetchEvents = async () => {
     if (!isAuthenticated || !bookId) return;
@@ -425,7 +468,35 @@ function MatrixPageContent() {
 
           {!loading && isAuthenticated && todoItems.length > 0 && (
             <div className={styles.matrixSection}>
-              <h2 className={styles.sectionTitle}>Eisenhower Matrix ({todoItems.length} items)</h2>
+              <div className={styles.matrixHeader}>
+                <h2 className={styles.sectionTitle}>Eisenhower Matrix ({filteredTodoItems.length} of {todoItems.length} items)</h2>
+                <button
+                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                  onClick={() => setShowFilters(prev => !prev)}
+                >
+                  {showFilters ? '▲ Filters' : '▼ Filters'}
+                </button>
+              </div>
+              {showFilters && (
+                <div className={styles.filterBar}>
+                  {ALL_STATUSES.map(status => (
+                    <div key={status} className={styles.filterGroup}>
+                      <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
+                      <div className={styles.filterModes}>
+                        {FILTER_MODES.map(mode => (
+                          <button
+                            key={mode}
+                            className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                            onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
+                          >
+                            {FILTER_MODE_LABELS[mode]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className={styles.matrix}>
                 {/* Top-left: Urgent & Important */}
                 <div 
@@ -447,12 +518,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent === true && todo.important === true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -478,12 +549,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent !== true && todo.important === true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -509,12 +580,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent === true && todo.important !== true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
+                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -540,12 +611,12 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {todoItems
+                    {filteredTodoItems
                       .filter(todo => todo.urgent !== true && todo.important !== true)
                       .map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {todoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
+                    {filteredTodoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
