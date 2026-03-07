@@ -18,7 +18,7 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
     e.preventDefault();
     
     if (!calendarName.trim()) {
-      setError('Calendar name is required');
+      setError('Book name is required');
       return;
     }
 
@@ -37,7 +37,7 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
       setCalendarName('');
       setIsOpen(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to create calendar');
+      setError(err.message || 'Failed to create book');
     } finally {
       setIsCreating(false);
     }
@@ -56,25 +56,25 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
         disabled={disabled}
         className={styles.button}
       >
-        Create Calendar
+        Create Book
       </button>
 
       {isOpen && (
         <div className={styles.overlay}>
           <div className={styles.modal}>
-            <h2 className={styles.modalTitle}>Create New Calendar</h2>
+            <h2 className={styles.modalTitle}>Create New Book</h2>
             
             <form onSubmit={handleSubmit}>
               <div className={styles.fieldGroup}>
                 <label htmlFor="calendarName" className={styles.label}>
-                  Calendar Name
+                  Book Name
                 </label>
                 <input
                   type="text"
                   id="calendarName"
                   value={calendarName}
                   onChange={(e) => setCalendarName(e.target.value)}
-                  placeholder="My Calendar"
+                  placeholder="My Book"
                   className={styles.input}
                   disabled={isCreating}
                   autoFocus

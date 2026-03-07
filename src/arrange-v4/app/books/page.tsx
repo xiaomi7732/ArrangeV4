@@ -57,7 +57,7 @@ export default function BooksPage() {
       setCalendars(filteredCalendars);
     } catch (error: any) {
       console.error('Error fetching calendars:', error);
-      setError(error.message || 'Failed to fetch calendars');
+      setError(error.message || 'Failed to fetch books');
       
       // If token acquisition fails, try interactive login
       if (error.name === 'InteractionRequiredAuthError') {
@@ -69,7 +69,7 @@ export default function BooksPage() {
           );
           setCalendars(filteredCalendars);
         } catch (popupError: any) {
-          setError(popupError.message || 'Failed to fetch calendars');
+          setError(popupError.message || 'Failed to fetch books');
         }
       }
     } finally {
@@ -91,7 +91,7 @@ export default function BooksPage() {
       await fetchCalendars();
     } catch (error: any) {
       console.error('Error creating calendar:', error);
-      throw new Error(error.message || 'Failed to create calendar');
+      throw new Error(error.message || 'Failed to create book');
     }
   };
 
@@ -109,7 +109,7 @@ export default function BooksPage() {
       await fetchCalendars();
     } catch (error: any) {
       console.error('Error deleting calendar:', error);
-      throw new Error(error.message || 'Failed to delete calendar');
+      throw new Error(error.message || 'Failed to delete book');
     }
   };
 
@@ -179,7 +179,7 @@ export default function BooksPage() {
               Sign in to view your books
             </h2>
             <p className={styles.unauthDescription}>
-              This application uses Microsoft authentication to securely access your Microsoft 365 calendars.
+              This application uses Microsoft authentication to securely access your books.
             </p>
             <button
               onClick={handleLogin}

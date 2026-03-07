@@ -431,7 +431,7 @@ function MatrixPageContent() {
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
-            No calendar selected. Please select a calendar from the <a href="/books" className={styles.warningLink}>Books page</a>.
+            No book selected. Please select a book from the <a href="/books" className={styles.warningLink}>Books page</a>.
           </div>
         </div>
       </div>

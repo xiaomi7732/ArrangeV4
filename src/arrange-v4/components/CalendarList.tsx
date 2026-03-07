@@ -25,7 +25,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   const handleDelete = async (calendar: Calendar) => {
     if (!calendar.id) return;
     
-    const displayName = calendar.name?.replace(/ by arrange$/i, '') || calendar.name || 'this calendar';
+    const displayName = calendar.name?.replace(/ by arrange$/i, '') || calendar.name || 'this book';
     if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
       return;
     }
@@ -34,8 +34,8 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     try {
       await onDeleteCalendar(calendar.id);
     } catch (error) {
-      console.error('Failed to delete calendar:', error);
-      alert('Failed to delete calendar. Please try again.');
+      console.error('Failed to delete book:', error);
+      alert('Failed to delete book. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -60,14 +60,14 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   if (calendars.length === 0) {
     return (
       <div className={styles.empty}>
-        No calendars ending with &quot;by arrange&quot; found.
+        No books found. Create one to get started.
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className={styles.sectionTitle}>Calendars by Arrange</h2>
+      <h2 className={styles.sectionTitle}>Your Books</h2>
       <div className={styles.grid}>
         {calendars.map((calendar) => (
           <div
@@ -124,7 +124,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                 disabled={deletingId === calendar.id}
                 className={styles.deleteButton}
               >
-                {deletingId === calendar.id ? 'Deleting...' : 'Delete Calendar'}
+                {deletingId === calendar.id ? 'Deleting...' : 'Delete Book'}
               </button>
             </div>
           </div>
