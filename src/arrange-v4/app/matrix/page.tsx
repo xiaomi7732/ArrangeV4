@@ -537,7 +537,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Do First</h3>
+                      <h3 className={styles.quadrantTitle}>Do First ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent & Important</p>
                     </div>
                     <AddTodoItem 
@@ -568,7 +568,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Schedule</h3>
+                      <h3 className={styles.quadrantTitle}>Schedule ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
                     </div>
                     <AddTodoItem 
@@ -599,7 +599,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Delegate</h3>
+                      <h3 className={styles.quadrantTitle}>Delegate ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -630,7 +630,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Eliminate</h3>
+                      <h3 className={styles.quadrantTitle}>Eliminate ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
