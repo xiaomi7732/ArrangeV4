@@ -1,0 +1,163 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 32px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.errorBold {
+  font-weight: bold;
+}
+
+.empty {
+  text-align: center;
+  padding: 32px;
+  color: #6b7280;
+}
+
+.sectionTitle {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #111827;
+  margin-bottom: 16px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.calendarCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  background-color: white;
+  transition: box-shadow 0.2s;
+}
+
+.calendarCard:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.calendarTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.calendarName {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin-bottom: 8px;
+  color: #2563eb;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.calendarName:hover {
+  color: #1d4ed8;
+}
+
+.calendarOwner {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.badgeGreen {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badgeBlue {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badgePurple {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.colorDot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.calendarId {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 12px;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarFooter {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.deleteButton {
+  width: 100%;
+  background-color: #fef2f2;
+  color: #991b1b;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 0.875rem;
+}
+
+.deleteButton:hover:not(:disabled) {
+  background-color: #fecaca;
+}
+
+.deleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

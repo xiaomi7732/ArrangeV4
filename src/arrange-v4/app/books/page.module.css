@@ -1,0 +1,125 @@
+.container {
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 16px;
+}
+
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-size: 1.875rem;
+  font-weight: bold;
+  color: #111827;
+}
+
+.welcome {
+  color: #4b5563;
+  margin-top: 8px;
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  font-weight: 500;
+  padding: 8px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.buttonPrimary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.buttonSecondary {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.buttonSecondary:hover:not(:disabled) {
+  background-color: #d1d5db;
+}
+
+.buttonDanger {
+  background-color: #fef2f2;
+  color: #991b1b;
+}
+
+.buttonDanger:hover:not(:disabled) {
+  background-color: #fecaca;
+}
+
+/* Unauthenticated state */
+.unauthCard {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 48px;
+  text-align: center;
+}
+
+.unauthTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 16px;
+}
+
+.unauthDescription {
+  color: #4b5563;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .inner {
+    padding: 16px;
+  }
+
+  .unauthCard {
+    padding: 32px 24px;
+  }
+}
