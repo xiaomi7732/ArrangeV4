@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const appVersion = process.env.NEXT_PUBLIC_APP_VERSION || "local";
 
 const nextConfig: NextConfig = {
   output: "export",
@@ -10,6 +11,7 @@ const nextConfig: NextConfig = {
   },
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
+    NEXT_PUBLIC_APP_VERSION: appVersion,
   },
 };
 
