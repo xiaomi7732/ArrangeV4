@@ -290,10 +290,9 @@ function MatrixPageContent() {
         account: account,
       });
 
-      await createTodoItem(response.accessToken, bookId, todoItem);
-      
-      // Refresh the events list after creating
-      await fetchEvents();
+      const createdEvent = await createTodoItem(response.accessToken, bookId, todoItem);
+      const newTodo = parseTodoData(createdEvent);
+      setTodoItems(prev => [...prev, newTodo]);
     } catch (error: any) {
       console.error('Error creating TODO item:', error);
       throw new Error(error.message || 'Failed to create TODO item');
