@@ -85,10 +85,8 @@ export default function BooksPage() {
         account: account,
       });
 
-      await createCalendar(response.accessToken, name);
-      
-      // Refresh the calendar list after creating
-      await fetchCalendars();
+      const newCalendar = await createCalendar(response.accessToken, name);
+      setCalendars(prev => [...prev, newCalendar]);
     } catch (error: any) {
       console.error('Error creating calendar:', error);
       throw new Error(error.message || 'Failed to create book');
@@ -104,9 +102,7 @@ export default function BooksPage() {
       });
 
       await deleteCalendar(response.accessToken, calendarId);
-      
-      // Refresh the calendar list after deleting
-      await fetchCalendars();
+      setCalendars(prev => prev.filter(c => c.id !== calendarId));
     } catch (error: any) {
       console.error('Error deleting calendar:', error);
       throw new Error(error.message || 'Failed to delete book');
