@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import styles from './CreateCalendar.module.css';
 
 interface CreateCalendarProps {
   onCreateCalendar: (name: string) => Promise<void>;
@@ -17,7 +18,7 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
     e.preventDefault();
     
     if (!calendarName.trim()) {
-      setError('Calendar name is required');
+      setError('Book name is required');
       return;
     }
 
@@ -36,7 +37,7 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
       setCalendarName('');
       setIsOpen(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to create calendar');
+      setError(err.message || 'Failed to create book');
     } finally {
       setIsCreating(false);
     }
@@ -53,55 +54,55 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
       <button
         onClick={() => setIsOpen(true)}
         disabled={disabled}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className={styles.button}
       >
-        Create Calendar
+        Create Book
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Create New Calendar</h2>
+        <div className={styles.overlay}>
+          <div className={styles.modal}>
+            <h2 className={styles.modalTitle}>Create New Book</h2>
             
             <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label htmlFor="calendarName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Calendar Name
+              <div className={styles.fieldGroup}>
+                <label htmlFor="calendarName" className={styles.label}>
+                  Book Name
                 </label>
                 <input
                   type="text"
                   id="calendarName"
                   value={calendarName}
                   onChange={(e) => setCalendarName(e.target.value)}
-                  placeholder="My Calendar"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="My Book"
+                  className={styles.input}
                   disabled={isCreating}
                   autoFocus
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  " by arrange" will be automatically added to the end
+                <p className={styles.hint}>
+                  &quot; by arrange&quot; will be automatically added to the end
                 </p>
               </div>
 
               {error && (
-                <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                <div className={styles.error}>
                   {error}
                 </div>
               )}
 
-              <div className="flex justify-end gap-3">
+              <div className={styles.modalActions}>
                 <button
                   type="button"
                   onClick={handleCancel}
                   disabled={isCreating}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={styles.cancelButton}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isCreating || !calendarName.trim()}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={styles.submitButton}
                 >
                   {isCreating ? 'Creating...' : 'Create'}
                 </button>

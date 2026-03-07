@@ -5,6 +5,7 @@ import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
 import { getCalendars } from '@/lib/graphService';
 import { useState, useEffect } from 'react';
+import styles from './page.module.css';
 
 /**
  * Determines the appropriate landing page after user authentication
@@ -102,50 +103,41 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h1 className="text-5xl font-bold text-gray-900 mb-4">
-              Welcome to Arrange V4
-            </h1>
-          </div>
-          <div>
-            Arrange V4 is the only todo app that you need. Organize your tasks efficiently and boost your productivity.
-          </div>
-          <div className="text-center">
-            {!isAuthenticated ? (
+    <div className={styles.container}>
+      <div className={styles.card}>
+        <h1 className={styles.title}>Welcome to Arrange</h1>
+        <p className={styles.description}>
+          The only todo app you need. Organize your tasks with the Eisenhower Matrix and boost your productivity.
+        </p>
+        <div className={styles.actions}>
+          {!isAuthenticated ? (
+            <button
+              onClick={handleLogin}
+              disabled={inProgress !== 'none'}
+              className={`${styles.button} ${styles.buttonPrimary}`}
+            >
+              {inProgress !== 'none' ? 'Signing in...' : 'Get Started'}
+            </button>
+          ) : (
+            <>
               <button
-                onClick={handleLogin}
-                disabled={inProgress !== 'none'}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-lg"
+                onClick={handleNavigateToBooks}
+                className={`${styles.button} ${styles.buttonPrimary}`}
               >
-                {inProgress !== 'none' ? 'Signing in...' : 'Get Started - Sign In'}
+                Go to My Books
               </button>
-            ) : (
-              <div className="space-x-4">
+              {matrixAvailable.show && (
                 <button
-                  onClick={handleNavigateToBooks}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg transition-colors text-lg"
+                  onClick={handleNavigateToMatrix}
+                  className={`${styles.button} ${styles.buttonSecondary}`}
                 >
-                  Go to My Books
+                  Go to Matrix
                 </button>
-                {matrixAvailable.show && (
-                  <button
-                    onClick={handleNavigateToMatrix}
-                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-8 rounded-lg transition-colors text-lg"
-                  >
-                    Go to Matrix
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </div>
-
-
       </div>
     </div>
-
   );
 }

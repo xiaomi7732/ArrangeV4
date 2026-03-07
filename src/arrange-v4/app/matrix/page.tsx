@@ -290,10 +290,9 @@ function MatrixPageContent() {
         account: account,
       });
 
-      await createTodoItem(response.accessToken, bookId, todoItem);
-      
-      // Refresh the events list after creating
-      await fetchEvents();
+      const createdEvent = await createTodoItem(response.accessToken, bookId, todoItem);
+      const newTodo = parseTodoData(createdEvent);
+      setTodoItems(prev => [...prev, newTodo]);
     } catch (error: any) {
       console.error('Error creating TODO item:', error);
       throw new Error(error.message || 'Failed to create TODO item');
@@ -431,7 +430,7 @@ function MatrixPageContent() {
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
-            No calendar selected. Please select a calendar from the <a href="/books" className={styles.warningLink}>Books page</a>.
+            No book selected. Please select a book from the <a href="/books" className={styles.warningLink}>Books page</a>.
           </div>
         </div>
       </div>
@@ -538,7 +537,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Do First</h3>
+                      <h3 className={styles.quadrantTitle}>Do First ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent & Important</p>
                     </div>
                     <AddTodoItem 
@@ -569,7 +568,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Schedule</h3>
+                      <h3 className={styles.quadrantTitle}>Schedule ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
                     </div>
                     <AddTodoItem 
@@ -600,7 +599,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Delegate</h3>
+                      <h3 className={styles.quadrantTitle}>Delegate ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -631,7 +630,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Eliminate</h3>
+                      <h3 className={styles.quadrantTitle}>Eliminate ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true).length})</h3>
                       <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 

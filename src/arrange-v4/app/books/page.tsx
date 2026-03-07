@@ -6,6 +6,7 @@ import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
+import styles from './page.module.css';
 
 export default function BooksPage() {
   const { instance, accounts, inProgress } = useMsal();
@@ -56,7 +57,7 @@ export default function BooksPage() {
       setCalendars(filteredCalendars);
     } catch (error: any) {
       console.error('Error fetching calendars:', error);
-      setError(error.message || 'Failed to fetch calendars');
+      setError(error.message || 'Failed to fetch books');
       
       // If token acquisition fails, try interactive login
       if (error.name === 'InteractionRequiredAuthError') {
@@ -68,7 +69,7 @@ export default function BooksPage() {
           );
           setCalendars(filteredCalendars);
         } catch (popupError: any) {
-          setError(popupError.message || 'Failed to fetch calendars');
+          setError(popupError.message || 'Failed to fetch books');
         }
       }
     } finally {
@@ -84,13 +85,11 @@ export default function BooksPage() {
         account: account,
       });
 
-      await createCalendar(response.accessToken, name);
-      
-      // Refresh the calendar list after creating
-      await fetchCalendars();
+      const newCalendar = await createCalendar(response.accessToken, name);
+      setCalendars(prev => [...prev, newCalendar]);
     } catch (error: any) {
       console.error('Error creating calendar:', error);
-      throw new Error(error.message || 'Failed to create calendar');
+      throw new Error(error.message || 'Failed to create book');
     }
   };
 
@@ -103,12 +102,10 @@ export default function BooksPage() {
       });
 
       await deleteCalendar(response.accessToken, calendarId);
-      
-      // Refresh the calendar list after deleting
-      await fetchCalendars();
+      setCalendars(prev => prev.filter(c => c.id !== calendarId));
     } catch (error: any) {
       console.error('Error deleting calendar:', error);
-      throw new Error(error.message || 'Failed to delete calendar');
+      throw new Error(error.message || 'Failed to delete book');
     }
   };
 
@@ -119,27 +116,27 @@ export default function BooksPage() {
   }, [isAuthenticated, inProgress]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-center">
+    <div className={styles.container}>
+      <div className={styles.inner}>
+        <div className={styles.card}>
+          <div className={styles.header}>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">My Books</h1>
+              <h1 className={styles.title}>My Books</h1>
               {userName && (
-                <p className="text-gray-600 mt-2">Welcome, {userName}</p>
+                <p className={styles.welcome}>Welcome, {userName}</p>
               )}
             </div>
-            <div>
+            <div className={styles.actions}>
               {!isAuthenticated ? (
                 <button
                   onClick={handleLogin}
                   disabled={inProgress !== 'none'}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className={`${styles.button} ${styles.buttonPrimary}`}
                 >
                   {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
                 </button>
               ) : (
-                <div className="flex gap-2">
+                <>
                   <CreateCalendar 
                     onCreateCalendar={handleCreateCalendar}
                     disabled={loading}
@@ -147,24 +144,24 @@ export default function BooksPage() {
                   <button
                     onClick={fetchCalendars}
                     disabled={loading}
-                    className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className={`${styles.button} ${styles.buttonSecondary}`}
                   >
-                    {loading ? 'Loading...' : 'Refresh Books'}
+                    {loading ? 'Loading...' : 'Refresh'}
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+                    className={`${styles.button} ${styles.buttonDanger}`}
                   >
                     Sign Out
                   </button>
-                </div>
+                </>
               )}
             </div>
           </div>
         </div>
 
         {isAuthenticated ? (
-          <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className={styles.card}>
             <CalendarList 
               calendars={calendars} 
               loading={loading} 
@@ -173,17 +170,17 @@ export default function BooksPage() {
             />
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-            <h2 className="text-2xl font-semibold text-gray-700 mb-4">
+          <div className={styles.unauthCard}>
+            <h2 className={styles.unauthTitle}>
               Sign in to view your books
             </h2>
-            <p className="text-gray-600 mb-6">
-              This application uses Microsoft authentication to securely access your Microsoft 365 calendars.
+            <p className={styles.unauthDescription}>
+              This application uses Microsoft authentication to securely access your books.
             </p>
             <button
               onClick={handleLogin}
               disabled={inProgress !== 'none'}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={`${styles.button} ${styles.buttonPrimary}`}
             >
               {inProgress !== 'none' ? 'Signing in...' : 'Sign In with Microsoft'}
             </button>

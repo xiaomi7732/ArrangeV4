@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
+import styles from './CalendarList.module.css';
 
 interface CalendarListProps {
   calendars: Calendar[];
@@ -24,7 +25,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   const handleDelete = async (calendar: Calendar) => {
     if (!calendar.id) return;
     
-    const displayName = calendar.name?.replace(/ by arrange$/i, '') || calendar.name || 'this calendar';
+    const displayName = calendar.name?.replace(/ by arrange$/i, '') || calendar.name || 'this book';
     if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
       return;
     }
@@ -33,73 +34,72 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     try {
       await onDeleteCalendar(calendar.id);
     } catch (error) {
-      console.error('Failed to delete calendar:', error);
-      alert('Failed to delete calendar. Please try again.');
+      console.error('Failed to delete book:', error);
+      alert('Failed to delete book. Please try again.');
     } finally {
       setDeletingId(null);
     }
   };
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className={styles.loading}>
+        <div className={styles.spinner}></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-        <strong className="font-bold">Error: </strong>
-        <span className="block sm:inline">{error}</span>
+      <div className={styles.error} role="alert">
+        <span className={styles.errorBold}>Error: </span>
+        <span>{error}</span>
       </div>
     );
   }
 
   if (calendars.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        No calendars ending with "by arrange" found.
+      <div className={styles.empty}>
+        No books found. Create one to get started.
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold mb-4">Calendars by Arrange</h2>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div>
+      <h2 className={styles.sectionTitle}>Your Books</h2>
+      <div className={styles.grid}>
         {calendars.map((calendar) => (
           <div
             key={calendar.id}
-            className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow bg-white"
+            className={styles.calendarCard}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
+            <div className={styles.calendarTop}>
+              <div>
                 <h3 
-                  className="font-semibold text-lg mb-2 text-blue-600 hover:text-blue-800 cursor-pointer hover:cursor-pointer transition-colors"
+                  className={styles.calendarName}
                   onClick={() => handleCalendarClick(calendar)}
-                  style={{ cursor: 'pointer' }}
                 >
                   {calendar.name?.replace(/ by arrange$/i, '') || calendar.name}
                 </h3>
                 {calendar.owner && (
-                  <p className="text-sm text-gray-600 mb-1">
+                  <p className={styles.calendarOwner}>
                     Owner: {calendar.owner.name || calendar.owner.address}
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className={styles.badges}>
                   {calendar.canEdit && (
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                    <span className={`${styles.badge} ${styles.badgeGreen}`}>
                       Can Edit
                     </span>
                   )}
                   {calendar.canShare && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    <span className={`${styles.badge} ${styles.badgeBlue}`}>
                       Can Share
                     </span>
                   )}
                   {calendar.canViewPrivateItems && (
-                    <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                    <span className={`${styles.badge} ${styles.badgePurple}`}>
                       View Private
                     </span>
                   )}
@@ -107,24 +107,24 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
               </div>
               {calendar.color && (
                 <div
-                  className="w-6 h-6 rounded-full ml-2 flex-shrink-0"
+                  className={styles.colorDot}
                   style={{ backgroundColor: calendar.color }}
                   title={`Color: ${calendar.color}`}
                 />
               )}
             </div>
             {calendar.id && (
-              <p className="text-xs text-gray-400 mt-3 font-mono truncate" title={calendar.id}>
+              <p className={styles.calendarId} title={calendar.id}>
                 ID: {calendar.id}
               </p>
             )}
-            <div className="mt-4 pt-3 border-t border-gray-200">
+            <div className={styles.calendarFooter}>
               <button
                 onClick={() => handleDelete(calendar)}
                 disabled={deletingId === calendar.id}
-                className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-medium py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                className={styles.deleteButton}
               >
-                {deletingId === calendar.id ? 'Deleting...' : 'Delete Calendar'}
+                {deletingId === calendar.id ? 'Deleting...' : 'Delete Book'}
               </button>
             </div>
           </div>
