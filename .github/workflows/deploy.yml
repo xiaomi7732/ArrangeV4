@@ -34,7 +34,9 @@ jobs:
 
       - name: Build
         working-directory: src/arrange-v4
-        run: npm run build
+        run: |
+          export NEXT_PUBLIC_APP_VERSION="$(date -u +'%Y%m%d%H%M')-$(echo '${{ github.sha }}' | cut -c1-6)"
+          npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
