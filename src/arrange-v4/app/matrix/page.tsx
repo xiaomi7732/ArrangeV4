@@ -410,6 +410,31 @@ function MatrixPageContent() {
     }
   };
 
+  const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
+    if (!selectedTodo?.id || !bookId) return;
+
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item =>
+        item.id === selectedTodo.id ? { ...item, ...updatedFields } : item
+      )
+    );
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await updateTodoItem(response.accessToken, bookId, selectedTodo.id, updatedFields);
+    } catch (error: any) {
+      console.error('Error updating TODO:', error);
+      setTodoItems(previousItems);
+      throw error;
+    }
+  };
+
   const handleLogin = async () => {
     try {
       await instance.loginPopup(loginRequest);
@@ -660,7 +685,8 @@ function MatrixPageContent() {
           {selectedTodo && (
             <ViewTodoItem 
               todo={selectedTodo} 
-              onClose={() => setSelectedTodo(null)} 
+              onClose={() => setSelectedTodo(null)}
+              onUpdate={handleUpdateTodo}
             />
           )}
         </div>
