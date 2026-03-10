@@ -416,6 +416,7 @@ function MatrixPageContent() {
         item.id === selectedTodo.id ? { ...item, ...updatedFields } : item
       )
     );
+    setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
 
     try {
       const account = accounts[0];
@@ -428,6 +429,8 @@ function MatrixPageContent() {
     } catch (error: any) {
       console.error('Error updating TODO:', error);
       setTodoItems(previousItems);
+      const reverted = previousItems.find(i => i.id === selectedTodo.id);
+      if (reverted) setSelectedTodo(reverted);
       throw error;
     }
   };
