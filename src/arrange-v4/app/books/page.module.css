@@ -82,6 +82,22 @@
   background-color: #fecaca;
 }
 
+/* Instructions banner */
+.instructions {
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+}
+
+.instructionsText {
+  color: #1e40af;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
 /* Unauthenticated state */
 .unauthCard {
   background-color: white;

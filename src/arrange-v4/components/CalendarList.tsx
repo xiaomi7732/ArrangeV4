@@ -60,7 +60,10 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   if (calendars.length === 0) {
     return (
       <div className={styles.empty}>
-        No books found. Create one to get started.
+        <p className={styles.emptyTitle}>No books yet</p>
+        <p className={styles.emptyHint}>
+          Create your first book using the <strong>New Book</strong> button above. Each book is a separate collection of tasks organized in an Eisenhower Matrix.
+        </p>
       </div>
     );
   }
