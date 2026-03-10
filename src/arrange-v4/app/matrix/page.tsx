@@ -149,22 +149,15 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
         </div>
       )}
       
-      {todo.checklist && todo.checklist.length > 0 && (
-        <div className={styles.todoChecklist}>
-          <p className={styles.todoChecklistTitle}>Checklist:</p>
-          <ul className={styles.todoChecklistItems}>
-            {todo.checklist.map((item, idx) => {
-              const checked = item.startsWith('-[x]');
-              const text = item.replace(/^-\[x?\]\s*/, '');
-              return (
-                <li key={idx} className={`${styles.todoChecklistItem} ${checked ? styles.todoChecklistChecked : ''}`}>
-                  {checked ? '☑' : '☐'} {text}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      {todo.checklist && todo.checklist.length > 0 && (() => {
+        const done = todo.checklist.filter(i => i.startsWith('-[x]')).length;
+        const total = todo.checklist.length;
+        return (
+          <p className={styles.todoChecklistSummary}>
+            ☑ {done}/{total} completed
+          </p>
+        );
+      })()}
     </div>
   );
 }

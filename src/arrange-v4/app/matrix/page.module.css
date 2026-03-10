@@ -565,28 +565,10 @@
   margin-top: 8px;
 }
 
-.todoChecklist {
+.todoChecklistSummary {
   margin-top: 8px;
-  font-size: 0.875rem;
-  color: #4b5563;
-}
-
-.todoChecklistTitle {
-  font-weight: 500;
-}
-
-.todoChecklistItems {
-  list-style: none;
-  padding-left: 0;
-}
-
-.todoChecklistItem {
   font-size: 0.75rem;
-}
-
-.todoChecklistChecked {
-  text-decoration: line-through;
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 /* Status container and badges */
