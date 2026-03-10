@@ -161,14 +161,21 @@ export default function BooksPage() {
         </div>
 
         {isAuthenticated ? (
-          <div className={styles.card}>
-            <CalendarList 
-              calendars={calendars} 
-              loading={loading} 
-              error={error}
-              onDeleteCalendar={handleDeleteCalendar}
-            />
-          </div>
+          <>
+            <div className={styles.instructions}>
+              <p className={styles.instructionsText}>
+                A <strong>book</strong> is where your tasks live. Pick a book below to open its Eisenhower Matrix, or create a new one to get started.
+              </p>
+            </div>
+            <div className={styles.card}>
+              <CalendarList 
+                calendars={calendars} 
+                loading={loading} 
+                error={error}
+                onDeleteCalendar={handleDeleteCalendar}
+              />
+            </div>
+          </>
         ) : (
           <div className={styles.unauthCard}>
             <h2 className={styles.unauthTitle}>

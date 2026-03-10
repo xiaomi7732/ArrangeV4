@@ -149,18 +149,15 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
         </div>
       )}
       
-      {todo.checklist && todo.checklist.length > 0 && (
-        <div className={styles.todoChecklist}>
-          <p className={styles.todoChecklistTitle}>Checklist:</p>
-          <ul className={styles.todoChecklistItems}>
-            {todo.checklist.map((item, idx) => (
-              <li key={idx} className={styles.todoChecklistItem}>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {todo.checklist && todo.checklist.length > 0 && (() => {
+        const done = todo.checklist.filter(i => i.startsWith('-[x]')).length;
+        const total = todo.checklist.length;
+        return (
+          <p className={styles.todoChecklistSummary}>
+            ☑ {done}/{total} completed
+          </p>
+        );
+      })()}
     </div>
   );
 }
@@ -407,6 +404,34 @@ function MatrixPageContent() {
       // Revert on error
       setTodoItems(previousItems);
       setError(error.message || 'Failed to update status');
+    }
+  };
+
+  const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
+    if (!selectedTodo?.id || !bookId) return;
+
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item =>
+        item.id === selectedTodo.id ? { ...item, ...updatedFields } : item
+      )
+    );
+    setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: account,
+      });
+
+      await updateTodoItem(response.accessToken, bookId, selectedTodo.id, updatedFields);
+    } catch (error: any) {
+      console.error('Error updating TODO:', error);
+      setTodoItems(previousItems);
+      const reverted = previousItems.find(i => i.id === selectedTodo.id);
+      if (reverted) setSelectedTodo(reverted);
+      throw error;
     }
   };
 
@@ -660,7 +685,8 @@ function MatrixPageContent() {
           {selectedTodo && (
             <ViewTodoItem 
               todo={selectedTodo} 
-              onClose={() => setSelectedTodo(null)} 
+              onClose={() => setSelectedTodo(null)}
+              onUpdate={handleUpdateTodo}
             />
           )}
         </div>
