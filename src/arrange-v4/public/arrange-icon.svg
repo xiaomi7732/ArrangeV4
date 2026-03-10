@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#5090C2"/>
+      <stop offset="1" stop-color="#3B72A8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Modern rounded background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Centered content -->
+  <g transform="translate(256, 246) scale(0.86) translate(-256, -270)">
+    <!-- White A "paper" with border stroke -->
+    <path d="M210 135 L301 135 L403 406 L316 406 L305 360 L205 360 L194 406 L109 406 Z"
+          fill="white" stroke="white" stroke-width="18" stroke-linejoin="round"/>
+
+    <!-- A left half (fold shadow) -->
+    <path d="M256 135 L210 135 L109 406 L194 406 L205 360 L256 360 Z" fill="#9AA5B0"/>
+  </g>
+
+  <!-- Counter (in final coordinate space) -->
+  <path d="M256 188 L283 277 L229 277 Z" fill="url(#bg)"/>
+</svg>

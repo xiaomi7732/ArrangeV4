@@ -17,6 +17,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Arrange V4",
   description: "Task management with Eisenhower Matrix",
+  icons: {
+    icon: [
+      { url: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/icon-192.png`, sizes: "192x192", type: "image/png" },
+      { url: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/icon-512.png`, sizes: "512x512", type: "image/png" },
+    ],
+    apple: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/apple-icon.png`,
+  },
 };
 
 export default function RootLayout({
