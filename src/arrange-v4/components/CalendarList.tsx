@@ -76,13 +76,11 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
           <div
             key={calendar.id}
             className={styles.calendarCard}
+            onClick={() => handleCalendarClick(calendar)}
           >
             <div className={styles.calendarTop}>
               <div>
-                <h3 
-                  className={styles.calendarName}
-                  onClick={() => handleCalendarClick(calendar)}
-                >
+                <h3 className={styles.calendarName}>
                   {calendar.name?.replace(/ by arrange$/i, '') || calendar.name}
                 </h3>
                 {calendar.owner && (
@@ -123,7 +121,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
             )}
             <div className={styles.calendarFooter}>
               <button
-                onClick={() => handleDelete(calendar)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(calendar); }}
                 disabled={deletingId === calendar.id}
                 className={styles.deleteButton}
               >

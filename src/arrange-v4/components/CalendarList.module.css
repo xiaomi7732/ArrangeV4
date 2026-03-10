@@ -73,6 +73,7 @@
   padding: 16px;
   background-color: white;
   transition: box-shadow 0.2s;
+  cursor: pointer;
 }
 
 .calendarCard:hover {
