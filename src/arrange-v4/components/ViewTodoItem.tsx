@@ -204,7 +204,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                   }}
                   placeholder="Add checklist item..."
                   className={styles.input} disabled={isSubmitting} />
-                <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+                <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
                   disabled={isSubmitting || !newChecklistItem.trim()}
                   onClick={() => {
                     if (newChecklistItem.trim()) {

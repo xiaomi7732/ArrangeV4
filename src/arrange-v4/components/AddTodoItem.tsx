@@ -269,7 +269,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                 }}
                 placeholder="Add checklist item..."
                 className={styles.input} disabled={isSubmitting} />
-              <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+              <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
                 disabled={isSubmitting || !newChecklistItem.trim()}
                 onClick={() => {
                   if (newChecklistItem.trim()) {

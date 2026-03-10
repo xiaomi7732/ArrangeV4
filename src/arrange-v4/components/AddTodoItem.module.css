@@ -154,6 +154,11 @@
   flex: 1;
 }
 
+.checklistAddBtn {
+  flex: 0 0 auto !important;
+  width: auto;
+}
+
 .checklistCheckLabel {
   display: flex;
   align-items: center;
