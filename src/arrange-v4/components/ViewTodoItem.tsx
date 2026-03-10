@@ -30,6 +30,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
   const [etsDateTime, setEtsDateTime] = useState(formatLocalDateTime(todo.etsDateTime));
   const [etaDateTime, setEtaDateTime] = useState(formatLocalDateTime(todo.etaDateTime));
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
+  const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
 
   const getQuadrantLabel = (u: boolean, i: boolean) => {
     if (u && i) return '🔴 Do First (Urgent & Important)';
@@ -70,6 +72,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
         etsDateTime: etsDateTime ? new Date(etsDateTime).toISOString() : undefined,
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? { type: 'text', content: remarks.trim() } : undefined,
+        checklist: checklist.length > 0 ? checklist : [],
       };
       await onUpdate?.(updatedFields);
       onClose();
@@ -88,6 +91,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
     setEtsDateTime(formatLocalDateTime(todo.etsDateTime));
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
+    setChecklist(todo.checklist || []);
+    setNewChecklistItem('');
     setError(null);
     setEditing(false);
   };
@@ -158,6 +163,58 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                 onChange={(e) => setRemarks(e.target.value)}
                 placeholder="Add any notes or remarks..." rows={3}
                 disabled={isSubmitting} className={styles.textarea} />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Checklist</label>
+              {checklist.length > 0 && (
+                <ul className={styles.checklistEdit}>
+                  {checklist.map((item, idx) => {
+                    const checked = item.startsWith('-[x]');
+                    const text = item.replace(/^-\[x?\]\s*/, '');
+                    return (
+                      <li key={idx} className={styles.checklistEditItem}>
+                        <label className={styles.checklistCheckLabel}>
+                          <input type="checkbox" checked={checked} disabled={isSubmitting}
+                            className={styles.checkbox}
+                            onChange={() => setChecklist(prev => prev.map((it, i) =>
+                              i === idx ? (checked ? '-[] ' + text : '-[x] ' + text) : it
+                            ))} />
+                          <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
+                        </label>
+                        <button type="button" className={styles.checklistRemove}
+                          disabled={isSubmitting}
+                          onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
+                          ✕
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className={styles.checklistAdd}>
+                <input type="text" value={newChecklistItem}
+                  onChange={(e) => setNewChecklistItem(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newChecklistItem.trim()) {
+                      e.preventDefault();
+                      setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                      setNewChecklistItem('');
+                    }
+                  }}
+                  placeholder="Add checklist item..."
+                  className={styles.input} disabled={isSubmitting} />
+                <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+                  disabled={isSubmitting || !newChecklistItem.trim()}
+                  onClick={() => {
+                    if (newChecklistItem.trim()) {
+                      setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                      setNewChecklistItem('');
+                    }
+                  }}>
+                  Add
+                </button>
+              </div>
             </div>
 
             <div className={styles.preview}>
@@ -236,10 +293,24 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
           {todo.checklist && todo.checklist.length > 0 && (
             <div className={styles.formGroup}>
               <span className={styles.label}>Checklist</span>
-              <ul className={styles.checklistBox}>
-                {todo.checklist.map((item, idx) => (
-                  <li key={idx}>{item}</li>
-                ))}
+              <ul className={styles.checklistEdit}>
+                {todo.checklist.map((item, idx) => {
+                  const checked = item.startsWith('-[x]');
+                  const text = item.replace(/^-\[x?\]\s*/, '');
+                  return (
+                    <li key={idx} className={styles.checklistEditItem}>
+                      <label className={styles.checklistCheckLabel}>
+                        <input type="checkbox" checked={checked} className={styles.checkbox}
+                          onChange={() => {
+                            const updated = [...todo.checklist!];
+                            updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
+                            onUpdate?.({ checklist: updated });
+                          }} disabled={!onUpdate} />
+                        <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
+                      </label>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

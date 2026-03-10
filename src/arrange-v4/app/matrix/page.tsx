@@ -153,11 +153,15 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
         <div className={styles.todoChecklist}>
           <p className={styles.todoChecklistTitle}>Checklist:</p>
           <ul className={styles.todoChecklistItems}>
-            {todo.checklist.map((item, idx) => (
-              <li key={idx} className={styles.todoChecklistItem}>
-                {item}
-              </li>
-            ))}
+            {todo.checklist.map((item, idx) => {
+              const checked = item.startsWith('-[x]');
+              const text = item.replace(/^-\[x?\]\s*/, '');
+              return (
+                <li key={idx} className={`${styles.todoChecklistItem} ${checked ? styles.todoChecklistChecked : ''}`}>
+                  {checked ? '☑' : '☐'} {text}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

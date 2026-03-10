@@ -36,6 +36,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [important, setImportant] = useState(defaultImportant);
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
+  const [checklist, setChecklist] = useState<string[]>([]);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
 
@@ -45,6 +47,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setImportant(defaultImportant);
     setStatus('new');
     setRemarks('');
+    setChecklist([]);
+    setNewChecklistItem('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
     setEtsDateTime(getDateTimeString());
     setError(null);
@@ -83,6 +87,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           type: 'text',
           content: remarks.trim(),
         } : undefined,
+        checklist: checklist.length > 0 ? checklist : undefined,
       };
 
       await onAddTodo(todoItem);
@@ -233,6 +238,48 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
               disabled={isSubmitting}
               className={styles.textarea}
             />
+          </div>
+
+          {/* Checklist */}
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Checklist</label>
+            {checklist.length > 0 && (
+              <ul className={styles.checklistEdit}>
+                {checklist.map((item, idx) => (
+                  <li key={idx} className={styles.checklistEditItem}>
+                    <span>{item.replace(/^-\[x?\]\s*/, '')}</span>
+                    <button type="button" className={styles.checklistRemove}
+                      disabled={isSubmitting}
+                      onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className={styles.checklistAdd}>
+              <input type="text" value={newChecklistItem}
+                onChange={(e) => setNewChecklistItem(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newChecklistItem.trim()) {
+                    e.preventDefault();
+                    setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                    setNewChecklistItem('');
+                  }
+                }}
+                placeholder="Add checklist item..."
+                className={styles.input} disabled={isSubmitting} />
+              <button type="button" className={`${styles.button} ${styles.buttonSecondary}`}
+                disabled={isSubmitting || !newChecklistItem.trim()}
+                onClick={() => {
+                  if (newChecklistItem.trim()) {
+                    setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                    setNewChecklistItem('');
+                  }
+                }}>
+                Add
+              </button>
+            </div>
           </div>
 
           {/* Matrix Quadrant Preview */}
