@@ -184,9 +184,7 @@ function MatrixPageContent() {
   const bookId = searchParams.get('bookId');
 
   useEffect(() => {
-    if (bookId) {
-      localStorage.setItem('lastBookId', bookId);
-    } else {
+    if (!bookId) {
       const saved = localStorage.getItem('lastBookId');
       if (saved) {
         router.replace(`/matrix?bookId=${saved}`);
@@ -222,11 +220,20 @@ function MatrixPageContent() {
       const account = accounts[0];
       const response = await instance.acquireTokenSilent({ ...loginRequest, account });
       const all = await getCalendars(response.accessToken);
-      setCalendars(all.filter(c => c.name?.toLowerCase().endsWith(' by arrange')));
+      const arrangeCalendars = all.filter(c => c.name?.toLowerCase().endsWith(' by arrange'));
+      setCalendars(arrangeCalendars);
+
+      // Validate the current bookId against fetched calendars
+      if (bookId && arrangeCalendars.length > 0 && !arrangeCalendars.some(c => c.id === bookId)) {
+        localStorage.removeItem('lastBookId');
+        router.replace('/books');
+      } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {
+        localStorage.setItem('lastBookId', bookId);
+      }
     } catch (error) {
       console.error('Error fetching calendars:', error);
     }
-  }, [isAuthenticated, accounts, instance]);
+  }, [isAuthenticated, accounts, instance, bookId, router]);
 
   useEffect(() => {
     fetchCalendars();
