@@ -46,7 +46,7 @@ export interface TodoItem {
   remarks?: {
     type: 'text' | 'markdown';
     content: string;
-  };
+  } | null;
 }
 
 const NON_TERMINAL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked'];
