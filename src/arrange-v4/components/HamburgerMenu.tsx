@@ -12,7 +12,7 @@ interface NavItem {
   matchPrefix?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home', icon: '🏠' },
   { href: '/books', label: 'My Books', icon: '📚' },
   { href: '/matrix', label: 'Matrix', icon: '📊', matchPrefix: true },
@@ -20,7 +20,17 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function HamburgerMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
+
+  useEffect(() => {
+    const savedBookId = localStorage.getItem('lastBookId');
+    if (savedBookId) {
+      setNavItems(BASE_NAV_ITEMS.map(item =>
+        item.matchPrefix ? { ...item, href: `/matrix?bookId=${savedBookId}` } : item
+      ));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -45,7 +55,7 @@ export default function HamburgerMenu() {
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
-      return pathname.startsWith(item.href);
+      return pathname.startsWith('/matrix');
     }
     return pathname === item.href;
   }
@@ -75,7 +85,7 @@ export default function HamburgerMenu() {
               </button>
             </div>
             <nav className={styles.nav}>
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

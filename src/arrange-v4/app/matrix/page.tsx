@@ -182,6 +182,17 @@ function MatrixPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const bookId = searchParams.get('bookId');
+
+  useEffect(() => {
+    if (bookId) {
+      localStorage.setItem('lastBookId', bookId);
+    } else {
+      const saved = localStorage.getItem('lastBookId');
+      if (saved) {
+        router.replace(`/matrix?bookId=${saved}`);
+      }
+    }
+  }, [bookId, router]);
   
   const { instance, accounts, inProgress } = useMsal();
   const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
