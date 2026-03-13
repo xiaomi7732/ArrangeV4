@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
@@ -186,6 +186,8 @@ function MatrixPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const bookId = searchParams.get('bookId');
+  const bookIdRef = useRef(bookId);
+  bookIdRef.current = bookId;
 
   useEffect(() => {
     if (!bookId) {
@@ -297,17 +299,20 @@ function MatrixPageContent() {
       setTodoItems(todos);
 
       // Sweep stale non-terminal items in the background (non-blocking)
+      const sweepBookId = bookId;
       void (async () => {
         try {
-          const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
-          if (bumpedIds.length > 0) {
+          const bumpedIds = await sweepStaleTodos(response.accessToken, sweepBookId, todos);
+          if (bumpedIds.length > 0 && bookIdRef.current === sweepBookId) {
             const refreshedEvents = await getCalendarEvents(
               response.accessToken,
-              bookId,
+              sweepBookId,
               startDate.toISOString(),
               endDate.toISOString()
             );
-            setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+            if (bookIdRef.current === sweepBookId) {
+              setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+            }
           }
         } catch (sweepError) {
           console.error('Error sweeping stale TODO items:', sweepError);

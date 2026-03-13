@@ -25,7 +25,8 @@ export default function HamburgerMenu() {
   const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
   const { instance, accounts } = useMsal();
-  const sidebarRef = useRef<HTMLElement>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const isAuthenticated = accounts.length > 0;
 
@@ -51,6 +52,7 @@ export default function HamburgerMenu() {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      triggerRef.current?.focus();
     }
     return () => {
       document.body.style.overflow = '';
@@ -98,6 +100,7 @@ export default function HamburgerMenu() {
   return (
     <>
       <button
+        ref={triggerRef}
         className={styles.menuButton}
         onClick={() => setIsOpen(true)}
         aria-label="Open navigation menu"

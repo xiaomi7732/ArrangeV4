@@ -81,6 +81,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
+              if ((e.target as HTMLElement).closest('button')) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 handleCalendarClick(calendar);
