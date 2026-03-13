@@ -191,7 +191,7 @@ function MatrixPageContent() {
     if (!bookId) {
       const saved = getLastBookId();
       if (saved) {
-        router.replace(`/matrix?bookId=${saved}`);
+        router.replace(`/matrix?bookId=${encodeURIComponent(saved)}`);
       }
     }
   }, [bookId, router]);
@@ -223,9 +223,8 @@ function MatrixPageContent() {
     eliminate: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true),
   }), [filteredTodoItems]);
 
-  const currentCalendarName = calendars.find(c => c.id === bookId)
-    ? getCalendarDisplayName(calendars.find(c => c.id === bookId)!)
-    : bookId;
+  const currentCalendar = calendars.find(c => c.id === bookId);
+  const currentCalendarName = currentCalendar ? getCalendarDisplayName(currentCalendar) : bookId;
 
   const fetchCalendars = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -247,7 +246,7 @@ function MatrixPageContent() {
       const arrangeCalendars = filterArrangeCalendars(all);
       setCalendars(arrangeCalendars);
 
-      if (bookId && arrangeCalendars.length > 0 && !arrangeCalendars.some(c => c.id === bookId)) {
+      if (bookId && !arrangeCalendars.some(c => c.id === bookId)) {
         clearLastBookId();
         router.replace('/books');
       } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {

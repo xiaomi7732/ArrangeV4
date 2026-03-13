@@ -19,12 +19,12 @@ async function getPostLoginRoute(accessToken: string): Promise<string> {
     const arrangeCalendars = filterArrangeCalendars(calendars);
     
     if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
-      return `/matrix?bookId=${arrangeCalendars[0].id}`;
+      return `/matrix?bookId=${encodeURIComponent(arrangeCalendars[0].id)}`;
     }
 
     const savedBookId = getLastBookId();
     if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
-      return `/matrix?bookId=${savedBookId}`;
+      return `/matrix?bookId=${encodeURIComponent(savedBookId)}`;
     }
   } catch (error) {
     console.error('Error fetching calendars for route decision:', error);
@@ -99,7 +99,7 @@ export default function Home() {
 
   const handleNavigateToMatrix = () => {
     if (matrixAvailable.bookId) {
-      router.push(`/matrix?bookId=${matrixAvailable.bookId}`);
+      router.push(`/matrix?bookId=${encodeURIComponent(matrixAvailable.bookId)}`);
     }
   };
 
