@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
+import { getCalendarDisplayName } from '@/lib/calendarUtils';
 import styles from './CalendarList.module.css';
 
 interface CalendarListProps {
@@ -25,7 +26,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   const handleDelete = async (calendar: Calendar) => {
     if (!calendar.id) return;
     
-    const displayName = calendar.name?.replace(/ by arrange$/i, '') || calendar.name || 'this book';
+    const displayName = getCalendarDisplayName(calendar);
     if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
       return;
     }
@@ -81,7 +82,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
             <div className={styles.calendarTop}>
               <div>
                 <h3 className={styles.calendarName}>
-                  {calendar.name?.replace(/ by arrange$/i, '') || calendar.name}
+                  {getCalendarDisplayName(calendar)}
                 </h3>
                 {calendar.owner && (
                   <p className={styles.calendarOwner}>

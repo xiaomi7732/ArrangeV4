@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
+import { filterArrangeCalendars } from '@/lib/calendarUtils';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
 import styles from './page.module.css';
@@ -49,11 +50,9 @@ export default function BooksPage() {
       const userInfo = await getUserInfo(response.accessToken);
       setUserName(userInfo.displayName || userInfo.userPrincipalName || '');
 
-      // Fetch calendars and filter those ending with "by arrange"
+      // Fetch calendars and filter arrange books
       const calendarsData = await getCalendars(response.accessToken);
-      const filteredCalendars = calendarsData.filter(
-        (calendar) => calendar.name?.toLowerCase().endsWith(' by arrange')
-      );
+      const filteredCalendars = filterArrangeCalendars(calendarsData);
       setCalendars(filteredCalendars);
     } catch (error: any) {
       console.error('Error fetching calendars:', error);
@@ -64,9 +63,7 @@ export default function BooksPage() {
         try {
           const response = await instance.acquireTokenPopup(loginRequest);
           const calendarsData = await getCalendars(response.accessToken);
-          const filteredCalendars = calendarsData.filter(
-            (calendar) => calendar.name?.toLowerCase().endsWith('by arrange')
-          );
+          const filteredCalendars = filterArrangeCalendars(calendarsData);
           setCalendars(filteredCalendars);
         } catch (popupError: any) {
           setError(popupError.message || 'Failed to fetch books');

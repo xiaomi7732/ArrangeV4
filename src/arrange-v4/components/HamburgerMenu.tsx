@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
+import { getLastBookId } from '@/lib/bookStorage';
 import styles from './HamburgerMenu.module.css';
 
 interface NavItem {
@@ -33,7 +34,7 @@ export default function HamburgerMenu() {
   };
 
   useEffect(() => {
-    const savedBookId = localStorage.getItem('lastBookId');
+    const savedBookId = getLastBookId();
     if (savedBookId) {
       setNavItems(BASE_NAV_ITEMS.map(item =>
         item.matchPrefix ? { ...item, href: `/matrix?bookId=${savedBookId}` } : item
