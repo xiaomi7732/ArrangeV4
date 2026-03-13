@@ -24,6 +24,12 @@ async function getPostLoginRoute(accessToken: string): Promise<string> {
     if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
       return `/matrix?bookId=${arrangeCalendars[0].id}`;
     }
+
+    // If there are multiple calendars, check if the last used book still exists
+    const savedBookId = localStorage.getItem('lastBookId');
+    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
+      return `/matrix?bookId=${savedBookId}`;
+    }
   } catch (error) {
     console.error('Error fetching calendars for route decision:', error);
   }
@@ -47,6 +53,12 @@ async function shouldShowMatrixButton(accessToken: string): Promise<{ show: bool
     // Show matrix button if there's exactly 1 calendar ending with " by arrange"
     if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
       return { show: true, bookId: arrangeCalendars[0].id };
+    }
+
+    // If there are multiple calendars, use the last used book if it still exists
+    const savedBookId = localStorage.getItem('lastBookId');
+    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
+      return { show: true, bookId: savedBookId };
     }
   } catch (error) {
     console.error('Error checking matrix availability:', error);
