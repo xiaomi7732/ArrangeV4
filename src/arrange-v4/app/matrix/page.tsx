@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
@@ -10,6 +10,7 @@ import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUt
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
@@ -213,6 +214,13 @@ function MatrixPageContent() {
     if (mode === 'todayOnly') return passesTodayFilter(todo);
     return true;
   });
+
+  const quadrants = useMemo(() => ({
+    doFirst: filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true),
+    schedule: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true),
+    delegate: filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true),
+    eliminate: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true),
+  }), [filteredTodoItems]);
 
   const currentCalendarName = calendars.find(c => c.id === bookId)
     ? getCalendarDisplayName(calendars.find(c => c.id === bookId)!)
@@ -476,7 +484,7 @@ function MatrixPageContent() {
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
-            No book selected. Please select a book from the <a href="/books" className={styles.warningLink}>Books page</a>.
+            No book selected. Please select a book from the <Link href="/books" className={styles.warningLink}>Books page</Link>.
           </div>
         </div>
       </div>
@@ -583,7 +591,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Do First ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Do First ({quadrants.doFirst.length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent & Important</p>
                     </div>
                     <AddTodoItem 
@@ -595,12 +603,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent === true && todo.important === true)
-                      .map((todo) => (
+                    {quadrants.doFirst.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
+                    {quadrants.doFirst.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -614,7 +620,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Schedule ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Schedule ({quadrants.schedule.length})</h3>
                       <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
                     </div>
                     <AddTodoItem 
@@ -626,12 +632,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent !== true && todo.important === true)
-                      .map((todo) => (
+                    {quadrants.schedule.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
+                    {quadrants.schedule.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -645,7 +649,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Delegate ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Delegate ({quadrants.delegate.length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -657,12 +661,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent === true && todo.important !== true)
-                      .map((todo) => (
+                    {quadrants.delegate.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
+                    {quadrants.delegate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -676,7 +678,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Eliminate ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Eliminate ({quadrants.eliminate.length})</h3>
                       <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -688,12 +690,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent !== true && todo.important !== true)
-                      .map((todo) => (
+                    {quadrants.eliminate.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
+                    {quadrants.eliminate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
