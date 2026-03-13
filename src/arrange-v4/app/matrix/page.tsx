@@ -7,7 +7,7 @@ import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
-import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, markSessionSweepDone } from '@/lib/bookStorage';
+import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
@@ -299,10 +299,10 @@ function MatrixPageContent() {
       setTodoItems(todos);
 
       // Sweep stale items across ALL calendars once per session (non-blocking)
-      if (!hasSessionSweepRun()) {
+      if (!hasSessionSweepRun() && !isSessionSweepInProgress()) {
+        markSessionSweepInProgress();
         const sweepAccessToken = response.accessToken;
         const sweepBookId = bookId;
-        // Snapshot calendars from state; fallback fetched inside the IIFE to stay non-blocking
         const snapshotCalendars = calendars.length > 0 ? [...calendars] : null;
         void (async () => {
           try {
@@ -330,21 +330,27 @@ function MatrixPageContent() {
             };
             await Promise.all(Array.from({ length: CONCURRENCY }, () => processNext()));
 
-            // Refresh current view if still on the same book
-            if (bookIdRef.current === sweepBookId) {
-              const refreshedEvents = await getCalendarEvents(
-                sweepAccessToken, sweepBookId,
-                startDate.toISOString(), endDate.toISOString()
-              );
-              if (bookIdRef.current === sweepBookId) {
-                setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
-              }
-            }
-
             if (!hasFailure) {
               markSessionSweepDone();
             }
+            clearSessionSweepInProgress();
+
+            // Refresh current view if still on the same book (independent of sweep status)
+            try {
+              if (bookIdRef.current === sweepBookId) {
+                const refreshedEvents = await getCalendarEvents(
+                  sweepAccessToken, sweepBookId,
+                  startDate.toISOString(), endDate.toISOString()
+                );
+                if (bookIdRef.current === sweepBookId) {
+                  setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+                }
+              }
+            } catch (refreshError) {
+              console.error('Error refreshing view after sweep:', refreshError);
+            }
           } catch (sweepError) {
+            clearSessionSweepInProgress();
             console.error('Error during session sweep:', sweepError);
           }
         })();

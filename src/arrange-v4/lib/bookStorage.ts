@@ -1,5 +1,6 @@
 const LAST_BOOK_ID_KEY = 'arrange_lastBookId';
 const SESSION_SWEEP_KEY = 'arrange_sweepDone';
+const SESSION_SWEEP_IN_PROGRESS_KEY = 'arrange_sweepInProgress';
 
 function isLocalStorageAvailable(): boolean {
   try {
@@ -47,9 +48,37 @@ export function clearLastBookId(): void {
 export function hasSessionSweepRun(): boolean {
   if (!isSessionStorageAvailable()) return false;
   try {
-    return sessionStorage.getItem(SESSION_SWEEP_KEY) === 'true';
+    const status = sessionStorage.getItem(SESSION_SWEEP_KEY);
+    return status === 'true';
   } catch {
     return false;
+  }
+}
+
+export function isSessionSweepInProgress(): boolean {
+  if (!isSessionStorageAvailable()) return false;
+  try {
+    return sessionStorage.getItem(SESSION_SWEEP_IN_PROGRESS_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function markSessionSweepInProgress(): void {
+  if (!isSessionStorageAvailable()) return;
+  try {
+    sessionStorage.setItem(SESSION_SWEEP_IN_PROGRESS_KEY, 'true');
+  } catch {
+    // Silently ignore
+  }
+}
+
+export function clearSessionSweepInProgress(): void {
+  if (!isSessionStorageAvailable()) return;
+  try {
+    sessionStorage.removeItem(SESSION_SWEEP_IN_PROGRESS_KEY);
+  } catch {
+    // Silently ignore
   }
 }
 
