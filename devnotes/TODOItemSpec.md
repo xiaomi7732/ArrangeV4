@@ -73,7 +73,7 @@ TODO items are stored as calendar events and fetched using a ±30-day time windo
 To prevent non-terminal items (`new`, `inProgress`, `blocked`) from falling off the window:
 
 * **On edit**: When a non-terminal item is updated and its calendar dates are in the past,
-  `etsDateTime`/`ETADateTime` are automatically moved to today (preserving the original time-of-day
+  `etsDateTime`/`etaDateTime` are automatically moved to today (preserving the original time-of-day
   and duration). The original values are saved to `originalEtsDateTime`/`originalEtaDateTime` on
   first bump and never overwritten.
 * **On load**: A sweep runs after fetching events, bumping any remaining stale non-terminal items.

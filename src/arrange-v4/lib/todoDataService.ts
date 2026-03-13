@@ -38,15 +38,15 @@ export interface TodoItem {
   urgent?: boolean;
   important?: boolean;
   status?: TodoStatus;
-  startDateTime?: string; // Actual start time - set when status changes to 'inProgress'
-  finishDateTime?: string; // Actual finish time - set when status changes to 'finished'
+  startDateTime?: string | null; // Actual start time - set when status changes to 'inProgress'
+  finishDateTime?: string | null; // Actual finish time - set when status changes to 'finished'
   originalEtsDateTime?: string | null; // Original planned start time, preserved when dates are bumped forward
   originalEtaDateTime?: string | null; // Original planned end time, preserved when dates are bumped forward
   checklist?: string[];
   remarks?: {
     type: 'text' | 'markdown';
     content: string;
-  };
+  } | null;
 }
 
 const NON_TERMINAL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked'];
@@ -70,6 +70,8 @@ export function computeBumpedDates(
   const ets = new Date(etsDateTime);
   const eta = new Date(etaDateTime);
 
+  if (isNaN(ets.getTime()) || isNaN(eta.getTime())) return null;
+
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
 
@@ -77,6 +79,7 @@ export function computeBumpedDates(
   if (ets >= todayStart) return null;
 
   const duration = eta.getTime() - ets.getTime();
+  if (duration <= 0) return null;
 
   // Move to today, preserving the original time-of-day (UTC)
   const bumpedEts = new Date(todayStart);
@@ -159,13 +162,22 @@ function stripHtmlTags(html: string): string {
   return div.textContent || div.innerText || '';
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Builds the HTML body content for a calendar event, wrapping the TODO JSON data
  * in a <pre> tag between markers for easy extraction and human-readable display.
  */
 function buildBodyHtml(todoData: object): string {
   const json = JSON.stringify(todoData, null, 2);
-  return `<pre>${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+  return `<pre>${ARRANGE_DATA_START_MARKER}\n${escapeHtml(json)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
 }
 
 /**
@@ -209,8 +221,8 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
         todoItem.important = todoData.important;
         todoItem.checklist = todoData.checklist;
         todoItem.remarks = todoData.remarks;
-        todoItem.startDateTime = todoData.startDateTime;
-        todoItem.finishDateTime = todoData.finishDateTime;
+        todoItem.startDateTime = todoData.startDateTime ?? undefined;
+        todoItem.finishDateTime = todoData.finishDateTime ?? undefined;
         todoItem.originalEtsDateTime = todoData.originalEtsDateTime || null;
         todoItem.originalEtaDateTime = todoData.originalEtaDateTime || null;
       } catch (error) {
@@ -386,15 +398,26 @@ export async function sweepStaleTodos(
   if (staleItems.length === 0) return [];
 
   const bumpedIds: string[] = [];
-  for (const item of staleItems) {
-    try {
-      // An empty update triggers the built-in date-bump logic in updateTodoItem
-      await updateTodoItem(accessToken, calendarId, item.id!, {});
-      bumpedIds.push(item.id!);
-    } catch (error) {
-      console.error(`Error bumping stale TODO ${item.id}:`, error);
+  const concurrencyLimit = 5;
+  let currentIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = currentIndex++;
+      if (index >= staleItems.length) break;
+
+      const item = staleItems[index];
+      try {
+        await updateTodoItem(accessToken, calendarId, item.id!, {});
+        bumpedIds.push(item.id!);
+      } catch (error) {
+        console.error(`Error bumping stale TODO ${item.id}:`, error);
+      }
     }
   }
+
+  const workerCount = Math.min(concurrencyLimit, staleItems.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   return bumpedIds;
 }

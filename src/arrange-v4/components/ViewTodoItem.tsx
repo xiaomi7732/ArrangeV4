@@ -13,6 +13,7 @@ interface ViewTodoItemProps {
 export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const formatLocalDateTime = (isoString?: string) => {
@@ -71,7 +72,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
         status,
         etsDateTime: etsDateTime ? new Date(etsDateTime).toISOString() : undefined,
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
-        remarks: remarks.trim() ? { type: 'text', content: remarks.trim() } : undefined,
+        remarks: remarks.trim() ? { type: 'text' as const, content: remarks.trim() } : null,
         checklist: checklist.length > 0 ? checklist : [],
       };
       await onUpdate?.(updatedFields);
@@ -301,11 +302,18 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                     <li key={idx} className={styles.checklistEditItem}>
                       <label className={styles.checklistCheckLabel}>
                         <input type="checkbox" checked={checked} className={styles.checkbox}
-                          onChange={() => {
+                          onChange={async () => {
                             const updated = [...todo.checklist!];
                             updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
-                            onUpdate?.({ checklist: updated });
-                          }} disabled={!onUpdate} />
+                            setChecklistUpdating(true);
+                            try {
+                              await onUpdate?.({ checklist: updated });
+                            } catch (err: any) {
+                              setError(err.message || 'Failed to update checklist');
+                            } finally {
+                              setChecklistUpdating(false);
+                            }
+                          }} disabled={!onUpdate || checklistUpdating} />
                         <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
                       </label>
                     </li>

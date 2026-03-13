@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
@@ -25,20 +25,25 @@ export default function HamburgerMenu() {
   const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
   const { instance, accounts } = useMsal();
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const isAuthenticated = accounts.length > 0;
 
   const handleSignOut = () => {
     setIsOpen(false);
-    instance.logoutPopup({ postLogoutRedirectUri: '/' });
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+    instance.logoutPopup({ postLogoutRedirectUri: `${window.location.origin}${basePath}/` });
   };
 
   useEffect(() => {
     const savedBookId = getLastBookId();
     if (savedBookId) {
       setNavItems(BASE_NAV_ITEMS.map(item =>
-        item.matchPrefix ? { ...item, href: `/matrix?bookId=${savedBookId}` } : item
+        item.matchPrefix ? { ...item, href: `/matrix?bookId=${encodeURIComponent(savedBookId)}` } : item
       ));
+    } else {
+      setNavItems(BASE_NAV_ITEMS);
     }
   }, [isOpen]);
 
@@ -47,6 +52,7 @@ export default function HamburgerMenu() {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      triggerRef.current?.focus();
     }
     return () => {
       document.body.style.overflow = '';
@@ -54,13 +60,34 @@ export default function HamburgerMenu() {
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        return;
+      }
+      // Focus trap
+      if (e.key === 'Tab' && sidebarRef.current) {
+        const focusable = sidebarRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
+    document.addEventListener('keydown', handleKeyDown);
+    // Move focus into sidebar
+    const closeBtn = sidebarRef.current?.querySelector<HTMLElement>('button');
+    closeBtn?.focus();
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
   function isActive(item: NavItem): boolean {
@@ -73,9 +100,12 @@ export default function HamburgerMenu() {
   return (
     <>
       <button
+        ref={triggerRef}
         className={styles.menuButton}
         onClick={() => setIsOpen(true)}
         aria-label="Open navigation menu"
+        aria-expanded={isOpen}
+        aria-controls="nav-sidebar"
       >
         ☰
       </button>
@@ -83,7 +113,7 @@ export default function HamburgerMenu() {
       {isOpen && (
         <>
           <div className={styles.overlay} onClick={() => setIsOpen(false)} />
-          <aside className={styles.sidebar} role="navigation" aria-label="Main navigation">
+          <aside id="nav-sidebar" ref={sidebarRef} className={styles.sidebar} role="navigation" aria-label="Main navigation">
             <div className={styles.sidebarHeader}>
               <span className={styles.sidebarTitle}>Arrange</span>
               <button

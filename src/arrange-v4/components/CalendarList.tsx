@@ -19,7 +19,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
 
   const handleCalendarClick = (calendar: Calendar) => {
     if (calendar.id) {
-      router.push(`/matrix?bookId=${calendar.id}`);
+      router.push(`/matrix?bookId=${encodeURIComponent(calendar.id)}`);
     }
   };
 
@@ -78,6 +78,15 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
             key={calendar.id}
             className={styles.calendarCard}
             onClick={() => handleCalendarClick(calendar)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if ((e.target as HTMLElement).closest('button')) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleCalendarClick(calendar);
+              }
+            }}
           >
             <div className={styles.calendarTop}>
               <div>

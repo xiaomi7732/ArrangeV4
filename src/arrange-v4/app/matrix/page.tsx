@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
@@ -10,6 +10,7 @@ import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUt
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
@@ -54,7 +55,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
 }) {
   const currentStatus = todo.status || 'new';
 
-  const handleStatusClick = (e: React.MouseEvent, status: TodoStatus) => {
+  const handleStatusClick = (e: React.MouseEvent<HTMLButtonElement>, status: TodoStatus) => {
     e.stopPropagation(); // Prevent card click when clicking status
     if (status !== currentStatus && onStatusChange) {
       onStatusChange(todo, status);
@@ -80,6 +81,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
             className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
             onClick={(e) => handleStatusClick(e, status)}
             title={`Set status to ${STATUS_LABELS[status]}`}
+            aria-pressed={status === currentStatus}
           >
             {STATUS_LABELS[status]}
           </button>
@@ -184,12 +186,14 @@ function MatrixPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const bookId = searchParams.get('bookId');
+  const bookIdRef = useRef(bookId);
+  bookIdRef.current = bookId;
 
   useEffect(() => {
     if (!bookId) {
       const saved = getLastBookId();
       if (saved) {
-        router.replace(`/matrix?bookId=${saved}`);
+        router.replace(`/matrix?bookId=${encodeURIComponent(saved)}`);
       }
     }
   }, [bookId, router]);
@@ -214,27 +218,45 @@ function MatrixPageContent() {
     return true;
   });
 
-  const currentCalendarName = calendars.find(c => c.id === bookId)
-    ? getCalendarDisplayName(calendars.find(c => c.id === bookId)!)
-    : bookId;
+  const quadrants = useMemo(() => ({
+    doFirst: filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true),
+    schedule: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true),
+    delegate: filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true),
+    eliminate: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true),
+  }), [filteredTodoItems]);
+
+  const currentCalendar = calendars.find(c => c.id === bookId);
+  const currentCalendarName = currentCalendar ? getCalendarDisplayName(currentCalendar) : bookId;
 
   const fetchCalendars = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       const account = accounts[0];
-      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
-      const all = await getCalendars(response.accessToken);
+      let accessToken: string;
+      try {
+        const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+        accessToken = response.accessToken;
+      } catch (silentError: any) {
+        if (silentError.name === 'InteractionRequiredAuthError') {
+          const response = await instance.acquireTokenPopup(loginRequest);
+          accessToken = response.accessToken;
+        } else {
+          throw silentError;
+        }
+      }
+      const all = await getCalendars(accessToken);
       const arrangeCalendars = filterArrangeCalendars(all);
       setCalendars(arrangeCalendars);
 
-      if (bookId && arrangeCalendars.length > 0 && !arrangeCalendars.some(c => c.id === bookId)) {
+      if (bookId && !arrangeCalendars.some(c => c.id === bookId)) {
         clearLastBookId();
         router.replace('/books');
       } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {
         setLastBookId(bookId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching calendars:', error);
+      setError(error.message || 'Failed to fetch calendars');
     }
   }, [isAuthenticated, accounts, instance, bookId, router]);
 
@@ -243,7 +265,7 @@ function MatrixPageContent() {
   }, [fetchCalendars]);
 
   const handleCalendarSwitch = (calendarId: string) => {
-    router.push(`/matrix?bookId=${calendarId}`);
+    router.push(`/matrix?bookId=${encodeURIComponent(calendarId)}`);
   };
 
   const fetchEvents = async () => {
@@ -276,18 +298,26 @@ function MatrixPageContent() {
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
 
-      // Sweep stale non-terminal items (bump their calendar dates to today)
-      const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
-      if (bumpedIds.length > 0) {
-        // Re-fetch to get the updated event data
-        const refreshedEvents = await getCalendarEvents(
-          response.accessToken,
-          bookId,
-          startDate.toISOString(),
-          endDate.toISOString()
-        );
-        setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
-      }
+      // Sweep stale non-terminal items in the background (non-blocking)
+      const sweepBookId = bookId;
+      void (async () => {
+        try {
+          const bumpedIds = await sweepStaleTodos(response.accessToken, sweepBookId, todos);
+          if (bumpedIds.length > 0 && bookIdRef.current === sweepBookId) {
+            const refreshedEvents = await getCalendarEvents(
+              response.accessToken,
+              sweepBookId,
+              startDate.toISOString(),
+              endDate.toISOString()
+            );
+            if (bookIdRef.current === sweepBookId) {
+              setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+            }
+          }
+        } catch (sweepError) {
+          console.error('Error sweeping stale TODO items:', sweepError);
+        }
+      })();
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
@@ -476,7 +506,7 @@ function MatrixPageContent() {
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
-            No book selected. Please select a book from the <a href="/books" className={styles.warningLink}>Books page</a>.
+            No book selected. Please select a book from the <Link href="/books" className={styles.warningLink}>Books page</Link>.
           </div>
         </div>
       </div>
@@ -583,7 +613,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Do First ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Do First ({quadrants.doFirst.length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent & Important</p>
                     </div>
                     <AddTodoItem 
@@ -595,12 +625,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent === true && todo.important === true)
-                      .map((todo) => (
+                    {quadrants.doFirst.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true).length === 0 && (
+                    {quadrants.doFirst.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -614,7 +642,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Schedule ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Schedule ({quadrants.schedule.length})</h3>
                       <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
                     </div>
                     <AddTodoItem 
@@ -626,12 +654,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent !== true && todo.important === true)
-                      .map((todo) => (
+                    {quadrants.schedule.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true).length === 0 && (
+                    {quadrants.schedule.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -645,7 +671,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Delegate ({filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Delegate ({quadrants.delegate.length})</h3>
                       <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -657,12 +683,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent === true && todo.important !== true)
-                      .map((todo) => (
+                    {quadrants.delegate.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true).length === 0 && (
+                    {quadrants.delegate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
@@ -676,7 +700,7 @@ function MatrixPageContent() {
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
-                      <h3 className={styles.quadrantTitle}>Eliminate ({filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true).length})</h3>
+                      <h3 className={styles.quadrantTitle}>Eliminate ({quadrants.eliminate.length})</h3>
                       <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
                     </div>
                     <AddTodoItem 
@@ -688,12 +712,10 @@ function MatrixPageContent() {
                     />
                   </div>
                   <div className={styles.quadrantContent}>
-                    {filteredTodoItems
-                      .filter(todo => todo.urgent !== true && todo.important !== true)
-                      .map((todo) => (
+                    {quadrants.eliminate.map((todo) => (
                         <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
                       ))}
-                    {filteredTodoItems.filter(todo => !todo.urgent && !todo.important).length === 0 && (
+                    {quadrants.eliminate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
                   </div>
