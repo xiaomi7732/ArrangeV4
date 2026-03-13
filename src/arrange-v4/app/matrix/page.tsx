@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
@@ -55,7 +55,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
 }) {
   const currentStatus = todo.status || 'new';
 
-  const handleStatusClick = (e: React.MouseEvent, status: TodoStatus) => {
+  const handleStatusClick = (e: React.MouseEvent<HTMLButtonElement>, status: TodoStatus) => {
     e.stopPropagation(); // Prevent card click when clicking status
     if (status !== currentStatus && onStatusChange) {
       onStatusChange(todo, status);
@@ -81,6 +81,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
             className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
             onClick={(e) => handleStatusClick(e, status)}
             title={`Set status to ${STATUS_LABELS[status]}`}
+            aria-pressed={status === currentStatus}
           >
             {STATUS_LABELS[status]}
           </button>

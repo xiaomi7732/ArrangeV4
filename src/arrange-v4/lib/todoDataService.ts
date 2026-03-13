@@ -38,8 +38,8 @@ export interface TodoItem {
   urgent?: boolean;
   important?: boolean;
   status?: TodoStatus;
-  startDateTime?: string; // Actual start time - set when status changes to 'inProgress'
-  finishDateTime?: string; // Actual finish time - set when status changes to 'finished'
+  startDateTime?: string | null; // Actual start time - set when status changes to 'inProgress'
+  finishDateTime?: string | null; // Actual finish time - set when status changes to 'finished'
   originalEtsDateTime?: string | null; // Original planned start time, preserved when dates are bumped forward
   originalEtaDateTime?: string | null; // Original planned end time, preserved when dates are bumped forward
   checklist?: string[];
@@ -221,8 +221,8 @@ export function parseTodoData(event: CalendarEvent): TodoItem & { id?: string } 
         todoItem.important = todoData.important;
         todoItem.checklist = todoData.checklist;
         todoItem.remarks = todoData.remarks;
-        todoItem.startDateTime = todoData.startDateTime;
-        todoItem.finishDateTime = todoData.finishDateTime;
+        todoItem.startDateTime = todoData.startDateTime ?? undefined;
+        todoItem.finishDateTime = todoData.finishDateTime ?? undefined;
         todoItem.originalEtsDateTime = todoData.originalEtsDateTime || null;
         todoItem.originalEtaDateTime = todoData.originalEtaDateTime || null;
       } catch (error) {
