@@ -1,7 +1,7 @@
 const LAST_BOOK_ID_KEY = 'arrange_lastBookId';
 const SESSION_SWEEP_KEY = 'arrange_sweepDone';
 
-function isStorageAvailable(): boolean {
+function isLocalStorageAvailable(): boolean {
   try {
     return typeof window !== 'undefined' && !!window.localStorage;
   } catch {
@@ -9,8 +9,16 @@ function isStorageAvailable(): boolean {
   }
 }
 
+function isSessionStorageAvailable(): boolean {
+  try {
+    return typeof window !== 'undefined' && !!window.sessionStorage;
+  } catch {
+    return false;
+  }
+}
+
 export function getLastBookId(): string | null {
-  if (!isStorageAvailable()) return null;
+  if (!isLocalStorageAvailable()) return null;
   try {
     return localStorage.getItem(LAST_BOOK_ID_KEY);
   } catch {
@@ -19,7 +27,7 @@ export function getLastBookId(): string | null {
 }
 
 export function setLastBookId(bookId: string): void {
-  if (!isStorageAvailable()) return;
+  if (!isLocalStorageAvailable()) return;
   try {
     localStorage.setItem(LAST_BOOK_ID_KEY, bookId);
   } catch {
@@ -28,7 +36,7 @@ export function setLastBookId(bookId: string): void {
 }
 
 export function clearLastBookId(): void {
-  if (!isStorageAvailable()) return;
+  if (!isLocalStorageAvailable()) return;
   try {
     localStorage.removeItem(LAST_BOOK_ID_KEY);
   } catch {
@@ -37,16 +45,16 @@ export function clearLastBookId(): void {
 }
 
 export function hasSessionSweepRun(): boolean {
-  if (!isStorageAvailable()) return true;
+  if (!isSessionStorageAvailable()) return false;
   try {
     return sessionStorage.getItem(SESSION_SWEEP_KEY) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
 export function markSessionSweepDone(): void {
-  if (!isStorageAvailable()) return;
+  if (!isSessionStorageAvailable()) return;
   try {
     sessionStorage.setItem(SESSION_SWEEP_KEY, 'true');
   } catch {

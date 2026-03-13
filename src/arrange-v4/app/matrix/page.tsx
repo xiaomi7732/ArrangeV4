@@ -300,27 +300,33 @@ function MatrixPageContent() {
 
       // Sweep stale items across ALL calendars once per session (non-blocking)
       if (!hasSessionSweepRun()) {
-        markSessionSweepDone();
         const sweepAccessToken = response.accessToken;
         const sweepBookId = bookId;
+        // Reuse already-fetched calendars from component state if available
+        const sweepCalendars = calendars.length > 0
+          ? calendars
+          : filterArrangeCalendars(await getCalendars(sweepAccessToken));
         void (async () => {
           try {
-            const allCalendars = await getCalendars(sweepAccessToken);
-            const arrangeCalendars = filterArrangeCalendars(allCalendars);
-
-            for (const cal of arrangeCalendars) {
-              if (!cal.id) continue;
-              try {
-                const calEvents = await getCalendarEvents(
-                  sweepAccessToken, cal.id,
-                  startDate.toISOString(), endDate.toISOString()
-                );
-                const calTodos = calEvents.map(event => parseTodoData(event));
-                await sweepStaleTodos(sweepAccessToken, cal.id, calTodos);
-              } catch (calError) {
-                console.error(`Error sweeping calendar ${cal.id}:`, calError);
+            const calendarQueue = sweepCalendars.filter(c => c.id);
+            const CONCURRENCY = 5;
+            let i = 0;
+            const processNext = async () => {
+              while (i < calendarQueue.length) {
+                const cal = calendarQueue[i++];
+                try {
+                  const calEvents = await getCalendarEvents(
+                    sweepAccessToken, cal.id!,
+                    startDate.toISOString(), endDate.toISOString()
+                  );
+                  const calTodos = calEvents.map(event => parseTodoData(event));
+                  await sweepStaleTodos(sweepAccessToken, cal.id!, calTodos);
+                } catch (calError) {
+                  console.error(`Error sweeping calendar ${cal.id}:`, calError);
+                }
               }
-            }
+            };
+            await Promise.all(Array.from({ length: CONCURRENCY }, () => processNext()));
 
             // Refresh current view if still on the same book
             if (bookIdRef.current === sweepBookId) {
@@ -332,6 +338,8 @@ function MatrixPageContent() {
                 setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
               }
             }
+
+            markSessionSweepDone();
           } catch (sweepError) {
             console.error('Error during session sweep:', sweepError);
           }
