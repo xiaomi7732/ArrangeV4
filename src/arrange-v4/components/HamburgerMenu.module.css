@@ -115,6 +115,29 @@
   text-align: center;
 }
 
+.sidebarFooter {
+  border-top: 1px solid #e5e7eb;
+  padding: 8px 0;
+}
+
+.signOutButton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  font-size: 0.95rem;
+  color: #dc2626;
+  background: none;
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.signOutButton:hover {
+  background: #fef2f2;
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(-100%);
@@ -182,6 +205,18 @@
   .navLinkActive:hover {
     background: #1e3a5f;
     color: #93bbfd;
+  }
+
+  .sidebarFooter {
+    border-top-color: #374151;
+  }
+
+  .signOutButton {
+    color: #f87171;
+  }
+
+  .signOutButton:hover {
+    background: #371520;
   }
 
   .overlay {

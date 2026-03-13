@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useMsal } from '@azure/msal-react';
 import styles from './HamburgerMenu.module.css';
 
 interface NavItem {
@@ -22,6 +23,14 @@ export default function HamburgerMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
+  const { instance, accounts } = useMsal();
+
+  const isAuthenticated = accounts.length > 0;
+
+  const handleSignOut = () => {
+    setIsOpen(false);
+    instance.logoutPopup({ postLogoutRedirectUri: '/' });
+  };
 
   useEffect(() => {
     const savedBookId = localStorage.getItem('lastBookId');
@@ -97,6 +106,14 @@ export default function HamburgerMenu() {
                 </Link>
               ))}
             </nav>
+            {isAuthenticated && (
+              <div className={styles.sidebarFooter}>
+                <button className={styles.signOutButton} onClick={handleSignOut}>
+                  <span className={styles.navIcon}>🚪</span>
+                  Sign Out
+                </button>
+              </div>
+            )}
           </aside>
         </>
       )}
