@@ -302,15 +302,16 @@ function MatrixPageContent() {
       if (!hasSessionSweepRun()) {
         const sweepAccessToken = response.accessToken;
         const sweepBookId = bookId;
-        // Reuse already-fetched calendars from component state if available
-        const sweepCalendars = calendars.length > 0
-          ? calendars
-          : filterArrangeCalendars(await getCalendars(sweepAccessToken));
+        // Snapshot calendars from state; fallback fetched inside the IIFE to stay non-blocking
+        const snapshotCalendars = calendars.length > 0 ? [...calendars] : null;
         void (async () => {
           try {
+            const sweepCalendars = snapshotCalendars
+              ?? filterArrangeCalendars(await getCalendars(sweepAccessToken));
             const calendarQueue = sweepCalendars.filter(c => c.id);
             const CONCURRENCY = 5;
             let i = 0;
+            let hasFailure = false;
             const processNext = async () => {
               while (i < calendarQueue.length) {
                 const cal = calendarQueue[i++];
@@ -322,6 +323,7 @@ function MatrixPageContent() {
                   const calTodos = calEvents.map(event => parseTodoData(event));
                   await sweepStaleTodos(sweepAccessToken, cal.id!, calTodos);
                 } catch (calError) {
+                  hasFailure = true;
                   console.error(`Error sweeping calendar ${cal.id}:`, calError);
                 }
               }
@@ -339,7 +341,9 @@ function MatrixPageContent() {
               }
             }
 
-            markSessionSweepDone();
+            if (!hasFailure) {
+              markSessionSweepDone();
+            }
           } catch (sweepError) {
             console.error('Error during session sweep:', sweepError);
           }
