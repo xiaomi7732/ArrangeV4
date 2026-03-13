@@ -23,7 +23,7 @@ const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
   inProgress: 'showAll',
   blocked: 'showAll',
   finished: 'todayOnly',
-  cancelled: 'todayOnly',
+  cancelled: 'hide',
 };
 
 const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
