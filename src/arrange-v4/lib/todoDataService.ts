@@ -70,6 +70,8 @@ export function computeBumpedDates(
   const ets = new Date(etsDateTime);
   const eta = new Date(etaDateTime);
 
+  if (isNaN(ets.getTime()) || isNaN(eta.getTime())) return null;
+
   const todayStart = new Date(now);
   todayStart.setUTCHours(0, 0, 0, 0);
 
@@ -77,6 +79,7 @@ export function computeBumpedDates(
   if (ets >= todayStart) return null;
 
   const duration = eta.getTime() - ets.getTime();
+  if (duration <= 0) return null;
 
   // Move to today, preserving the original time-of-day (UTC)
   const bumpedEts = new Date(todayStart);
@@ -159,13 +162,22 @@ function stripHtmlTags(html: string): string {
   return div.textContent || div.innerText || '';
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Builds the HTML body content for a calendar event, wrapping the TODO JSON data
  * in a <pre> tag between markers for easy extraction and human-readable display.
  */
 function buildBodyHtml(todoData: object): string {
   const json = JSON.stringify(todoData, null, 2);
-  return `<pre>${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+  return `<pre>${ARRANGE_DATA_START_MARKER}\n${escapeHtml(json)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
 }
 
 /**
@@ -386,15 +398,26 @@ export async function sweepStaleTodos(
   if (staleItems.length === 0) return [];
 
   const bumpedIds: string[] = [];
-  for (const item of staleItems) {
-    try {
-      // An empty update triggers the built-in date-bump logic in updateTodoItem
-      await updateTodoItem(accessToken, calendarId, item.id!, {});
-      bumpedIds.push(item.id!);
-    } catch (error) {
-      console.error(`Error bumping stale TODO ${item.id}:`, error);
+  const concurrencyLimit = 5;
+  let currentIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = currentIndex++;
+      if (index >= staleItems.length) break;
+
+      const item = staleItems[index];
+      try {
+        await updateTodoItem(accessToken, calendarId, item.id!, {});
+        bumpedIds.push(item.id!);
+      } catch (error) {
+        console.error(`Error bumping stale TODO ${item.id}:`, error);
+      }
     }
   }
+
+  const workerCount = Math.min(concurrencyLimit, staleItems.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   return bumpedIds;
 }

@@ -230,8 +230,19 @@ function MatrixPageContent() {
     if (!isAuthenticated) return;
     try {
       const account = accounts[0];
-      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
-      const all = await getCalendars(response.accessToken);
+      let accessToken: string;
+      try {
+        const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+        accessToken = response.accessToken;
+      } catch (silentError: any) {
+        if (silentError.name === 'InteractionRequiredAuthError') {
+          const response = await instance.acquireTokenPopup(loginRequest);
+          accessToken = response.accessToken;
+        } else {
+          throw silentError;
+        }
+      }
+      const all = await getCalendars(accessToken);
       const arrangeCalendars = filterArrangeCalendars(all);
       setCalendars(arrangeCalendars);
 
@@ -241,8 +252,9 @@ function MatrixPageContent() {
       } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {
         setLastBookId(bookId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching calendars:', error);
+      setError(error.message || 'Failed to fetch calendars');
     }
   }, [isAuthenticated, accounts, instance, bookId, router]);
 
@@ -251,7 +263,7 @@ function MatrixPageContent() {
   }, [fetchCalendars]);
 
   const handleCalendarSwitch = (calendarId: string) => {
-    router.push(`/matrix?bookId=${calendarId}`);
+    router.push(`/matrix?bookId=${encodeURIComponent(calendarId)}`);
   };
 
   const fetchEvents = async () => {
@@ -284,18 +296,23 @@ function MatrixPageContent() {
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
 
-      // Sweep stale non-terminal items (bump their calendar dates to today)
-      const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
-      if (bumpedIds.length > 0) {
-        // Re-fetch to get the updated event data
-        const refreshedEvents = await getCalendarEvents(
-          response.accessToken,
-          bookId,
-          startDate.toISOString(),
-          endDate.toISOString()
-        );
-        setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
-      }
+      // Sweep stale non-terminal items in the background (non-blocking)
+      void (async () => {
+        try {
+          const bumpedIds = await sweepStaleTodos(response.accessToken, bookId, todos);
+          if (bumpedIds.length > 0) {
+            const refreshedEvents = await getCalendarEvents(
+              response.accessToken,
+              bookId,
+              startDate.toISOString(),
+              endDate.toISOString()
+            );
+            setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+          }
+        } catch (sweepError) {
+          console.error('Error sweeping stale TODO items:', sweepError);
+        }
+      })();
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
