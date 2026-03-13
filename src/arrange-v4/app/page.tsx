@@ -4,6 +4,8 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
 import { getCalendars } from '@/lib/graphService';
+import { filterArrangeCalendars } from '@/lib/calendarUtils';
+import { getLastBookId } from '@/lib/bookStorage';
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
@@ -14,21 +16,20 @@ import styles from './page.module.css';
 async function getPostLoginRoute(accessToken: string): Promise<string> {
   try {
     const calendars = await getCalendars(accessToken);
+    const arrangeCalendars = filterArrangeCalendars(calendars);
     
-    // Filter calendars that end with " by arrange"
-    const arrangeCalendars = calendars.filter(cal => 
-      cal.name?.endsWith(' by arrange')
-    );
-    
-    // If there's exactly 1 calendar ending with " by arrange", go to matrix
     if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
       return `/matrix?bookId=${arrangeCalendars[0].id}`;
+    }
+
+    const savedBookId = getLastBookId();
+    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
+      return `/matrix?bookId=${savedBookId}`;
     }
   } catch (error) {
     console.error('Error fetching calendars for route decision:', error);
   }
   
-  // Default to books
   return '/books';
 }
 
@@ -38,15 +39,15 @@ async function getPostLoginRoute(accessToken: string): Promise<string> {
 async function shouldShowMatrixButton(accessToken: string): Promise<{ show: boolean; bookId?: string }> {
   try {
     const calendars = await getCalendars(accessToken);
+    const arrangeCalendars = filterArrangeCalendars(calendars);
     
-    // Filter calendars that end with " by arrange"
-    const arrangeCalendars = calendars.filter(cal => 
-      cal.name?.endsWith(' by arrange')
-    );
-    
-    // Show matrix button if there's exactly 1 calendar ending with " by arrange"
     if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
       return { show: true, bookId: arrangeCalendars[0].id };
+    }
+
+    const savedBookId = getLastBookId();
+    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
+      return { show: true, bookId: savedBookId };
     }
   } catch (error) {
     console.error('Error checking matrix availability:', error);

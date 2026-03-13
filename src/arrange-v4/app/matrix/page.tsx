@@ -6,6 +6,8 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
+import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
+import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import styles from './page.module.css';
@@ -182,6 +184,15 @@ function MatrixPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const bookId = searchParams.get('bookId');
+
+  useEffect(() => {
+    if (!bookId) {
+      const saved = getLastBookId();
+      if (saved) {
+        router.replace(`/matrix?bookId=${saved}`);
+      }
+    }
+  }, [bookId, router]);
   
   const { instance, accounts, inProgress } = useMsal();
   const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
@@ -203,7 +214,9 @@ function MatrixPageContent() {
     return true;
   });
 
-  const currentCalendarName = calendars.find(c => c.id === bookId)?.name?.replace(/ by arrange$/i, '') || bookId;
+  const currentCalendarName = calendars.find(c => c.id === bookId)
+    ? getCalendarDisplayName(calendars.find(c => c.id === bookId)!)
+    : bookId;
 
   const fetchCalendars = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -211,11 +224,19 @@ function MatrixPageContent() {
       const account = accounts[0];
       const response = await instance.acquireTokenSilent({ ...loginRequest, account });
       const all = await getCalendars(response.accessToken);
-      setCalendars(all.filter(c => c.name?.toLowerCase().endsWith(' by arrange')));
+      const arrangeCalendars = filterArrangeCalendars(all);
+      setCalendars(arrangeCalendars);
+
+      if (bookId && arrangeCalendars.length > 0 && !arrangeCalendars.some(c => c.id === bookId)) {
+        clearLastBookId();
+        router.replace('/books');
+      } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {
+        setLastBookId(bookId);
+      }
     } catch (error) {
       console.error('Error fetching calendars:', error);
     }
-  }, [isAuthenticated, accounts, instance]);
+  }, [isAuthenticated, accounts, instance, bookId, router]);
 
   useEffect(() => {
     fetchCalendars();
@@ -477,7 +498,7 @@ function MatrixPageContent() {
                 >
                   {calendars.map(cal => (
                     <option key={cal.id} value={cal.id}>
-                      {cal.name?.replace(/ by arrange$/i, '')}
+                      {getCalendarDisplayName(cal)}
                     </option>
                   ))}
                 </select>
