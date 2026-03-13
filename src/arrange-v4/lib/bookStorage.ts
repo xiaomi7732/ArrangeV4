@@ -1,4 +1,5 @@
 const LAST_BOOK_ID_KEY = 'arrange_lastBookId';
+const SESSION_SWEEP_KEY = 'arrange_sweepDone';
 
 function isStorageAvailable(): boolean {
   try {
@@ -30,6 +31,24 @@ export function clearLastBookId(): void {
   if (!isStorageAvailable()) return;
   try {
     localStorage.removeItem(LAST_BOOK_ID_KEY);
+  } catch {
+    // Silently ignore
+  }
+}
+
+export function hasSessionSweepRun(): boolean {
+  if (!isStorageAvailable()) return true;
+  try {
+    return sessionStorage.getItem(SESSION_SWEEP_KEY) === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function markSessionSweepDone(): void {
+  if (!isStorageAvailable()) return;
+  try {
+    sessionStorage.setItem(SESSION_SWEEP_KEY, 'true');
   } catch {
     // Silently ignore
   }

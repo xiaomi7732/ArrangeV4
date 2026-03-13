@@ -7,7 +7,7 @@ import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
-import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
+import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, markSessionSweepDone } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
@@ -298,26 +298,45 @@ function MatrixPageContent() {
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
 
-      // Sweep stale non-terminal items in the background (non-blocking)
-      const sweepBookId = bookId;
-      void (async () => {
-        try {
-          const bumpedIds = await sweepStaleTodos(response.accessToken, sweepBookId, todos);
-          if (bumpedIds.length > 0 && bookIdRef.current === sweepBookId) {
-            const refreshedEvents = await getCalendarEvents(
-              response.accessToken,
-              sweepBookId,
-              startDate.toISOString(),
-              endDate.toISOString()
-            );
-            if (bookIdRef.current === sweepBookId) {
-              setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+      // Sweep stale items across ALL calendars once per session (non-blocking)
+      if (!hasSessionSweepRun()) {
+        markSessionSweepDone();
+        const sweepAccessToken = response.accessToken;
+        const sweepBookId = bookId;
+        void (async () => {
+          try {
+            const allCalendars = await getCalendars(sweepAccessToken);
+            const arrangeCalendars = filterArrangeCalendars(allCalendars);
+
+            for (const cal of arrangeCalendars) {
+              if (!cal.id) continue;
+              try {
+                const calEvents = await getCalendarEvents(
+                  sweepAccessToken, cal.id,
+                  startDate.toISOString(), endDate.toISOString()
+                );
+                const calTodos = calEvents.map(event => parseTodoData(event));
+                await sweepStaleTodos(sweepAccessToken, cal.id, calTodos);
+              } catch (calError) {
+                console.error(`Error sweeping calendar ${cal.id}:`, calError);
+              }
             }
+
+            // Refresh current view if still on the same book
+            if (bookIdRef.current === sweepBookId) {
+              const refreshedEvents = await getCalendarEvents(
+                sweepAccessToken, sweepBookId,
+                startDate.toISOString(), endDate.toISOString()
+              );
+              if (bookIdRef.current === sweepBookId) {
+                setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+              }
+            }
+          } catch (sweepError) {
+            console.error('Error during session sweep:', sweepError);
           }
-        } catch (sweepError) {
-          console.error('Error sweeping stale TODO items:', sweepError);
-        }
-      })();
+        })();
+      }
     } catch (error: any) {
       console.error('Error fetching events:', error);
       setError(error.message || 'Failed to fetch events');
