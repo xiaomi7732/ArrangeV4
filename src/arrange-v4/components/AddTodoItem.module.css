@@ -15,7 +15,7 @@
   padding: 24px;
   width: 100%;
   max-width: 640px;
-  max-height: 85vh;
+  height: 85vh;
   margin: 0 16px;
   display: flex;
   flex-direction: column;
@@ -55,13 +55,20 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow-y: auto;
   flex: 1;
+  overflow: hidden;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
+}
+
+.formGroupFill {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .label {
@@ -96,7 +103,7 @@
   color: #111827;
   line-height: 1.6;
   white-space: pre-wrap;
-  max-height: 200px;
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -199,6 +206,7 @@
 
 .textarea {
   resize: none;
+  flex: 1;
 }
 
 .checkboxGrid {
@@ -314,6 +322,55 @@
 .icon {
   width: 20px;
   height: 20px;
+}
+
+/* Tabs */
+.tabBar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 8px 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: #374151;
+  background-color: #f9fafb;
+}
+
+.tabActive {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.tabContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.tabPlaceholder {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  font-style: italic;
+  padding: 12px 0;
 }
 
 .addButtonCompact {
