@@ -187,6 +187,7 @@ function MatrixPageContent() {
   const router = useRouter();
   const bookId = searchParams.get('bookId');
   const bookIdRef = useRef(bookId);
+  const sweepAttemptedRef = useRef(false);
   bookIdRef.current = bookId;
 
   useEffect(() => {
@@ -298,8 +299,9 @@ function MatrixPageContent() {
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
 
-      // Sweep stale items across ALL calendars once per session (non-blocking)
-      if (!hasSessionSweepRun() && !isSessionSweepInProgress()) {
+      // Sweep stale items across ALL calendars once per page load (non-blocking)
+      if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
+        sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
         const sweepAccessToken = response.accessToken;
         const sweepBookId = bookId;
