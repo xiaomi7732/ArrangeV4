@@ -40,6 +40,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
+  type AddTab = 'essentials' | 'remarks' | 'checklist';
+  const [activeTab, setActiveTab] = useState<AddTab>('essentials');
 
   const resetForm = () => {
     setSubject('');
@@ -51,6 +53,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setNewChecklistItem('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
     setEtsDateTime(getDateTimeString());
+    setActiveTab('essentials');
     setError(null);
   };
 
@@ -134,182 +137,144 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
         )}
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          {/* Subject */}
-          <div className={styles.formGroup}>
-            <label htmlFor="subject" className={styles.label}>
-              Subject *
-            </label>
-            <input
-              type="text"
-              id="subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Enter task title"
-              className={styles.input}
-              disabled={isSubmitting}
-            />
+          <div className={styles.tabBar}>
+            <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('remarks')}>Remarks</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('checklist')}>Checklist</button>
           </div>
 
-          {/* Urgency & Importance */}
-          <div className={styles.checkboxGrid}>
-            <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={urgent}
-                onChange={(e) => setUrgent(e.target.checked)}
-                disabled={isSubmitting}
-                className={styles.checkbox}
-              />
-              <span className={styles.checkboxText}>Urgent</span>
-            </label>
-            <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={important}
-                onChange={(e) => setImportant(e.target.checked)}
-                disabled={isSubmitting}
-                className={styles.checkbox}
-              />
-              <span className={styles.checkboxText}>Important</span>
-            </label>
-          </div>
+          {activeTab === 'essentials' && (
+            <div className={styles.tabContent}>
+              <div className={styles.formGroup}>
+                <label htmlFor="subject" className={styles.label}>Subject *</label>
+                <input type="text" id="subject" value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Enter task title" className={styles.input} disabled={isSubmitting} />
+              </div>
 
-          {/* Status */}
-          <div className={styles.formGroup}>
-            <label htmlFor="status" className={styles.label}>
-              Status
-            </label>
-            <select
-              id="status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TodoStatus)}
-              disabled={isSubmitting}
-              className={styles.select}
-            >
-              <option value="new">New</option>
-              <option value="inProgress">In Progress</option>
-              <option value="blocked">Blocked</option>
-              <option value="finished">Finished</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
+              <div className={styles.checkboxGrid}>
+                <label className={styles.checkboxLabel}>
+                  <input type="checkbox" checked={urgent}
+                    onChange={(e) => setUrgent(e.target.checked)}
+                    disabled={isSubmitting} className={styles.checkbox} />
+                  <span className={styles.checkboxText}>Urgent</span>
+                </label>
+                <label className={styles.checkboxLabel}>
+                  <input type="checkbox" checked={important}
+                    onChange={(e) => setImportant(e.target.checked)}
+                    disabled={isSubmitting} className={styles.checkbox} />
+                  <span className={styles.checkboxText}>Important</span>
+                </label>
+              </div>
 
-          {/* ETS DateTime */}
-          <div className={styles.formGroup}>
-            <label htmlFor="etsDateTime" className={styles.label}>
-              ETS (Estimated Start Time)
-            </label>
-            <input
-              type="datetime-local"
-              id="etsDateTime"
-              value={etsDateTime}
-              onChange={(e) => setEtsDateTime(e.target.value)}
-              disabled={isSubmitting}
-              className={styles.input}
-            />
-          </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="status" className={styles.label}>Status</label>
+                <select id="status" value={status}
+                  onChange={(e) => setStatus(e.target.value as TodoStatus)}
+                  disabled={isSubmitting} className={styles.select}>
+                  <option value="new">New</option>
+                  <option value="inProgress">In Progress</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="finished">Finished</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
 
-          {/* ETA DateTime */}
-          <div className={styles.formGroup}>
-            <label htmlFor="etaDateTime" className={styles.label}>
-              ETA (Estimated Time of Accomplishment)
-            </label>
-            <input
-              type="datetime-local"
-              id="etaDateTime"
-              value={etaDateTime}
-              onChange={(e) => setEtaDateTime(e.target.value)}
-              disabled={isSubmitting}
-              className={styles.input}
-            />
-          </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="etsDateTime" className={styles.label}>ETS (Estimated Start Time)</label>
+                <input type="datetime-local" id="etsDateTime" value={etsDateTime}
+                  onChange={(e) => setEtsDateTime(e.target.value)}
+                  disabled={isSubmitting} className={styles.input} />
+              </div>
 
-          {/* Remarks */}
-          <div className={styles.formGroup}>
-            <label htmlFor="remarks" className={styles.label}>
-              Remarks
-            </label>
-            <textarea
-              id="remarks"
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Add any notes or remarks..."
-              rows={3}
-              disabled={isSubmitting}
-              className={styles.textarea}
-            />
-          </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="etaDateTime" className={styles.label}>ETA (Estimated Time of Accomplishment)</label>
+                <input type="datetime-local" id="etaDateTime" value={etaDateTime}
+                  onChange={(e) => setEtaDateTime(e.target.value)}
+                  disabled={isSubmitting} className={styles.input} />
+              </div>
 
-          {/* Checklist */}
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Checklist</label>
-            {checklist.length > 0 && (
-              <ul className={styles.checklistEdit}>
-                {checklist.map((item, idx) => (
-                  <li key={idx} className={styles.checklistEditItem}>
-                    <span>{item.replace(/^-\[x?\]\s*/, '')}</span>
-                    <button type="button" className={styles.checklistRemove}
-                      disabled={isSubmitting}
-                      onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className={styles.checklistAdd}>
-              <input type="text" value={newChecklistItem}
-                onChange={(e) => setNewChecklistItem(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newChecklistItem.trim()) {
-                    e.preventDefault();
-                    setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                    setNewChecklistItem('');
-                  }
-                }}
-                placeholder="Add checklist item..."
-                className={styles.input} disabled={isSubmitting} />
-              <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
-                disabled={isSubmitting || !newChecklistItem.trim()}
-                onClick={() => {
-                  if (newChecklistItem.trim()) {
-                    setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                    setNewChecklistItem('');
-                  }
-                }}>
-                Add
-              </button>
+              <div className={styles.preview}>
+                <p className={styles.previewText}>
+                  Matrix Quadrant:{' '}
+                  <span className={styles.previewLabel}>
+                    {urgent && important && '🔴 Do First (Urgent & Important)'}
+                    {!urgent && important && '🟡 Schedule (Important, Not Urgent)'}
+                    {urgent && !important && '🟠 Delegate (Urgent, Not Important)'}
+                    {!urgent && !important && '⚪ Eliminate (Neither)'}
+                  </span>
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Matrix Quadrant Preview */}
-          <div className={styles.preview}>
-            <p className={styles.previewText}>
-              Matrix Quadrant: {' '}
-              <span className={styles.previewLabel}>
-                {urgent && important && '🔴 Do First (Urgent & Important)'}
-                {!urgent && important && '🟡 Schedule (Important, Not Urgent)'}
-                {urgent && !important && '🟠 Delegate (Urgent, Not Important)'}
-                {!urgent && !important && '⚪ Eliminate (Neither)'}
-              </span>
-            </p>
-          </div>
+          {activeTab === 'remarks' && (
+            <div className={styles.tabContent}>
+              <div className={styles.formGroupFill}>
+                <label htmlFor="remarks" className={styles.label}>Remarks</label>
+                <textarea id="remarks" value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Add any notes or remarks..."
+                  disabled={isSubmitting} className={styles.textarea} />
+              </div>
+            </div>
+          )}
 
-          {/* Actions */}
+          {activeTab === 'checklist' && (
+            <div className={styles.tabContent}>
+              <div className={styles.formGroup}>
+                <label className={styles.label}>Checklist</label>
+                {checklist.length > 0 && (
+                  <ul className={styles.checklistEdit}>
+                    {checklist.map((item, idx) => (
+                      <li key={idx} className={styles.checklistEditItem}>
+                        <span>{item.replace(/^-\[x?\]\s*/, '')}</span>
+                        <button type="button" className={styles.checklistRemove}
+                          disabled={isSubmitting}
+                          onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className={styles.checklistAdd}>
+                  <input type="text" value={newChecklistItem}
+                    onChange={(e) => setNewChecklistItem(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newChecklistItem.trim()) {
+                        e.preventDefault();
+                        setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                        setNewChecklistItem('');
+                      }
+                    }}
+                    placeholder="Add checklist item..."
+                    className={styles.input} disabled={isSubmitting} />
+                  <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
+                    disabled={isSubmitting || !newChecklistItem.trim()}
+                    onClick={() => {
+                      if (newChecklistItem.trim()) {
+                        setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                        setNewChecklistItem('');
+                      }
+                    }}>
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className={styles.actions}>
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={isSubmitting}
-              className={`${styles.button} ${styles.buttonSecondary}`}
-            >
+            <button type="button" onClick={handleCancel} disabled={isSubmitting}
+              className={`${styles.button} ${styles.buttonSecondary}`}>
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`${styles.button} ${styles.buttonPrimary}`}
-            >
+            <button type="submit" disabled={isSubmitting}
+              className={`${styles.button} ${styles.buttonPrimary}`}>
               {isSubmitting ? 'Creating...' : 'Create TODO'}
             </button>
           </div>

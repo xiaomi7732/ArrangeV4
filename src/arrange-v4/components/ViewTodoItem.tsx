@@ -10,11 +10,14 @@ interface ViewTodoItemProps {
   onUpdate?: (updatedFields: Partial<TodoItem>) => Promise<void>;
 }
 
+type ViewTab = 'essentials' | 'remarks' | 'checklist';
+
 export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
 
   const formatLocalDateTime = (isoString?: string) => {
     if (!isoString) return '';
@@ -109,121 +112,142 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
           )}
 
           <form onSubmit={handleSave} className={styles.form}>
-            <div className={styles.formGroup}>
-              <label htmlFor="edit-subject" className={styles.label}>Subject *</label>
-              <input type="text" id="edit-subject" value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Enter task title" className={styles.input} disabled={isSubmitting} />
+            <div className={styles.tabBar}>
+              <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
+                onClick={() => setActiveTab('essentials')}>Essentials</button>
+              <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
+                onClick={() => setActiveTab('remarks')}>Remarks</button>
+              <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
+                onClick={() => setActiveTab('checklist')}>Checklist</button>
             </div>
 
-            <div className={styles.checkboxGrid}>
-              <label className={styles.checkboxLabel}>
-                <input type="checkbox" checked={urgent}
-                  onChange={(e) => setUrgent(e.target.checked)}
-                  disabled={isSubmitting} className={styles.checkbox} />
-                <span className={styles.checkboxText}>Urgent</span>
-              </label>
-              <label className={styles.checkboxLabel}>
-                <input type="checkbox" checked={important}
-                  onChange={(e) => setImportant(e.target.checked)}
-                  disabled={isSubmitting} className={styles.checkbox} />
-                <span className={styles.checkboxText}>Important</span>
-              </label>
-            </div>
+            {activeTab === 'essentials' && (
+              <div className={styles.tabContent}>
+                <div className={styles.formGroup}>
+                  <label htmlFor="edit-subject" className={styles.label}>Subject *</label>
+                  <input type="text" id="edit-subject" value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="Enter task title" className={styles.input} disabled={isSubmitting} />
+                </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="edit-status" className={styles.label}>Status</label>
-              <select id="edit-status" value={status}
-                onChange={(e) => setStatus(e.target.value as TodoStatus)}
-                disabled={isSubmitting} className={styles.select}>
-                <option value="new">New</option>
-                <option value="inProgress">In Progress</option>
-                <option value="blocked">Blocked</option>
-                <option value="finished">Finished</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
+                <div className={styles.checkboxGrid}>
+                  <label className={styles.checkboxLabel}>
+                    <input type="checkbox" checked={urgent}
+                      onChange={(e) => setUrgent(e.target.checked)}
+                      disabled={isSubmitting} className={styles.checkbox} />
+                    <span className={styles.checkboxText}>Urgent</span>
+                  </label>
+                  <label className={styles.checkboxLabel}>
+                    <input type="checkbox" checked={important}
+                      onChange={(e) => setImportant(e.target.checked)}
+                      disabled={isSubmitting} className={styles.checkbox} />
+                    <span className={styles.checkboxText}>Important</span>
+                  </label>
+                </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="edit-ets" className={styles.label}>ETS (Estimated Start Time)</label>
-              <input type="datetime-local" id="edit-ets" value={etsDateTime}
-                onChange={(e) => setEtsDateTime(e.target.value)}
-                disabled={isSubmitting} className={styles.input} />
-            </div>
+                <div className={styles.formGroup}>
+                  <label htmlFor="edit-status" className={styles.label}>Status</label>
+                  <select id="edit-status" value={status}
+                    onChange={(e) => setStatus(e.target.value as TodoStatus)}
+                    disabled={isSubmitting} className={styles.select}>
+                    <option value="new">New</option>
+                    <option value="inProgress">In Progress</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="finished">Finished</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="edit-eta" className={styles.label}>ETA (Estimated Time of Accomplishment)</label>
-              <input type="datetime-local" id="edit-eta" value={etaDateTime}
-                onChange={(e) => setEtaDateTime(e.target.value)}
-                disabled={isSubmitting} className={styles.input} />
-            </div>
+                <div className={styles.formGroup}>
+                  <label htmlFor="edit-ets" className={styles.label}>ETS (Estimated Start Time)</label>
+                  <input type="datetime-local" id="edit-ets" value={etsDateTime}
+                    onChange={(e) => setEtsDateTime(e.target.value)}
+                    disabled={isSubmitting} className={styles.input} />
+                </div>
 
-            <div className={styles.formGroup}>
-              <label htmlFor="edit-remarks" className={styles.label}>Remarks</label>
-              <textarea id="edit-remarks" value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add any notes or remarks..." rows={3}
-                disabled={isSubmitting} className={styles.textarea} />
-            </div>
+                <div className={styles.formGroup}>
+                  <label htmlFor="edit-eta" className={styles.label}>ETA (Estimated Time of Accomplishment)</label>
+                  <input type="datetime-local" id="edit-eta" value={etaDateTime}
+                    onChange={(e) => setEtaDateTime(e.target.value)}
+                    disabled={isSubmitting} className={styles.input} />
+                </div>
 
-            <div className={styles.formGroup}>
-              <label className={styles.label}>Checklist</label>
-              {checklist.length > 0 && (
-                <ul className={styles.checklistEdit}>
-                  {checklist.map((item, idx) => {
-                    const checked = item.startsWith('-[x]');
-                    const text = item.replace(/^-\[x?\]\s*/, '');
-                    return (
-                      <li key={idx} className={styles.checklistEditItem}>
-                        <label className={styles.checklistCheckLabel}>
-                          <input type="checkbox" checked={checked} disabled={isSubmitting}
-                            className={styles.checkbox}
-                            onChange={() => setChecklist(prev => prev.map((it, i) =>
-                              i === idx ? (checked ? '-[] ' + text : '-[x] ' + text) : it
-                            ))} />
-                          <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
-                        </label>
-                        <button type="button" className={styles.checklistRemove}
-                          disabled={isSubmitting}
-                          onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
-                          ✕
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <div className={styles.checklistAdd}>
-                <input type="text" value={newChecklistItem}
-                  onChange={(e) => setNewChecklistItem(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newChecklistItem.trim()) {
-                      e.preventDefault();
-                      setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                      setNewChecklistItem('');
-                    }
-                  }}
-                  placeholder="Add checklist item..."
-                  className={styles.input} disabled={isSubmitting} />
-                <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
-                  disabled={isSubmitting || !newChecklistItem.trim()}
-                  onClick={() => {
-                    if (newChecklistItem.trim()) {
-                      setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                      setNewChecklistItem('');
-                    }
-                  }}>
-                  Add
-                </button>
+                <div className={styles.preview}>
+                  <p className={styles.previewText}>
+                    Matrix Quadrant:{' '}
+                    <span className={styles.previewLabel}>{getQuadrantLabel(urgent, important)}</span>
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className={styles.preview}>
-              <p className={styles.previewText}>
-                Matrix Quadrant:{' '}
-                <span className={styles.previewLabel}>{getQuadrantLabel(urgent, important)}</span>
-              </p>
-            </div>
+            {activeTab === 'remarks' && (
+              <div className={styles.tabContent}>
+                <div className={styles.formGroupFill}>
+                  <label htmlFor="edit-remarks" className={styles.label}>Remarks</label>
+                  <textarea id="edit-remarks" value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Add any notes or remarks..."
+                    disabled={isSubmitting} className={styles.textarea} />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'checklist' && (
+              <div className={styles.tabContent}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label}>Checklist</label>
+                  {checklist.length > 0 && (
+                    <ul className={styles.checklistEdit}>
+                      {checklist.map((item, idx) => {
+                        const checked = item.startsWith('-[x]');
+                        const text = item.replace(/^-\[x?\]\s*/, '');
+                        return (
+                          <li key={idx} className={styles.checklistEditItem}>
+                            <label className={styles.checklistCheckLabel}>
+                              <input type="checkbox" checked={checked} disabled={isSubmitting}
+                                className={styles.checkbox}
+                                onChange={() => setChecklist(prev => prev.map((it, i) =>
+                                  i === idx ? (checked ? '-[] ' + text : '-[x] ' + text) : it
+                                ))} />
+                              <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
+                            </label>
+                            <button type="button" className={styles.checklistRemove}
+                              disabled={isSubmitting}
+                              onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
+                              ✕
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <div className={styles.checklistAdd}>
+                    <input type="text" value={newChecklistItem}
+                      onChange={(e) => setNewChecklistItem(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newChecklistItem.trim()) {
+                          e.preventDefault();
+                          setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                          setNewChecklistItem('');
+                        }
+                      }}
+                      placeholder="Add checklist item..."
+                      className={styles.input} disabled={isSubmitting} />
+                    <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
+                      disabled={isSubmitting || !newChecklistItem.trim()}
+                      onClick={() => {
+                        if (newChecklistItem.trim()) {
+                          setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
+                          setNewChecklistItem('');
+                        }
+                      }}>
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className={styles.actions}>
               <button type="button" onClick={handleCancelEdit} disabled={isSubmitting}
@@ -247,88 +271,113 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
         <h2 className={styles.title}>{todo.subject}</h2>
 
         <div className={styles.form}>
-          <div className={styles.formGroup}>
-            <span className={styles.label}>Status</span>
-            <span className={styles.value}>{STATUS_LABELS[todo.status || 'new']}</span>
+          <div className={styles.tabBar}>
+            <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('remarks')}>Remarks</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('checklist')}>Checklist</button>
           </div>
 
-          <div className={styles.checkboxGrid}>
-            <div className={styles.formGroup}>
-              <span className={styles.label}>Urgent</span>
-              <span className={todo.urgent ? styles.valuePositive : styles.valueNegative}>
-                {todo.urgent ? '✓ Yes' : '✗ No'}
-              </span>
-            </div>
-            <div className={styles.formGroup}>
-              <span className={styles.label}>Important</span>
-              <span className={todo.important ? styles.valuePositive : styles.valueNegative}>
-                {todo.important ? '✓ Yes' : '✗ No'}
-              </span>
-            </div>
-          </div>
+          {activeTab === 'essentials' && (
+            <div className={styles.tabContent}>
+              <div className={styles.formGroup}>
+                <span className={styles.label}>Status</span>
+                <span className={styles.value}>{STATUS_LABELS[todo.status || 'new']}</span>
+              </div>
 
-          <div className={styles.formGroup}>
-            <span className={styles.label}>ETS (Estimated Start Time)</span>
-            <span className={styles.value}>{formatDateTime(todo.etsDateTime)}</span>
-          </div>
+              <div className={styles.checkboxGrid}>
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Urgent</span>
+                  <span className={todo.urgent ? styles.valuePositive : styles.valueNegative}>
+                    {todo.urgent ? '✓ Yes' : '✗ No'}
+                  </span>
+                </div>
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Important</span>
+                  <span className={todo.important ? styles.valuePositive : styles.valueNegative}>
+                    {todo.important ? '✓ Yes' : '✗ No'}
+                  </span>
+                </div>
+              </div>
 
-          <div className={styles.formGroup}>
-            <span className={styles.label}>ETA (Estimated Time of Accomplishment)</span>
-            <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
-          </div>
+              <div className={styles.formGroup}>
+                <span className={styles.label}>ETS (Estimated Start Time)</span>
+                <span className={styles.value}>{formatDateTime(todo.etsDateTime)}</span>
+              </div>
 
-          {todo.categories && todo.categories.length > 0 && (
-            <div className={styles.formGroup}>
-              <span className={styles.label}>Categories</span>
-              <span className={styles.value}>{todo.categories.join(', ')}</span>
-            </div>
-          )}
+              <div className={styles.formGroup}>
+                <span className={styles.label}>ETA (Estimated Time of Accomplishment)</span>
+                <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
+              </div>
 
-          {todo.remarks?.content && (
-            <div className={styles.formGroup}>
-              <span className={styles.label}>Remarks</span>
-              <div className={styles.remarksBox}>{todo.remarks.content}</div>
-            </div>
-          )}
+              {todo.categories && todo.categories.length > 0 && (
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Categories</span>
+                  <span className={styles.value}>{todo.categories.join(', ')}</span>
+                </div>
+              )}
 
-          {todo.checklist && todo.checklist.length > 0 && (
-            <div className={styles.formGroup}>
-              <span className={styles.label}>Checklist</span>
-              <ul className={styles.checklistEdit}>
-                {todo.checklist.map((item, idx) => {
-                  const checked = item.startsWith('-[x]');
-                  const text = item.replace(/^-\[x?\]\s*/, '');
-                  return (
-                    <li key={idx} className={styles.checklistEditItem}>
-                      <label className={styles.checklistCheckLabel}>
-                        <input type="checkbox" checked={checked} className={styles.checkbox}
-                          onChange={async () => {
-                            const updated = [...todo.checklist!];
-                            updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
-                            setChecklistUpdating(true);
-                            try {
-                              await onUpdate?.({ checklist: updated });
-                            } catch (err: any) {
-                              setError(err.message || 'Failed to update checklist');
-                            } finally {
-                              setChecklistUpdating(false);
-                            }
-                          }} disabled={!onUpdate || checklistUpdating} />
-                        <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
-                      </label>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className={styles.preview}>
+                <p className={styles.previewText}>
+                  Matrix Quadrant:{' '}
+                  <span className={styles.previewLabel}>{getQuadrantLabel(todo.urgent ?? false, todo.important ?? false)}</span>
+                </p>
+              </div>
             </div>
           )}
 
-          <div className={styles.preview}>
-            <p className={styles.previewText}>
-              Matrix Quadrant:{' '}
-              <span className={styles.previewLabel}>{getQuadrantLabel(todo.urgent ?? false, todo.important ?? false)}</span>
-            </p>
-          </div>
+          {activeTab === 'remarks' && (
+            <div className={styles.tabContent}>
+              {todo.remarks?.content ? (
+                <div className={styles.formGroupFill}>
+                  <span className={styles.label}>Remarks</span>
+                  <div className={styles.remarksBox}>{todo.remarks.content}</div>
+                </div>
+              ) : (
+                <p className={styles.tabPlaceholder}>No remarks</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'checklist' && (
+            <div className={styles.tabContent}>
+              {todo.checklist && todo.checklist.length > 0 ? (
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Checklist</span>
+                  <ul className={styles.checklistEdit}>
+                    {todo.checklist.map((item, idx) => {
+                      const checked = item.startsWith('-[x]');
+                      const text = item.replace(/^-\[x?\]\s*/, '');
+                      return (
+                        <li key={idx} className={styles.checklistEditItem}>
+                          <label className={styles.checklistCheckLabel}>
+                            <input type="checkbox" checked={checked} className={styles.checkbox}
+                              onChange={async () => {
+                                const updated = [...todo.checklist!];
+                                updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
+                                setChecklistUpdating(true);
+                                try {
+                                  await onUpdate?.({ checklist: updated });
+                                } catch (err: any) {
+                                  setError(err.message || 'Failed to update checklist');
+                                } finally {
+                                  setChecklistUpdating(false);
+                                }
+                              }} disabled={!onUpdate || checklistUpdating} />
+                            <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : (
+                <p className={styles.tabPlaceholder}>No checklist items</p>
+              )}
+            </div>
+          )}
 
           <div className={styles.actions}>
             {onUpdate && (
