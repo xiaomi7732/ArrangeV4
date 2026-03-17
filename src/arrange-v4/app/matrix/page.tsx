@@ -299,7 +299,7 @@ function MatrixPageContent() {
       const todos = eventsData.map(event => parseTodoData(event));
       setTodoItems(todos);
 
-      // Sweep stale items across ALL calendars once per page load (non-blocking)
+      // Sweep stale items across ALL calendars once per session (non-blocking; per-load ref prevents retries on failure)
       if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();

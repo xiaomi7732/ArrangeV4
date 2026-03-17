@@ -61,7 +61,12 @@ export function isSessionSweepInProgress(): boolean {
   try {
     const startedAt = sessionStorage.getItem(SESSION_SWEEP_IN_PROGRESS_KEY);
     if (!startedAt) return false;
-    const elapsed = Date.now() - Number(startedAt);
+    const ts = Number(startedAt);
+    if (!Number.isFinite(ts)) {
+      sessionStorage.removeItem(SESSION_SWEEP_IN_PROGRESS_KEY);
+      return false;
+    }
+    const elapsed = Date.now() - ts;
     if (elapsed > SWEEP_STALE_THRESHOLD_MS) {
       sessionStorage.removeItem(SESSION_SWEEP_IN_PROGRESS_KEY);
       return false;
