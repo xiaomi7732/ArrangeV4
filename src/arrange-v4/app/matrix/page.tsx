@@ -208,14 +208,36 @@ function MatrixPageContent() {
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [showUncategorized, setShowUncategorized] = useState(false);
 
   const isAuthenticated = accounts.length > 0;
+
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const todo of todoItems) {
+      if (todo.categories) {
+        for (const c of todo.categories) cats.add(c);
+      }
+    }
+    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+  }, [todoItems]);
+
+  const categoryFilterActive = selectedCategories.size > 0 || showUncategorized;
 
   const filteredTodoItems = todoItems.filter(todo => {
     const status = todo.status || 'new';
     const mode = statusFilters[status];
     if (mode === 'hide') return false;
-    if (mode === 'todayOnly') return passesTodayFilter(todo);
+    if (mode === 'todayOnly' && !passesTodayFilter(todo)) return false;
+
+    if (categoryFilterActive) {
+      const hasCats = todo.categories && todo.categories.length > 0;
+      if (showUncategorized && !hasCats) return true;
+      if (hasCats && todo.categories!.some(c => selectedCategories.has(c))) return true;
+      return false;
+    }
+
     return true;
   });
 
@@ -586,7 +608,7 @@ function MatrixPageContent() {
                 </button>
               ) : (
                 <>
-                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} />
+                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
                   <button
                     onClick={fetchEvents}
                     disabled={loading}
@@ -641,6 +663,43 @@ function MatrixPageContent() {
                       </div>
                     </div>
                   ))}
+                  {allCategories.length > 0 && (
+                    <div className={styles.categoryFilterSection}>
+                      <span className={styles.filterLabel}>Categories</span>
+                      <div className={styles.categoryFilterChips}>
+                        <button
+                          className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
+                          onClick={() => setShowUncategorized(prev => !prev)}
+                        >
+                          Uncategorized
+                        </button>
+                        {allCategories.map(cat => {
+                          const isSelected = selectedCategories.has(cat);
+                          return (
+                            <button
+                              key={cat}
+                              className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
+                              onClick={() => setSelectedCategories(prev => {
+                                const next = new Set(prev);
+                                if (isSelected) next.delete(cat); else next.add(cat);
+                                return next;
+                              })}
+                            >
+                              {cat}
+                            </button>
+                          );
+                        })}
+                        {categoryFilterActive && (
+                          <button
+                            className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
+                            onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                          >
+                            ✕ Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               <div className={styles.matrix}>
@@ -661,6 +720,7 @@ function MatrixPageContent() {
                       defaultUrgent={true}
                       defaultImportant={true}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -690,6 +750,7 @@ function MatrixPageContent() {
                       defaultUrgent={false}
                       defaultImportant={true}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -719,6 +780,7 @@ function MatrixPageContent() {
                       defaultUrgent={true}
                       defaultImportant={false}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -748,6 +810,7 @@ function MatrixPageContent() {
                       defaultUrgent={false}
                       defaultImportant={false}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -769,6 +832,7 @@ function MatrixPageContent() {
               todo={selectedTodo} 
               onClose={() => setSelectedTodo(null)}
               onUpdate={handleUpdateTodo}
+              availableCategories={allCategories}
             />
           )}
         </div>

@@ -275,6 +275,60 @@
   background-color: #1d4ed8;
 }
 
+.categoryFilterSection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.categoryFilterChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.categoryFilterChip {
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: 16px;
+  border: 1px solid #d1d5db;
+  background-color: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.categoryFilterChip:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.categoryFilterChipActive {
+  background-color: #dbeafe;
+  border-color: #2563eb;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.categoryFilterChipActive:hover {
+  background-color: #bfdbfe;
+}
+
+.categoryFilterClear {
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.categoryFilterClear:hover {
+  background-color: #fef2f2;
+  border-color: #dc2626;
+}
+
 .matrix {
   display: grid;
   grid-template-columns: 1fr;

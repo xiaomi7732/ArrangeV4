@@ -8,11 +8,12 @@ interface ViewTodoItemProps {
   todo: TodoItem & { id?: string };
   onClose: () => void;
   onUpdate?: (updatedFields: Partial<TodoItem>) => Promise<void>;
+  availableCategories?: string[];
 }
 
 type ViewTab = 'essentials' | 'remarks' | 'checklist';
 
-export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemProps) {
+export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checklistUpdating, setChecklistUpdating] = useState(false);
@@ -36,6 +37,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
   const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [categories, setCategories] = useState<string[]>(todo.categories || []);
+  const [newCategory, setNewCategory] = useState('');
 
   const getQuadrantLabel = (u: boolean, i: boolean) => {
     if (u && i) return '🔴 Do First (Urgent & Important)';
@@ -77,6 +80,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? { type: 'text' as const, content: remarks.trim() } : null,
         checklist: checklist.length > 0 ? checklist : [],
+        categories: categories.length > 0 ? categories : [],
       };
       await onUpdate?.(updatedFields);
       onClose();
@@ -97,6 +101,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
     setRemarks(todo.remarks?.content || '');
     setChecklist(todo.checklist || []);
     setNewChecklistItem('');
+    setCategories(todo.categories || []);
+    setNewCategory('');
     setError(null);
     setEditing(false);
   };
@@ -170,6 +176,71 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                   <input type="datetime-local" id="edit-eta" value={etaDateTime}
                     onChange={(e) => setEtaDateTime(e.target.value)}
                     disabled={isSubmitting} className={styles.input} />
+                </div>
+
+                <div className={styles.categorySection}>
+                  <label className={styles.label}>Categories</label>
+                  {(availableCategories.length > 0 || categories.length > 0) && (
+                    <div className={styles.categoryChips}>
+                      {availableCategories.filter(c => !categories.includes(c)).map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          className={styles.categoryChip}
+                          disabled={isSubmitting}
+                          onClick={() => setCategories(prev => [...prev, cat])}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                      {categories.map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          className={`${styles.categoryChip} ${styles.categoryChipSelected}`}
+                          disabled={isSubmitting}
+                          onClick={() => setCategories(prev => prev.filter(c => c !== cat))}
+                        >
+                          {cat}
+                          <span className={styles.categoryChipRemove}>✕</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className={styles.categoryAdd}>
+                    <input
+                      type="text"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newCategory.trim()) {
+                          e.preventDefault();
+                          const cat = newCategory.trim();
+                          if (!categories.includes(cat)) {
+                            setCategories(prev => [...prev, cat]);
+                          }
+                          setNewCategory('');
+                        }
+                      }}
+                      placeholder="Add new category..."
+                      className={styles.input}
+                      disabled={isSubmitting}
+                    />
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.buttonSecondary} ${styles.categoryAddBtn}`}
+                      disabled={isSubmitting || !newCategory.trim()}
+                      onClick={() => {
+                        const cat = newCategory.trim();
+                        if (cat && !categories.includes(cat)) {
+                          setCategories(prev => [...prev, cat]);
+                        }
+                        setNewCategory('');
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
                 </div>
 
                 <div className={styles.preview}>

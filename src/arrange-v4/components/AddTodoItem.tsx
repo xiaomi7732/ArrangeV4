@@ -11,9 +11,10 @@ interface AddTodoItemProps {
   defaultImportant?: boolean;
   buttonText?: string;
   compact?: boolean;
+  availableCategories?: string[];
 }
 
-export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false }: AddTodoItemProps) {
+export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
+  const [categories, setCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState('');
   type AddTab = 'essentials' | 'remarks' | 'checklist';
   const [activeTab, setActiveTab] = useState<AddTab>('essentials');
 
@@ -53,6 +56,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setNewChecklistItem('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
     setEtsDateTime(getDateTimeString());
+    setCategories([]);
+    setNewCategory('');
     setActiveTab('essentials');
     setError(null);
   };
@@ -91,6 +96,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           content: remarks.trim(),
         } : undefined,
         checklist: checklist.length > 0 ? checklist : undefined,
+        categories: categories.length > 0 ? categories : undefined,
       };
 
       await onAddTodo(todoItem);
@@ -195,6 +201,71 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                 <input type="datetime-local" id="etaDateTime" value={etaDateTime}
                   onChange={(e) => setEtaDateTime(e.target.value)}
                   disabled={isSubmitting} className={styles.input} />
+              </div>
+
+              <div className={styles.categorySection}>
+                <label className={styles.label}>Categories</label>
+                {(availableCategories.length > 0 || categories.length > 0) && (
+                  <div className={styles.categoryChips}>
+                    {availableCategories.filter(c => !categories.includes(c)).map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={styles.categoryChip}
+                        disabled={isSubmitting}
+                        onClick={() => setCategories(prev => [...prev, cat])}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                    {categories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={`${styles.categoryChip} ${styles.categoryChipSelected}`}
+                        disabled={isSubmitting}
+                        onClick={() => setCategories(prev => prev.filter(c => c !== cat))}
+                      >
+                        {cat}
+                        <span className={styles.categoryChipRemove}>✕</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.categoryAdd}>
+                  <input
+                    type="text"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newCategory.trim()) {
+                        e.preventDefault();
+                        const cat = newCategory.trim();
+                        if (!categories.includes(cat)) {
+                          setCategories(prev => [...prev, cat]);
+                        }
+                        setNewCategory('');
+                      }
+                    }}
+                    placeholder="Add new category..."
+                    className={styles.input}
+                    disabled={isSubmitting}
+                  />
+                  <button
+                    type="button"
+                    className={`${styles.button} ${styles.buttonSecondary} ${styles.categoryAddBtn}`}
+                    disabled={isSubmitting || !newCategory.trim()}
+                    onClick={() => {
+                      const cat = newCategory.trim();
+                      if (cat && !categories.includes(cat)) {
+                        setCategories(prev => [...prev, cat]);
+                      }
+                      setNewCategory('');
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
 
               <div className={styles.preview}>
