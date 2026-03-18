@@ -207,6 +207,7 @@ function MatrixPageContent() {
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [showTags, setShowTags] = useState(true);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
@@ -667,39 +668,46 @@ function MatrixPageContent() {
               )}
               {allCategories.length > 0 && (
                 <div className={styles.tagBar}>
-                  <span className={styles.tagBarLabel}>Tags</span>
-                  <div className={styles.categoryFilterChips}>
-                    <button
-                      className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
-                      onClick={() => setShowUncategorized(prev => !prev)}
-                    >
-                      Untagged
-                    </button>
-                    {allCategories.map(cat => {
-                      const isSelected = selectedCategories.has(cat);
-                      return (
-                        <button
-                          key={cat}
-                          className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
-                          onClick={() => setSelectedCategories(prev => {
-                            const next = new Set(prev);
-                            if (isSelected) next.delete(cat); else next.add(cat);
-                            return next;
-                          })}
-                        >
-                          {cat}
-                        </button>
-                      );
-                    })}
-                    {categoryFilterActive && (
+                  <button
+                    className={styles.tagBarToggle}
+                    onClick={() => setShowTags(prev => !prev)}
+                  >
+                    {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
+                  </button>
+                  {showTags && (
+                    <div className={styles.categoryFilterChips}>
                       <button
-                        className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
-                        onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                        className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
+                        onClick={() => setShowUncategorized(prev => !prev)}
                       >
-                        ✕ Clear
+                        Untagged
                       </button>
-                    )}
-                  </div>
+                      {allCategories.map(cat => {
+                        const isSelected = selectedCategories.has(cat);
+                        return (
+                          <button
+                            key={cat}
+                            className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
+                            onClick={() => setSelectedCategories(prev => {
+                              const next = new Set(prev);
+                              if (isSelected) next.delete(cat); else next.add(cat);
+                              return next;
+                            })}
+                          >
+                            {cat}
+                          </button>
+                        );
+                      })}
+                      {categoryFilterActive && (
+                        <button
+                          className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
+                          onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                        >
+                          ✕ Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div className={styles.matrix}>

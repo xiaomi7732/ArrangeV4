@@ -287,11 +287,21 @@
   border-radius: 8px;
 }
 
-.tagBarLabel {
+.tagBarToggle {
   font-size: 0.75rem;
   font-weight: 600;
   color: #374151;
-  margin-right: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.tagBarToggle:hover {
+  background-color: #e5e7eb;
 }
 
 .categoryFilterChips {
