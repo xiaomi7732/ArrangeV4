@@ -237,6 +237,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
                     onClick={() => startRename(tag)}
                     disabled={busy}
                     title="Rename tag"
+                    aria-label={`Rename tag ${tag}`}
                   >
                     ✏️
                   </button>
@@ -246,6 +247,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
                       onClick={() => startMerge(tag)}
                       disabled={busy}
                       title="Merge into another tag"
+                      aria-label={`Merge tag ${tag} into another`}
                     >
                       🔀
                     </button>
@@ -255,6 +257,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
                     onClick={() => startDelete(tag)}
                     disabled={busy}
                     title="Delete tag"
+                    aria-label={`Delete tag ${tag}`}
                   >
                     🗑️
                   </button>

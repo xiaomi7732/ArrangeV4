@@ -560,7 +560,7 @@ function MatrixPageContent() {
     const previousItems = [...todoItems];
     const previousSelectedCategories = new Set(selectedCategories);
     const previousShowUncategorized = showUncategorized;
-    const affectedIds = new Set(affectedItems.map(a => a.id));
+    const affectedIds = new Set(affectedItems.filter(a => a.id).map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -736,6 +736,8 @@ function MatrixPageContent() {
                         className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                         onClick={() => setShowManageTags(true)}
                         title="Manage tags"
+                        aria-label="Manage tags"
+                        aria-haspopup="dialog"
                       >
                         ⚙
                       </button>

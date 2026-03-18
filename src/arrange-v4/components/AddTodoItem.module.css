@@ -414,6 +414,12 @@
   background-color: #1d4ed8;
 }
 
+.categoryChipStatic {
+  background-color: #2563eb;
+  color: white;
+  cursor: default;
+}
+
 .categoryChipRemove {
   display: inline-flex;
   align-items: center;

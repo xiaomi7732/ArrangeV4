@@ -348,7 +348,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                   <span className={styles.label}>Tags</span>
                   <div className={styles.categoryChips}>
                     {todo.categories.map((cat) => (
-                      <span key={cat} className={`${styles.categoryChip} ${styles.categoryChipSelected}`}>
+                      <span key={cat} className={`${styles.categoryChip} ${styles.categoryChipStatic}`}>
                         {cat}
                       </span>
                     ))}
