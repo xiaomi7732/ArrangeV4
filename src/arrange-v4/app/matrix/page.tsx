@@ -10,6 +10,7 @@ import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUt
 import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import ManageTags from '@/components/ManageTags';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -211,6 +212,7 @@ function MatrixPageContent() {
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
+  const [showManageTags, setShowManageTags] = useState(false);
 
   const isAuthenticated = accounts.length > 0;
 
@@ -548,6 +550,94 @@ function MatrixPageContent() {
     }
   };
 
+  const handleDeleteTag = async (tag: string) => {
+    if (!bookId) return;
+
+    const affectedItems = todoItems.filter(item => item.categories?.includes(tag));
+    if (affectedItems.length === 0) return;
+
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item =>
+        item.categories?.includes(tag)
+          ? { ...item, categories: item.categories.filter(c => c !== tag) }
+          : item
+      )
+    );
+    // Clean up filter state
+    setSelectedCategories(prev => {
+      const next = new Set(prev);
+      next.delete(tag);
+      return next;
+    });
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < affectedItems.length) {
+          const item = affectedItems[idx++];
+          if (!item.id) continue;
+          await updateTodoItem(response.accessToken, bookId, item.id, {
+            categories: (item.categories || []).filter(c => c !== tag),
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+    } catch (error: any) {
+      console.error('Error deleting tag:', error);
+      setTodoItems(previousItems);
+      throw error;
+    }
+  };
+
+  const handleRenameTag = async (oldTag: string, newTag: string) => {
+    if (!bookId) return;
+
+    const affectedItems = todoItems.filter(item => item.categories?.includes(oldTag));
+    if (affectedItems.length === 0) return;
+
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item =>
+        item.categories?.includes(oldTag)
+          ? { ...item, categories: item.categories.map(c => c === oldTag ? newTag : c) }
+          : item
+      )
+    );
+    // Update filter state
+    setSelectedCategories(prev => {
+      if (!prev.has(oldTag)) return prev;
+      const next = new Set(prev);
+      next.delete(oldTag);
+      next.add(newTag);
+      return next;
+    });
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < affectedItems.length) {
+          const item = affectedItems[idx++];
+          if (!item.id) continue;
+          await updateTodoItem(response.accessToken, bookId, item.id, {
+            categories: (item.categories || []).map(c => c === oldTag ? newTag : c),
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+    } catch (error: any) {
+      console.error('Error renaming tag:', error);
+      setTodoItems(previousItems);
+      throw error;
+    }
+  };
+
   const handleLogin = async () => {
     try {
       await instance.loginPopup(loginRequest);
@@ -641,12 +731,21 @@ function MatrixPageContent() {
                 <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
                 <div className={styles.matrixHeaderActions}>
                   {allCategories.length > 0 && (
-                    <button
-                      className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
-                      onClick={() => setShowTags(prev => !prev)}
-                    >
-                      {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
-                    </button>
+                    <>
+                      <button
+                        className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                        onClick={() => setShowTags(prev => !prev)}
+                      >
+                        {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
+                      </button>
+                      <button
+                        className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                        onClick={() => setShowManageTags(true)}
+                        title="Manage tags"
+                      >
+                        ⚙
+                      </button>
+                    </>
                   )}
                   <button
                     className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
@@ -843,6 +942,17 @@ function MatrixPageContent() {
               onClose={() => setSelectedTodo(null)}
               onUpdate={handleUpdateTodo}
               availableCategories={allCategories}
+            />
+          )}
+
+          {/* Manage Tags Dialog */}
+          {showManageTags && (
+            <ManageTags
+              tags={allCategories}
+              todoItems={todoItems}
+              onRenameTag={handleRenameTag}
+              onDeleteTag={handleDeleteTag}
+              onClose={() => setShowManageTags(false)}
             />
           )}
         </div>

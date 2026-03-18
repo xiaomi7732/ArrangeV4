@@ -1,0 +1,262 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  margin: 0 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: #111827;
+}
+
+.tagList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tagRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background-color 0.1s;
+}
+
+.tagRow:hover {
+  background-color: #f9fafb;
+}
+
+.tagName {
+  flex: 1;
+  font-size: 0.95rem;
+  color: #111827;
+  font-weight: 500;
+}
+
+.tagCount {
+  font-size: 0.75rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.tagActions {
+  display: flex;
+  gap: 4px;
+}
+
+.iconButton {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  color: #6b7280;
+  transition: all 0.15s;
+}
+
+.iconButton:hover {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+  color: #374151;
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.iconButtonDanger:hover {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+/* Rename inline form */
+.renameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #eff6ff;
+  border-radius: 6px;
+}
+
+.renameInput {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.renameInput:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.renameActions {
+  display: flex;
+  gap: 4px;
+}
+
+.renameBtn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.renameSave {
+  background-color: #2563eb;
+  color: white;
+}
+
+.renameSave:hover {
+  background-color: #1d4ed8;
+}
+
+.renameSave:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.renameCancel {
+  background-color: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.renameCancel:hover {
+  background-color: #f9fafb;
+}
+
+/* Confirm delete */
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: #fef2f2;
+  border-radius: 6px;
+}
+
+.confirmText {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #991b1b;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 4px;
+}
+
+.confirmDelete {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background-color: #dc2626;
+  color: white;
+  transition: all 0.15s;
+}
+
+.confirmDelete:hover {
+  background-color: #b91c1c;
+}
+
+.confirmDelete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirmCancel {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background-color: transparent;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  transition: all 0.15s;
+}
+
+.confirmCancel:hover {
+  background-color: #f9fafb;
+}
+
+/* Footer */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+}
+
+.closeButton {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background-color: transparent;
+  color: #374151;
+  font-size: 0.95rem;
+  transition: all 0.15s;
+}
+
+.closeButton:hover {
+  background-color: #f9fafb;
+}
+
+.error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.empty {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  font-style: italic;
+  padding: 24px 0;
+  text-align: center;
+}
