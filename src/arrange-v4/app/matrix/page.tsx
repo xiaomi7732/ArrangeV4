@@ -638,6 +638,53 @@ function MatrixPageContent() {
     }
   };
 
+  const handleMergeTag = async (sourceTag: string, targetTag: string) => {
+    if (!bookId) return;
+
+    const affectedItems = todoItems.filter(item => item.categories?.includes(sourceTag));
+    if (affectedItems.length === 0) return;
+
+    const previousItems = [...todoItems];
+    setTodoItems(items =>
+      items.map(item => {
+        if (!item.categories?.includes(sourceTag)) return item;
+        const withoutSource = item.categories.filter(c => c !== sourceTag);
+        const merged = withoutSource.includes(targetTag) ? withoutSource : [...withoutSource, targetTag];
+        return { ...item, categories: merged };
+      })
+    );
+    // Update filter state: remove source, keep target
+    setSelectedCategories(prev => {
+      if (!prev.has(sourceTag)) return prev;
+      const next = new Set(prev);
+      next.delete(sourceTag);
+      next.add(targetTag);
+      return next;
+    });
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < affectedItems.length) {
+          const item = affectedItems[idx++];
+          if (!item.id) continue;
+          const cats = item.categories || [];
+          const withoutSource = cats.filter(c => c !== sourceTag);
+          const merged = withoutSource.includes(targetTag) ? withoutSource : [...withoutSource, targetTag];
+          await updateTodoItem(response.accessToken, bookId, item.id, { categories: merged });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+    } catch (error: any) {
+      console.error('Error merging tags:', error);
+      setTodoItems(previousItems);
+      throw error;
+    }
+  };
+
   const handleLogin = async () => {
     try {
       await instance.loginPopup(loginRequest);
@@ -952,6 +999,7 @@ function MatrixPageContent() {
               todoItems={todoItems}
               onRenameTag={handleRenameTag}
               onDeleteTag={handleDeleteTag}
+              onMergeTag={handleMergeTag}
               onClose={() => setShowManageTags(false)}
             />
           )}

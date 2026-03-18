@@ -9,24 +9,33 @@ interface ManageTagsProps {
   todoItems: (TodoItem & { id?: string })[];
   onRenameTag: (oldTag: string, newTag: string) => Promise<void>;
   onDeleteTag: (tag: string) => Promise<void>;
+  onMergeTag: (sourceTag: string, targetTag: string) => Promise<void>;
   onClose: () => void;
 }
 
-export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, onClose }: ManageTagsProps) {
+export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, onMergeTag, onClose }: ManageTagsProps) {
   const [renamingTag, setRenamingTag] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deletingTag, setDeletingTag] = useState<string | null>(null);
+  const [mergingTag, setMergingTag] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const getItemCount = (tag: string) =>
     todoItems.filter(item => item.categories?.includes(tag)).length;
 
+  const clearActions = () => {
+    setRenamingTag(null);
+    setDeletingTag(null);
+    setMergingTag(null);
+    setError(null);
+  };
+
   const startRename = (tag: string) => {
+    clearActions();
     setRenamingTag(tag);
     setRenameValue(tag);
-    setDeletingTag(null);
-    setError(null);
   };
 
   const handleRename = async () => {
@@ -51,9 +60,8 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
   };
 
   const startDelete = (tag: string) => {
+    clearActions();
     setDeletingTag(tag);
-    setRenamingTag(null);
-    setError(null);
   };
 
   const handleDelete = async () => {
@@ -66,6 +74,28 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
       setDeletingTag(null);
     } catch (err: any) {
       setError(err.message || 'Failed to delete tag');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startMerge = (tag: string) => {
+    clearActions();
+    setMergingTag(tag);
+    const otherTags = tags.filter(t => t !== tag);
+    setMergeTarget(otherTags[0] || '');
+  };
+
+  const handleMerge = async () => {
+    if (!mergingTag || !mergeTarget) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await onMergeTag(mergingTag, mergeTarget);
+      setMergingTag(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to merge tags');
     } finally {
       setBusy(false);
     }
@@ -147,6 +177,43 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
               );
             }
 
+            if (mergingTag === tag) {
+              const otherTags = tags.filter(t => t !== tag);
+              return (
+                <div key={tag} className={styles.mergeRow}>
+                  <span className={styles.mergeText}>
+                    Merge &ldquo;{tag}&rdquo; into
+                  </span>
+                  <select
+                    className={styles.mergeSelect}
+                    value={mergeTarget}
+                    onChange={(e) => setMergeTarget(e.target.value)}
+                    disabled={busy}
+                  >
+                    {otherTags.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <div className={styles.confirmActions}>
+                    <button
+                      className={`${styles.renameBtn} ${styles.renameSave}`}
+                      onClick={handleMerge}
+                      disabled={busy || !mergeTarget}
+                    >
+                      {busy ? '...' : 'Merge'}
+                    </button>
+                    <button
+                      className={`${styles.renameBtn} ${styles.renameCancel}`}
+                      onClick={() => setMergingTag(null)}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={tag} className={styles.tagRow}>
                 <span className={styles.tagName}>{tag}</span>
@@ -160,6 +227,16 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
                   >
                     ✏️
                   </button>
+                  {tags.length > 1 && (
+                    <button
+                      className={styles.iconButton}
+                      onClick={() => startMerge(tag)}
+                      disabled={busy}
+                      title="Merge into another tag"
+                    >
+                      🔀
+                    </button>
+                  )}
                   <button
                     className={`${styles.iconButton} ${styles.iconButtonDanger}`}
                     onClick={() => startDelete(tag)}
