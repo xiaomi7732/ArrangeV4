@@ -11,7 +11,7 @@ interface ViewTodoItemProps {
   availableCategories?: string[];
 }
 
-type ViewTab = 'essentials' | 'remarks' | 'checklist';
+type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
 
 export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
@@ -121,6 +121,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             <div className={styles.tabBar}>
               <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
                 onClick={() => setActiveTab('essentials')}>Essentials</button>
+              <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+                onClick={() => setActiveTab('tags')}>Tags</button>
               <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
                 onClick={() => setActiveTab('remarks')}>Remarks</button>
               <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -178,6 +180,17 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                     disabled={isSubmitting} className={styles.input} />
                 </div>
 
+                <div className={styles.preview}>
+                  <p className={styles.previewText}>
+                    Matrix Quadrant:{' '}
+                    <span className={styles.previewLabel}>{getQuadrantLabel(urgent, important)}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'tags' && (
+              <div className={styles.tabContent}>
                 <div className={styles.categorySection}>
                   <label className={styles.label}>Tags</label>
                   {(availableCategories.length > 0 || categories.length > 0) && (
@@ -241,13 +254,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                       Add
                     </button>
                   </div>
-                </div>
-
-                <div className={styles.preview}>
-                  <p className={styles.previewText}>
-                    Matrix Quadrant:{' '}
-                    <span className={styles.previewLabel}>{getQuadrantLabel(urgent, important)}</span>
-                  </p>
                 </div>
               </div>
             )}
@@ -345,6 +351,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           <div className={styles.tabBar}>
             <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('tags')}>Tags</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('remarks')}>Remarks</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -383,19 +391,31 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                 <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
               </div>
 
-              {todo.categories && todo.categories.length > 0 && (
-                <div className={styles.formGroup}>
-                  <span className={styles.label}>Tags</span>
-                  <span className={styles.value}>{todo.categories.join(', ')}</span>
-                </div>
-              )}
-
               <div className={styles.preview}>
                 <p className={styles.previewText}>
                   Matrix Quadrant:{' '}
                   <span className={styles.previewLabel}>{getQuadrantLabel(todo.urgent ?? false, todo.important ?? false)}</span>
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'tags' && (
+            <div className={styles.tabContent}>
+              {todo.categories && todo.categories.length > 0 ? (
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Tags</span>
+                  <div className={styles.categoryChips}>
+                    {todo.categories.map((cat, idx) => (
+                      <span key={idx} className={`${styles.categoryChip} ${styles.categoryChipSelected}`}>
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className={styles.tabPlaceholder}>No tags</p>
+              )}
             </div>
           )}
 

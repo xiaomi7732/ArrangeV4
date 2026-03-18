@@ -275,14 +275,23 @@
   background-color: #1d4ed8;
 }
 
-.categoryFilterSection {
+.tagBar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding-top: 8px;
-  border-top: 1px solid #e5e7eb;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tagBarLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  margin-right: 2px;
 }
 
 .categoryFilterChips {

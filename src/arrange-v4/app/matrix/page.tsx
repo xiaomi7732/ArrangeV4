@@ -642,7 +642,7 @@ function MatrixPageContent() {
                   className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                   onClick={() => setShowFilters(prev => !prev)}
                 >
-                  {showFilters ? '▲ Filters' : '▼ Filters'}
+                  {showFilters ? '▲ Status' : '▼ Status'}
                 </button>
               </div>
               {showFilters && (
@@ -663,43 +663,43 @@ function MatrixPageContent() {
                       </div>
                     </div>
                   ))}
-                  {allCategories.length > 0 && (
-                    <div className={styles.categoryFilterSection}>
-                      <span className={styles.filterLabel}>Tags</span>
-                      <div className={styles.categoryFilterChips}>
+                </div>
+              )}
+              {allCategories.length > 0 && (
+                <div className={styles.tagBar}>
+                  <span className={styles.tagBarLabel}>Tags</span>
+                  <div className={styles.categoryFilterChips}>
+                    <button
+                      className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
+                      onClick={() => setShowUncategorized(prev => !prev)}
+                    >
+                      Untagged
+                    </button>
+                    {allCategories.map(cat => {
+                      const isSelected = selectedCategories.has(cat);
+                      return (
                         <button
-                          className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
-                          onClick={() => setShowUncategorized(prev => !prev)}
+                          key={cat}
+                          className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
+                          onClick={() => setSelectedCategories(prev => {
+                            const next = new Set(prev);
+                            if (isSelected) next.delete(cat); else next.add(cat);
+                            return next;
+                          })}
                         >
-                          Untagged
+                          {cat}
                         </button>
-                        {allCategories.map(cat => {
-                          const isSelected = selectedCategories.has(cat);
-                          return (
-                            <button
-                              key={cat}
-                              className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
-                              onClick={() => setSelectedCategories(prev => {
-                                const next = new Set(prev);
-                                if (isSelected) next.delete(cat); else next.add(cat);
-                                return next;
-                              })}
-                            >
-                              {cat}
-                            </button>
-                          );
-                        })}
-                        {categoryFilterActive && (
-                          <button
-                            className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
-                            onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
-                          >
-                            ✕ Clear
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                      );
+                    })}
+                    {categoryFilterActive && (
+                      <button
+                        className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
+                        onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                      >
+                        ✕ Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <div className={styles.matrix}>

@@ -43,7 +43,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState('');
-  type AddTab = 'essentials' | 'remarks' | 'checklist';
+  type AddTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
   const [activeTab, setActiveTab] = useState<AddTab>('essentials');
 
   const resetForm = () => {
@@ -146,6 +146,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           <div className={styles.tabBar}>
             <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('tags')}>Tags</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('remarks')}>Remarks</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -203,6 +205,22 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                   disabled={isSubmitting} className={styles.input} />
               </div>
 
+              <div className={styles.preview}>
+                <p className={styles.previewText}>
+                  Matrix Quadrant:{' '}
+                  <span className={styles.previewLabel}>
+                    {urgent && important && '🔴 Do First (Urgent & Important)'}
+                    {!urgent && important && '🟡 Schedule (Important, Not Urgent)'}
+                    {urgent && !important && '🟠 Delegate (Urgent, Not Important)'}
+                    {!urgent && !important && '⚪ Eliminate (Neither)'}
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'tags' && (
+            <div className={styles.tabContent}>
               <div className={styles.categorySection}>
                 <label className={styles.label}>Tags</label>
                 {(availableCategories.length > 0 || categories.length > 0) && (
@@ -266,18 +284,6 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                     Add
                   </button>
                 </div>
-              </div>
-
-              <div className={styles.preview}>
-                <p className={styles.previewText}>
-                  Matrix Quadrant:{' '}
-                  <span className={styles.previewLabel}>
-                    {urgent && important && '🔴 Do First (Urgent & Important)'}
-                    {!urgent && important && '🟡 Schedule (Important, Not Urgent)'}
-                    {urgent && !important && '🟠 Delegate (Urgent, Not Important)'}
-                    {!urgent && !important && '⚪ Eliminate (Neither)'}
-                  </span>
-                </p>
               </div>
             </div>
           )}
