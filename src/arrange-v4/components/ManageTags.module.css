@@ -163,6 +163,7 @@
 .mergeRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 10px;
   background-color: #f0fdf4;
@@ -176,13 +177,14 @@
 }
 
 .mergeSelect {
-  flex: 1;
+  min-width: 120px;
   padding: 4px 8px;
   border: 1px solid #86efac;
   border-radius: 4px;
   font-size: 0.85rem;
   outline: none;
   background-color: white;
+  color: #111827;
 }
 
 .mergeSelect:focus {
