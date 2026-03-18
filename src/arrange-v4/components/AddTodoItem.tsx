@@ -204,7 +204,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
               </div>
 
               <div className={styles.categorySection}>
-                <label className={styles.label}>Categories</label>
+                <label className={styles.label}>Tags</label>
                 {(availableCategories.length > 0 || categories.length > 0) && (
                   <div className={styles.categoryChips}>
                     {availableCategories.filter(c => !categories.includes(c)).map(cat => (
@@ -247,7 +247,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                         setNewCategory('');
                       }
                     }}
-                    placeholder="Add new category..."
+                    placeholder="Add new tag..."
                     className={styles.input}
                     disabled={isSubmitting}
                   />

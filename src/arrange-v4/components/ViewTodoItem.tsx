@@ -179,7 +179,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                 </div>
 
                 <div className={styles.categorySection}>
-                  <label className={styles.label}>Categories</label>
+                  <label className={styles.label}>Tags</label>
                   {(availableCategories.length > 0 || categories.length > 0) && (
                     <div className={styles.categoryChips}>
                       {availableCategories.filter(c => !categories.includes(c)).map(cat => (
@@ -222,7 +222,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                           setNewCategory('');
                         }
                       }}
-                      placeholder="Add new category..."
+                      placeholder="Add new tag..."
                       className={styles.input}
                       disabled={isSubmitting}
                     />
@@ -385,7 +385,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
               {todo.categories && todo.categories.length > 0 && (
                 <div className={styles.formGroup}>
-                  <span className={styles.label}>Categories</span>
+                  <span className={styles.label}>Tags</span>
                   <span className={styles.value}>{todo.categories.join(', ')}</span>
                 </div>
               )}

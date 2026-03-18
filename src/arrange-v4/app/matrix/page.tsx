@@ -665,13 +665,13 @@ function MatrixPageContent() {
                   ))}
                   {allCategories.length > 0 && (
                     <div className={styles.categoryFilterSection}>
-                      <span className={styles.filterLabel}>Categories</span>
+                      <span className={styles.filterLabel}>Tags</span>
                       <div className={styles.categoryFilterChips}>
                         <button
                           className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
                           onClick={() => setShowUncategorized(prev => !prev)}
                         >
-                          Uncategorized
+                          Untagged
                         </button>
                         {allCategories.map(cat => {
                           const isSelected = selectedCategories.has(cat);
