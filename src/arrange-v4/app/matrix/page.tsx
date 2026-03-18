@@ -639,12 +639,22 @@ function MatrixPageContent() {
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
                 <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
-                <button
-                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
-                  onClick={() => setShowFilters(prev => !prev)}
-                >
-                  {showFilters ? '▲ Status' : '▼ Status'}
-                </button>
+                <div className={styles.matrixHeaderActions}>
+                  {allCategories.length > 0 && (
+                    <button
+                      className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                      onClick={() => setShowTags(prev => !prev)}
+                    >
+                      {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
+                    </button>
+                  )}
+                  <button
+                    className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                    onClick={() => setShowFilters(prev => !prev)}
+                  >
+                    {showFilters ? '▲ Status' : '▼ Status'}
+                  </button>
+                </div>
               </div>
               {showFilters && (
                 <div className={styles.filterBar}>
@@ -666,16 +676,9 @@ function MatrixPageContent() {
                   ))}
                 </div>
               )}
-              {allCategories.length > 0 && (
+              {showTags && allCategories.length > 0 && (
                 <div className={styles.tagBar}>
-                  <button
-                    className={styles.tagBarToggle}
-                    onClick={() => setShowTags(prev => !prev)}
-                  >
-                    {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
-                  </button>
-                  {showTags && (
-                    <div className={styles.categoryFilterChips}>
+                  <div className={styles.categoryFilterChips}>
                       <button
                         className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
                         onClick={() => setShowUncategorized(prev => !prev)}
@@ -707,7 +710,6 @@ function MatrixPageContent() {
                         </button>
                       )}
                     </div>
-                  )}
                 </div>
               )}
               <div className={styles.matrix}>

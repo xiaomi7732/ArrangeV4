@@ -196,10 +196,16 @@
 
 .matrixHeader {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.matrixHeaderActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .matrixHeader .sectionTitle {
@@ -285,23 +291,6 @@
   background-color: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-}
-
-.tagBarToggle {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #374151;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 4px;
-  white-space: nowrap;
-  transition: background-color 0.15s;
-}
-
-.tagBarToggle:hover {
-  background-color: #e5e7eb;
 }
 
 .categoryFilterChips {
