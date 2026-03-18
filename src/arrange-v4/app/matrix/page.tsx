@@ -550,26 +550,25 @@ function MatrixPageContent() {
     }
   };
 
-  const handleDeleteTag = async (tag: string) => {
-    if (!bookId) return;
-
-    const affectedItems = todoItems.filter(item => item.categories?.includes(tag));
-    if (affectedItems.length === 0) return;
+  const bulkUpdateCategories = async (
+    affectedItems: (TodoItem & { id?: string })[],
+    computeNewCategories: (item: TodoItem & { id?: string }) => string[],
+    updateFilterState: () => void,
+  ) => {
+    if (!bookId || affectedItems.length === 0) return;
 
     const previousItems = [...todoItems];
+    const previousSelectedCategories = new Set(selectedCategories);
+    const previousShowUncategorized = showUncategorized;
+
     setTodoItems(items =>
       items.map(item =>
-        item.categories?.includes(tag)
-          ? { ...item, categories: item.categories.filter(c => c !== tag) }
+        affectedItems.some(a => a.id === item.id)
+          ? { ...item, categories: computeNewCategories(item) }
           : item
       )
     );
-    // Clean up filter state
-    setSelectedCategories(prev => {
-      const next = new Set(prev);
-      next.delete(tag);
-      return next;
-    });
+    updateFilterState();
 
     try {
       const account = accounts[0];
@@ -581,108 +580,55 @@ function MatrixPageContent() {
           const item = affectedItems[idx++];
           if (!item.id) continue;
           await updateTodoItem(response.accessToken, bookId, item.id, {
-            categories: (item.categories || []).filter(c => c !== tag),
+            categories: computeNewCategories(item),
           });
         }
       };
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
     } catch (error: any) {
-      console.error('Error deleting tag:', error);
+      console.error('Error updating tags:', error);
       setTodoItems(previousItems);
+      setSelectedCategories(previousSelectedCategories);
+      setShowUncategorized(previousShowUncategorized);
       throw error;
     }
+  };
+
+  const handleDeleteTag = async (tag: string) => {
+    const affected = todoItems.filter(item => item.categories?.includes(tag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => (item.categories || []).filter(c => c !== tag),
+      () => setSelectedCategories(prev => { const next = new Set(prev); next.delete(tag); return next; }),
+    );
   };
 
   const handleRenameTag = async (oldTag: string, newTag: string) => {
-    if (!bookId) return;
-
-    const affectedItems = todoItems.filter(item => item.categories?.includes(oldTag));
-    if (affectedItems.length === 0) return;
-
-    const previousItems = [...todoItems];
-    setTodoItems(items =>
-      items.map(item =>
-        item.categories?.includes(oldTag)
-          ? { ...item, categories: item.categories.map(c => c === oldTag ? newTag : c) }
-          : item
-      )
+    const affected = todoItems.filter(item => item.categories?.includes(oldTag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
+      () => setSelectedCategories(prev => {
+        if (!prev.has(oldTag)) return prev;
+        const next = new Set(prev); next.delete(oldTag); next.add(newTag); return next;
+      }),
     );
-    // Update filter state
-    setSelectedCategories(prev => {
-      if (!prev.has(oldTag)) return prev;
-      const next = new Set(prev);
-      next.delete(oldTag);
-      next.add(newTag);
-      return next;
-    });
-
-    try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
-      const CONCURRENCY = 5;
-      let idx = 0;
-      const worker = async () => {
-        while (idx < affectedItems.length) {
-          const item = affectedItems[idx++];
-          if (!item.id) continue;
-          await updateTodoItem(response.accessToken, bookId, item.id, {
-            categories: (item.categories || []).map(c => c === oldTag ? newTag : c),
-          });
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
-    } catch (error: any) {
-      console.error('Error renaming tag:', error);
-      setTodoItems(previousItems);
-      throw error;
-    }
   };
 
   const handleMergeTag = async (sourceTag: string, targetTag: string) => {
-    if (!bookId) return;
-
-    const affectedItems = todoItems.filter(item => item.categories?.includes(sourceTag));
-    if (affectedItems.length === 0) return;
-
-    const previousItems = [...todoItems];
-    setTodoItems(items =>
-      items.map(item => {
-        if (!item.categories?.includes(sourceTag)) return item;
-        const withoutSource = item.categories.filter(c => c !== sourceTag);
-        const merged = withoutSource.includes(targetTag) ? withoutSource : [...withoutSource, targetTag];
-        return { ...item, categories: merged };
-      })
+    const affected = todoItems.filter(item => item.categories?.includes(sourceTag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => {
+        const cats = item.categories || [];
+        const without = cats.filter(c => c !== sourceTag);
+        return without.includes(targetTag) ? without : [...without, targetTag];
+      },
+      () => setSelectedCategories(prev => {
+        if (!prev.has(sourceTag)) return prev;
+        const next = new Set(prev); next.delete(sourceTag); next.add(targetTag); return next;
+      }),
     );
-    // Update filter state: remove source, keep target
-    setSelectedCategories(prev => {
-      if (!prev.has(sourceTag)) return prev;
-      const next = new Set(prev);
-      next.delete(sourceTag);
-      next.add(targetTag);
-      return next;
-    });
-
-    try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
-      const CONCURRENCY = 5;
-      let idx = 0;
-      const worker = async () => {
-        while (idx < affectedItems.length) {
-          const item = affectedItems[idx++];
-          if (!item.id) continue;
-          const cats = item.categories || [];
-          const withoutSource = cats.filter(c => c !== sourceTag);
-          const merged = withoutSource.includes(targetTag) ? withoutSource : [...withoutSource, targetTag];
-          await updateTodoItem(response.accessToken, bookId, item.id, { categories: merged });
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
-    } catch (error: any) {
-      console.error('Error merging tags:', error);
-      setTodoItems(previousItems);
-      throw error;
-    }
   };
 
   const handleLogin = async () => {

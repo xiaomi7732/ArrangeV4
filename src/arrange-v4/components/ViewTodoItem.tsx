@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
+import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
 interface ViewTodoItemProps {
@@ -38,7 +39,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [categories, setCategories] = useState<string[]>(todo.categories || []);
-  const [newCategory, setNewCategory] = useState('');
 
   const getQuadrantLabel = (u: boolean, i: boolean) => {
     if (u && i) return '🔴 Do First (Urgent & Important)';
@@ -102,7 +102,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setChecklist(todo.checklist || []);
     setNewChecklistItem('');
     setCategories(todo.categories || []);
-    setNewCategory('');
     setError(null);
     setEditing(false);
   };
@@ -191,70 +190,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
             {activeTab === 'tags' && (
               <div className={styles.tabContent}>
-                <div className={styles.categorySection}>
-                  <label className={styles.label}>Tags</label>
-                  {(availableCategories.length > 0 || categories.length > 0) && (
-                    <div className={styles.categoryChips}>
-                      {availableCategories.filter(c => !categories.includes(c)).map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          className={styles.categoryChip}
-                          disabled={isSubmitting}
-                          onClick={() => setCategories(prev => [...prev, cat])}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                      {categories.map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          className={`${styles.categoryChip} ${styles.categoryChipSelected}`}
-                          disabled={isSubmitting}
-                          onClick={() => setCategories(prev => prev.filter(c => c !== cat))}
-                        >
-                          {cat}
-                          <span className={styles.categoryChipRemove}>✕</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className={styles.categoryAdd}>
-                    <input
-                      type="text"
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newCategory.trim()) {
-                          e.preventDefault();
-                          const cat = newCategory.trim();
-                          if (!categories.includes(cat)) {
-                            setCategories(prev => [...prev, cat]);
-                          }
-                          setNewCategory('');
-                        }
-                      }}
-                      placeholder="Add new tag..."
-                      className={styles.input}
-                      disabled={isSubmitting}
-                    />
-                    <button
-                      type="button"
-                      className={`${styles.button} ${styles.buttonSecondary} ${styles.categoryAddBtn}`}
-                      disabled={isSubmitting || !newCategory.trim()}
-                      onClick={() => {
-                        const cat = newCategory.trim();
-                        if (cat && !categories.includes(cat)) {
-                          setCategories(prev => [...prev, cat]);
-                        }
-                        setNewCategory('');
-                      }}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
+                <TagPicker
+                  availableCategories={availableCategories}
+                  categories={categories}
+                  onChange={setCategories}
+                  disabled={isSubmitting}
+                />
               </div>
             )}
 

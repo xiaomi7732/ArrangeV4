@@ -42,7 +42,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
     if (!renamingTag || !renameValue.trim()) return;
     const newTag = renameValue.trim();
     if (newTag === renamingTag) { setRenamingTag(null); return; }
-    if (tags.includes(newTag)) {
+    if (tags.some(t => t.toLowerCase() === newTag.toLowerCase() && t !== renamingTag)) {
       setError(`Tag "${newTag}" already exists`);
       return;
     }
