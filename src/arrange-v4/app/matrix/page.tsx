@@ -10,6 +10,7 @@ import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUt
 import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import ManageTags from '@/components/ManageTags';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -207,15 +208,39 @@ function MatrixPageContent() {
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [showTags, setShowTags] = useState(true);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [showUncategorized, setShowUncategorized] = useState(false);
+  const [showManageTags, setShowManageTags] = useState(false);
 
   const isAuthenticated = accounts.length > 0;
+
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const todo of todoItems) {
+      if (todo.categories) {
+        for (const c of todo.categories) cats.add(c);
+      }
+    }
+    return Array.from(cats).sort((a, b) => a.localeCompare(b));
+  }, [todoItems]);
+
+  const categoryFilterActive = selectedCategories.size > 0 || showUncategorized;
 
   const filteredTodoItems = todoItems.filter(todo => {
     const status = todo.status || 'new';
     const mode = statusFilters[status];
     if (mode === 'hide') return false;
-    if (mode === 'todayOnly') return passesTodayFilter(todo);
+    if (mode === 'todayOnly' && !passesTodayFilter(todo)) return false;
+
+    if (categoryFilterActive) {
+      const hasCats = todo.categories && todo.categories.length > 0;
+      if (showUncategorized && !hasCats) return true;
+      if (hasCats && todo.categories!.some(c => selectedCategories.has(c))) return true;
+      return false;
+    }
+
     return true;
   });
 
@@ -525,6 +550,88 @@ function MatrixPageContent() {
     }
   };
 
+  const bulkUpdateCategories = async (
+    affectedItems: (TodoItem & { id?: string })[],
+    computeNewCategories: (item: TodoItem & { id?: string }) => string[],
+    updateFilterState: () => void,
+  ) => {
+    if (!bookId || affectedItems.length === 0) return;
+
+    const previousItems = [...todoItems];
+    const previousSelectedCategories = new Set(selectedCategories);
+    const previousShowUncategorized = showUncategorized;
+    const affectedIds = new Set(affectedItems.filter(a => a.id).map(a => a.id));
+
+    setTodoItems(items =>
+      items.map(item =>
+        affectedIds.has(item.id)
+          ? { ...item, categories: computeNewCategories(item) }
+          : item
+      )
+    );
+    updateFilterState();
+
+    try {
+      const account = accounts[0];
+      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < affectedItems.length) {
+          const item = affectedItems[idx++];
+          if (!item.id) continue;
+          await updateTodoItem(response.accessToken, bookId, item.id, {
+            categories: computeNewCategories(item),
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+    } catch (error: any) {
+      console.error('Error updating tags:', error);
+      setTodoItems(previousItems);
+      setSelectedCategories(previousSelectedCategories);
+      setShowUncategorized(previousShowUncategorized);
+      throw error;
+    }
+  };
+
+  const handleDeleteTag = async (tag: string) => {
+    const affected = todoItems.filter(item => item.categories?.includes(tag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => (item.categories || []).filter(c => c !== tag),
+      () => setSelectedCategories(prev => { const next = new Set(prev); next.delete(tag); return next; }),
+    );
+  };
+
+  const handleRenameTag = async (oldTag: string, newTag: string) => {
+    const affected = todoItems.filter(item => item.categories?.includes(oldTag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
+      () => setSelectedCategories(prev => {
+        if (!prev.has(oldTag)) return prev;
+        const next = new Set(prev); next.delete(oldTag); next.add(newTag); return next;
+      }),
+    );
+  };
+
+  const handleMergeTag = async (sourceTag: string, targetTag: string) => {
+    const affected = todoItems.filter(item => item.categories?.includes(sourceTag));
+    await bulkUpdateCategories(
+      affected,
+      (item) => {
+        const cats = item.categories || [];
+        const without = cats.filter(c => c !== sourceTag);
+        return without.includes(targetTag) ? without : [...without, targetTag];
+      },
+      () => setSelectedCategories(prev => {
+        if (!prev.has(sourceTag)) return prev;
+        const next = new Set(prev); next.delete(sourceTag); next.add(targetTag); return next;
+      }),
+    );
+  };
+
   const handleLogin = async () => {
     try {
       await instance.loginPopup(loginRequest);
@@ -586,7 +693,7 @@ function MatrixPageContent() {
                 </button>
               ) : (
                 <>
-                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} />
+                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
                   <button
                     onClick={fetchEvents}
                     disabled={loading}
@@ -616,12 +723,33 @@ function MatrixPageContent() {
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
                 <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
-                <button
-                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
-                  onClick={() => setShowFilters(prev => !prev)}
-                >
-                  {showFilters ? '▲ Filters' : '▼ Filters'}
-                </button>
+                <div className={styles.matrixHeaderActions}>
+                  {allCategories.length > 0 && (
+                    <>
+                      <button
+                        className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                        onClick={() => setShowTags(prev => !prev)}
+                      >
+                        {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
+                      </button>
+                      <button
+                        className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                        onClick={() => setShowManageTags(true)}
+                        title="Manage tags"
+                        aria-label="Manage tags"
+                        aria-haspopup="dialog"
+                      >
+                        ⚙
+                      </button>
+                    </>
+                  )}
+                  <button
+                    className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                    onClick={() => setShowFilters(prev => !prev)}
+                  >
+                    {showFilters ? '▲ Status' : '▼ Status'}
+                  </button>
+                </div>
               </div>
               {showFilters && (
                 <div className={styles.filterBar}>
@@ -643,6 +771,42 @@ function MatrixPageContent() {
                   ))}
                 </div>
               )}
+              {showTags && allCategories.length > 0 && (
+                <div className={styles.tagBar}>
+                  <div className={styles.categoryFilterChips}>
+                      <button
+                        className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
+                        onClick={() => setShowUncategorized(prev => !prev)}
+                      >
+                        Untagged
+                      </button>
+                      {allCategories.map(cat => {
+                        const isSelected = selectedCategories.has(cat);
+                        return (
+                          <button
+                            key={cat}
+                            className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
+                            onClick={() => setSelectedCategories(prev => {
+                              const next = new Set(prev);
+                              if (isSelected) next.delete(cat); else next.add(cat);
+                              return next;
+                            })}
+                          >
+                            {cat}
+                          </button>
+                        );
+                      })}
+                      {categoryFilterActive && (
+                        <button
+                          className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
+                          onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                        >
+                          ✕ Clear
+                        </button>
+                      )}
+                    </div>
+                </div>
+              )}
               <div className={styles.matrix}>
                 {/* Top-left: Urgent & Important */}
                 <div 
@@ -661,6 +825,7 @@ function MatrixPageContent() {
                       defaultUrgent={true}
                       defaultImportant={true}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -690,6 +855,7 @@ function MatrixPageContent() {
                       defaultUrgent={false}
                       defaultImportant={true}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -719,6 +885,7 @@ function MatrixPageContent() {
                       defaultUrgent={true}
                       defaultImportant={false}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -748,6 +915,7 @@ function MatrixPageContent() {
                       defaultUrgent={false}
                       defaultImportant={false}
                       compact={true}
+                      availableCategories={allCategories}
                     />
                   </div>
                   <div className={styles.quadrantContent}>
@@ -769,6 +937,19 @@ function MatrixPageContent() {
               todo={selectedTodo} 
               onClose={() => setSelectedTodo(null)}
               onUpdate={handleUpdateTodo}
+              availableCategories={allCategories}
+            />
+          )}
+
+          {/* Manage Tags Dialog */}
+          {showManageTags && (
+            <ManageTags
+              tags={allCategories}
+              todoItems={todoItems}
+              onRenameTag={handleRenameTag}
+              onDeleteTag={handleDeleteTag}
+              onMergeTag={handleMergeTag}
+              onClose={() => setShowManageTags(false)}
             />
           )}
         </div>

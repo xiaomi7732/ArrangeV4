@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/todoDataService';
+import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
 interface AddTodoItemProps {
@@ -11,9 +12,10 @@ interface AddTodoItemProps {
   defaultImportant?: boolean;
   buttonText?: string;
   compact?: boolean;
+  availableCategories?: string[];
 }
 
-export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false }: AddTodoItemProps) {
+export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
-  type AddTab = 'essentials' | 'remarks' | 'checklist';
+  const [categories, setCategories] = useState<string[]>([]);
+  type AddTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
   const [activeTab, setActiveTab] = useState<AddTab>('essentials');
 
   const resetForm = () => {
@@ -53,6 +56,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setNewChecklistItem('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
     setEtsDateTime(getDateTimeString());
+    setCategories([]);
     setActiveTab('essentials');
     setError(null);
   };
@@ -91,6 +95,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           content: remarks.trim(),
         } : undefined,
         checklist: checklist.length > 0 ? checklist : undefined,
+        categories: categories.length > 0 ? categories : undefined,
       };
 
       await onAddTodo(todoItem);
@@ -140,6 +145,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           <div className={styles.tabBar}>
             <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('tags')}>Tags</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('remarks')}>Remarks</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -208,6 +215,17 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
                   </span>
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'tags' && (
+            <div className={styles.tabContent}>
+              <TagPicker
+                availableCategories={availableCategories}
+                categories={categories}
+                onChange={setCategories}
+                disabled={isSubmitting}
+              />
             </div>
           )}
 

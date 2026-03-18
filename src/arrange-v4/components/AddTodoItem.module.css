@@ -373,6 +373,87 @@
   padding: 12px 0;
 }
 
+/* Tag picker */
+.categorySection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.categoryChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.categoryChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.categoryChip:hover {
+  background-color: #bfdbfe;
+}
+
+.categoryChipSelected {
+  background-color: #2563eb;
+  color: white;
+}
+
+.categoryChipSelected:hover {
+  background-color: #1d4ed8;
+}
+
+.categoryChipStatic {
+  background-color: #2563eb;
+  color: white;
+  cursor: default;
+}
+
+.categoryChipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  color: inherit;
+  font-size: 0.65rem;
+  line-height: 1;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.categoryChipRemove:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.categoryAdd {
+  display: flex;
+  gap: 8px;
+}
+
+.categoryAdd .input {
+  flex: 1;
+}
+
+.categoryAddBtn {
+  flex: 0 0 auto !important;
+  width: auto;
+}
+
 .addButtonCompact {
   background-color: rgba(255, 255, 255, 0.9);
   color: inherit;

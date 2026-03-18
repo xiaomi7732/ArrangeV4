@@ -196,10 +196,16 @@
 
 .matrixHeader {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.matrixHeaderActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .matrixHeader .sectionTitle {
@@ -273,6 +279,62 @@
 
 .filterModeActive:hover {
   background-color: #1d4ed8;
+}
+
+.tagBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.categoryFilterChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.categoryFilterChip {
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: 16px;
+  border: 1px solid #d1d5db;
+  background-color: transparent;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.categoryFilterChip:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.categoryFilterChipActive {
+  background-color: #dbeafe;
+  border-color: #2563eb;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.categoryFilterChipActive:hover {
+  background-color: #bfdbfe;
+}
+
+.categoryFilterClear {
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.categoryFilterClear:hover {
+  background-color: #fef2f2;
+  border-color: #dc2626;
 }
 
 .matrix {

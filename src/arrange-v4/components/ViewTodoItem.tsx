@@ -2,17 +2,19 @@
 
 import { useState } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
+import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
 interface ViewTodoItemProps {
   todo: TodoItem & { id?: string };
   onClose: () => void;
   onUpdate?: (updatedFields: Partial<TodoItem>) => Promise<void>;
+  availableCategories?: string[];
 }
 
-type ViewTab = 'essentials' | 'remarks' | 'checklist';
+type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
 
-export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemProps) {
+export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checklistUpdating, setChecklistUpdating] = useState(false);
@@ -36,6 +38,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
   const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [categories, setCategories] = useState<string[]>(todo.categories || []);
 
   const getQuadrantLabel = (u: boolean, i: boolean) => {
     if (u && i) return '🔴 Do First (Urgent & Important)';
@@ -77,6 +80,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? { type: 'text' as const, content: remarks.trim() } : null,
         checklist: checklist.length > 0 ? checklist : [],
+        categories: categories.length > 0 ? categories : [],
       };
       await onUpdate?.(updatedFields);
       onClose();
@@ -97,6 +101,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
     setRemarks(todo.remarks?.content || '');
     setChecklist(todo.checklist || []);
     setNewChecklistItem('');
+    setCategories(todo.categories || []);
     setError(null);
     setEditing(false);
   };
@@ -115,6 +120,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
             <div className={styles.tabBar}>
               <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
                 onClick={() => setActiveTab('essentials')}>Essentials</button>
+              <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+                onClick={() => setActiveTab('tags')}>Tags</button>
               <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
                 onClick={() => setActiveTab('remarks')}>Remarks</button>
               <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -178,6 +185,17 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                     <span className={styles.previewLabel}>{getQuadrantLabel(urgent, important)}</span>
                   </p>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'tags' && (
+              <div className={styles.tabContent}>
+                <TagPicker
+                  availableCategories={availableCategories}
+                  categories={categories}
+                  onChange={setCategories}
+                  disabled={isSubmitting}
+                />
               </div>
             )}
 
@@ -274,6 +292,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
           <div className={styles.tabBar}>
             <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('essentials')}>Essentials</button>
+            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab('tags')}>Tags</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('remarks')}>Remarks</button>
             <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
@@ -312,19 +332,31 @@ export default function ViewTodoItem({ todo, onClose, onUpdate }: ViewTodoItemPr
                 <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
               </div>
 
-              {todo.categories && todo.categories.length > 0 && (
-                <div className={styles.formGroup}>
-                  <span className={styles.label}>Categories</span>
-                  <span className={styles.value}>{todo.categories.join(', ')}</span>
-                </div>
-              )}
-
               <div className={styles.preview}>
                 <p className={styles.previewText}>
                   Matrix Quadrant:{' '}
                   <span className={styles.previewLabel}>{getQuadrantLabel(todo.urgent ?? false, todo.important ?? false)}</span>
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'tags' && (
+            <div className={styles.tabContent}>
+              {todo.categories && todo.categories.length > 0 ? (
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Tags</span>
+                  <div className={styles.categoryChips}>
+                    {todo.categories.map((cat) => (
+                      <span key={cat} className={`${styles.categoryChip} ${styles.categoryChipStatic}`}>
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className={styles.tabPlaceholder}>No tags</p>
+              )}
             </div>
           )}
 
