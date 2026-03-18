@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { TodoItem } from '@/lib/todoDataService';
 import styles from './ManageTags.module.css';
 
@@ -22,8 +22,21 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getItemCount = (tag: string) =>
-    todoItems.filter(item => item.categories?.includes(tag)).length;
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of todoItems) {
+      if (item.categories) {
+        for (const c of item.categories) {
+          counts.set(c, (counts.get(c) || 0) + 1);
+        }
+      }
+    }
+    return counts;
+  }, [todoItems]);
+
+  const handleClose = () => {
+    if (!busy) onClose();
+  };
 
   const clearActions = () => {
     setRenamingTag(null);
@@ -102,9 +115,9 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
   };
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.title}>Manage Tags</h2>
+    <div className={styles.overlay} onClick={handleClose}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="manage-tags-title" onClick={(e) => e.stopPropagation()}>
+        <h2 id="manage-tags-title" className={styles.title}>Manage Tags</h2>
 
         {error && (
           <div className={styles.error} role="alert">{error}</div>
@@ -115,7 +128,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
             <p className={styles.empty}>No tags yet</p>
           )}
           {tags.map(tag => {
-            const count = getItemCount(tag);
+            const count = tagCounts.get(tag) || 0;
 
             if (renamingTag === tag) {
               return (
@@ -252,7 +265,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.closeButton} onClick={onClose}>
+          <button className={styles.closeButton} onClick={handleClose} disabled={busy}>
             Close
           </button>
         </div>

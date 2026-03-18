@@ -560,10 +560,11 @@ function MatrixPageContent() {
     const previousItems = [...todoItems];
     const previousSelectedCategories = new Set(selectedCategories);
     const previousShowUncategorized = showUncategorized;
+    const affectedIds = new Set(affectedItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
-        affectedItems.some(a => a.id === item.id)
+        affectedIds.has(item.id)
           ? { ...item, categories: computeNewCategories(item) }
           : item
       )

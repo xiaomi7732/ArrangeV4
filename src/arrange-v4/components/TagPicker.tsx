@@ -14,7 +14,7 @@ export default function TagPicker({ availableCategories, categories, onChange, d
   const [newCategory, setNewCategory] = useState('');
 
   const addCategory = (cat: string) => {
-    if (!categories.includes(cat)) {
+    if (!categories.some(c => c.toLowerCase() === cat.toLowerCase())) {
       onChange([...categories, cat]);
     }
   };
@@ -36,7 +36,7 @@ export default function TagPicker({ availableCategories, categories, onChange, d
       <label className={styles.label}>Tags</label>
       {(availableCategories.length > 0 || categories.length > 0) && (
         <div className={styles.categoryChips}>
-          {availableCategories.filter(c => !categories.includes(c)).map(cat => (
+          {availableCategories.filter(c => !categories.some(sel => sel.toLowerCase() === c.toLowerCase())).map(cat => (
             <button
               key={cat}
               type="button"
