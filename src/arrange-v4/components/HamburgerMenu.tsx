@@ -124,7 +124,6 @@ export default function HamburgerMenu() {
         {leftActions && (
           <div className={styles.topBarLeft}>{leftActions}</div>
         )}
-        <div className={styles.topBarSpacer} />
         {rightActions && (
           <div className={styles.topBarRight}>{rightActions}</div>
         )}
