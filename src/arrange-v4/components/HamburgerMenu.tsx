@@ -120,10 +120,10 @@ export default function HamburgerMenu() {
         >
           ☰
         </button>
+        <span className={styles.pageLabel}>{pageLabel}</span>
         {leftActions && (
           <div className={styles.topBarLeft}>{leftActions}</div>
         )}
-        <span className={styles.pageLabel}>{pageLabel}</span>
         <div className={styles.topBarSpacer} />
         {rightActions && (
           <div className={styles.topBarRight}>{rightActions}</div>
