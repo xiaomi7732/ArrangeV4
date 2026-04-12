@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
@@ -112,6 +112,20 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setError(null);
     setEditing(false);
   };
+
+  const handleEsc = useCallback((e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    if (editing && !isSubmitting) {
+      handleCancelEdit();
+    } else if (!editing) {
+      onClose();
+    }
+  }, [editing, isSubmitting, onClose]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [handleEsc]);
 
   if (editing) {
     return (

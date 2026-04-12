@@ -35,6 +35,13 @@
   }
 }
 
+@media (max-width: 480px) {
+  .tab {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+}
+
 .title {
   font-size: 1.25rem;
   font-weight: bold;
@@ -382,6 +389,8 @@
   border-bottom: 2px solid #e5e7eb;
   margin-bottom: 16px;
   flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab {
@@ -396,6 +405,7 @@
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tab:hover {

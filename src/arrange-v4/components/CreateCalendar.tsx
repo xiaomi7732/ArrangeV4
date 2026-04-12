@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './CreateCalendar.module.css';
 
 interface CreateCalendarProps {
@@ -48,6 +48,15 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
     setCalendarName('');
     setError(null);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isCreating) handleCancel();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, isCreating]);
 
   return (
     <>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { TodoItem } from '@/lib/todoDataService';
 import styles from './ManageTags.module.css';
 
@@ -37,6 +37,14 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
   const handleClose = () => {
     if (!busy) onClose();
   };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [busy, onClose]);
 
   const clearActions = () => {
     setRenamingTag(null);

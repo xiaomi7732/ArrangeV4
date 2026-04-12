@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/todoDataService';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
@@ -111,6 +111,15 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     resetForm();
     setIsOpen(false);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) handleCancel();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, isSubmitting]);
 
   if (!isOpen) {
     return (
