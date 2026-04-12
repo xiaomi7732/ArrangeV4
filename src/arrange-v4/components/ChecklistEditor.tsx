@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import SortableChecklistItem from './SortableChecklistItem';
@@ -76,6 +76,20 @@ export default function ChecklistEditor({
     }
   }, [items]);
 
+  // Derive render-safe IDs that are always in sync with items.length
+  const renderIds = useMemo(() => {
+    if (itemIds.length === items.length) return itemIds;
+    // Temporarily pad or trim to match items during the render before useEffect fires
+    if (items.length > itemIds.length) {
+      const padded = [...itemIds];
+      for (let i = itemIds.length; i < items.length; i++) {
+        padded.push(`cl-tmp-${i}`);
+      }
+      return padded;
+    }
+    return itemIds.slice(0, items.length);
+  }, [itemIds, items.length]);
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -138,12 +152,12 @@ export default function ChecklistEditor({
     <>
       {items.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+          <SortableContext items={renderIds} strategy={verticalListSortingStrategy}>
             <ul className={styles.checklistEdit}>
               {items.map((item, idx) => {
                 const checked = item.startsWith('-[x]');
                 const text = item.replace(/^-\[x?\]\s*/, '');
-                const id = itemIds[idx];
+                const id = renderIds[idx];
                 return (
                   <SortableChecklistItem key={id} id={id} disabled={disabled}>
                     {showCheckboxes ? (
