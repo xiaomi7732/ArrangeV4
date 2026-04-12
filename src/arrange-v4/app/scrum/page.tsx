@@ -13,9 +13,10 @@ import ScrumCard from '@/components/ScrumCard';
 import Link from 'next/link';
 import styles from './page.module.css';
 
-const LANE_STATUSES: TodoStatus[] = ['new', 'blocked', 'inProgress', 'finished'];
+const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished'] as const satisfies readonly TodoStatus[];
+type LaneStatus = (typeof LANE_STATUSES)[number];
 
-const LANE_STYLES: Record<string, { lane: string; title: string }> = {
+const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
   new: { lane: styles.laneNew, title: styles.laneTitleNew },
   inProgress: { lane: styles.laneInProgress, title: styles.laneTitleInProgress },
   blocked: { lane: styles.laneBlocked, title: styles.laneTitleBlocked },
@@ -65,7 +66,7 @@ function ScrumPageContent() {
   const filteredItems = useMemo(() => {
     return todoItems.filter(todo => {
       const status = todo.status || 'new';
-      if (!LANE_STATUSES.includes(status)) return false;
+      if (!(LANE_STATUSES as readonly string[]).includes(status)) return false;
 
       if (categoryFilterActive) {
         const hasCats = todo.categories && todo.categories.length > 0;
