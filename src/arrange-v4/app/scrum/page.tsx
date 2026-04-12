@@ -79,7 +79,7 @@ function ScrumPageContent() {
   }, [todoItems, selectedCategories, showUncategorized, categoryFilterActive]);
 
   const lanes = useMemo(() => {
-    const result: Record<string, (TodoItem & { id?: string })[]> = {};
+    const result = {} as Record<LaneStatus, (TodoItem & { id?: string })[]>;
     for (const status of LANE_STATUSES) {
       result[status] = sortByPriority(filteredItems.filter(t => (t.status || 'new') === status));
     }
