@@ -6,6 +6,7 @@ import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
+import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -20,6 +21,7 @@ function CancelledPageContent() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
+  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   const displayError = error || calendarError;
@@ -264,12 +266,17 @@ function CancelledPageContent() {
                       <div
                         key={todo.id}
                         className={`${styles.taskRow} ${isSelected ? styles.taskRowSelected : ''}`}
+                        onClick={() => setSelectedTodo(todo)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedTodo(todo); } }}
                       >
                         <input
                           type="checkbox"
                           className={styles.taskCheckbox}
                           checked={isSelected}
                           onChange={() => todo.id && toggleSelect(todo.id)}
+                          onClick={(e) => e.stopPropagation()}
                           aria-label={`Select ${todo.subject}`}
                         />
                         <div className={styles.taskInfo}>
@@ -297,6 +304,14 @@ function CancelledPageContent() {
               </>
             )}
           </div>
+        )}
+
+        {/* Detail view dialog (read-only) */}
+        {selectedTodo && (
+          <ViewTodoItem
+            todo={selectedTodo}
+            onClose={() => setSelectedTodo(null)}
+          />
         )}
 
         {/* Confirmation dialog */}
