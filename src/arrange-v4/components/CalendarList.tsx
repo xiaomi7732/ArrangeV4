@@ -42,7 +42,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
       alert('Failed to delete book. Please try again.');
     } finally {
       setDeletingId(null);
-      setConfirmingId(null);
+      setConfirmingId(prev => prev === calendar.id ? null : prev);
     }
   }, [onDeleteCalendar]);
   if (loading) {
@@ -134,30 +134,36 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
               </p>
             )}
             <div className={styles.calendarFooter}>
-              {confirmingId === calendar.id ? (
-                <div className={styles.deleteConfirmRow}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setConfirmingId(null); }}
-                    className={styles.deleteCancelButton}
+              {calendar.id && (
+                confirmingId === calendar.id ? (
+                  <div
+                    className={styles.deleteConfirmRow}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
-                    Cancel
-                  </button>
+                    <button
+                      onClick={() => setConfirmingId(null)}
+                      className={styles.deleteCancelButton}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleDelete(calendar)}
+                      disabled={deletingId === calendar.id}
+                      className={styles.deleteConfirmButton}
+                    >
+                      {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
+                    </button>
+                  </div>
+                ) : (
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(calendar); }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id ?? null); }}
                     disabled={deletingId === calendar.id}
-                    className={styles.deleteConfirmButton}
+                    className={styles.deleteButton}
                   >
-                    {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
+                    🗑 Delete
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id!); }}
-                  disabled={deletingId === calendar.id}
-                  className={styles.deleteButton}
-                >
-                  🗑 Delete
-                </button>
+                )
               )}
             </div>
           </div>
