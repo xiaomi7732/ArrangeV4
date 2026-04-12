@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { getAllCalendarEvents } from '@/lib/graphService';
 import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
@@ -14,7 +14,7 @@ function CancelledPageContent() {
   const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
   const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError } = useBookId('/cancelled');
 
-  const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
+  const [cancelledItems, setCancelledItems] = useState<(TodoItem & { id?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -26,14 +26,9 @@ function CancelledPageContent() {
 
   const displayError = error || calendarError;
 
-  const cancelledItems = useMemo(
-    () => todoItems.filter(t => t.status === 'cancelled'),
-    [todoItems],
-  );
-
   const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => t.id && selectedIds.has(t.id));
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     if (!isAuthenticated || !bookId) return;
 
     setLoading(true);
@@ -43,7 +38,7 @@ function CancelledPageContent() {
       const accessToken = await acquireToken();
       const eventsData = await getAllCalendarEvents(accessToken, bookId);
       const todos = eventsData.map(event => parseTodoData(event));
-      setTodoItems(todos);
+      setCancelledItems(todos.filter(t => t.status === 'cancelled'));
       setSelectedIds(new Set());
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
@@ -52,14 +47,13 @@ function CancelledPageContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, bookId, acquireToken]);
 
   useEffect(() => {
     if (isAuthenticated && inProgress === 'none' && bookId) {
       fetchEvents();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, inProgress, bookId]);
+  }, [isAuthenticated, inProgress, bookId, fetchEvents]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -97,8 +91,8 @@ function CancelledPageContent() {
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
     // Optimistic removal — keep a snapshot for rollback
-    const previousItems = [...todoItems];
-    setTodoItems(items => items.filter(item => !item.id || !selectedIds.has(item.id)));
+    const previousItems = [...cancelledItems];
+    setCancelledItems(items => items.filter(item => !item.id || !selectedIds.has(item.id)));
 
     const CONCURRENCY = 5;
     let idx = 0;
@@ -127,9 +121,8 @@ function CancelledPageContent() {
       );
 
       if (hasFailure) {
-        // Some deletions failed — re-fetch to get accurate state
-        setError('Some items could not be deleted. Refreshing list.');
         await fetchEvents();
+        setError('Some items could not be deleted. The list has been refreshed.');
       } else {
         setSelectedIds(new Set());
       }
@@ -137,8 +130,7 @@ function CancelledPageContent() {
       console.error('Error during bulk delete:', err);
       const message = err instanceof Error ? err.message : 'Failed to delete items';
       setError(message);
-      // Rollback optimistic removal
-      setTodoItems(previousItems);
+      setCancelledItems(previousItems);
     } finally {
       setDeleting(false);
       setShowConfirm(false);
@@ -317,9 +309,16 @@ function CancelledPageContent() {
         {/* Confirmation dialog */}
         {showConfirm && (
           <div className={styles.confirmOverlay} onClick={() => !deleting && setShowConfirm(false)}>
-            <div className={styles.confirmDialog} onClick={e => e.stopPropagation()}>
-              <h2 className={styles.confirmTitle}>Delete {selectedIds.size} {selectedIds.size === 1 ? 'task' : 'tasks'}?</h2>
-              <p className={styles.confirmMessage}>
+            <div
+              className={styles.confirmDialog}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cancelled-delete-confirm-title"
+              aria-describedby="cancelled-delete-confirm-message"
+              onClick={e => e.stopPropagation()}
+            >
+              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {selectedIds.size} {selectedIds.size === 1 ? 'task' : 'tasks'}?</h2>
+              <p id="cancelled-delete-confirm-message" className={styles.confirmMessage}>
                 This action cannot be undone. The selected cancelled tasks will be permanently removed from your calendar.
               </p>
               {deleting && (

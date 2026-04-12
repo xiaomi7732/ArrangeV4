@@ -183,8 +183,8 @@ export default function MatrixPage() {
 }
 
 function MatrixPageContent() {
-  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin, instance } = useGraphToken();
-  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError, setError: setCalendarError } = useBookId('/matrix');
+  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
   bookIdRef.current = bookId;

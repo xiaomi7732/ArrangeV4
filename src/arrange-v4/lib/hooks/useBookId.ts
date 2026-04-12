@@ -39,6 +39,7 @@ export function useBookId(routePrefix: string) {
   // Fetch calendars and validate bookId
   const fetchCalendars = useCallback(async () => {
     if (!isAuthenticated) return;
+    setError(null);
     try {
       const accessToken = await acquireToken();
       const all = await getCalendars(accessToken);
