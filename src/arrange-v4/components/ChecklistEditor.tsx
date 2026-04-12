@@ -98,18 +98,17 @@ export default function ChecklistEditor({
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      setItemIds(ids => {
-        const oldIndex = ids.indexOf(String(active.id));
-        const newIndex = ids.indexOf(String(over.id));
-        if (oldIndex >= 0 && newIndex >= 0) {
-          prevItemsRef.current = arrayMove(items, oldIndex, newIndex);
-          onChange(prevItemsRef.current);
-          return arrayMove(ids, oldIndex, newIndex);
-        }
-        return ids;
-      });
+      const oldIndex = renderIds.indexOf(String(active.id));
+      const newIndex = renderIds.indexOf(String(over.id));
+      if (oldIndex >= 0 && newIndex >= 0) {
+        const updatedItems = arrayMove(items, oldIndex, newIndex);
+        const updatedIds = arrayMove(renderIds, oldIndex, newIndex);
+        prevItemsRef.current = updatedItems;
+        setItemIds(updatedIds);
+        onChange(updatedItems);
+      }
     }
-  }, [items, onChange]);
+  }, [items, onChange, renderIds]);
 
   const handleToggle = (idx: number) => {
     const item = items[idx];
