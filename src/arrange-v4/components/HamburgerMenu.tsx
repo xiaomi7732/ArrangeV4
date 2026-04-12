@@ -18,6 +18,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home', icon: '🏠' },
   { href: '/books', label: 'My Books', icon: '📚' },
   { href: '/matrix', label: 'Matrix', icon: '📊', matchPrefix: true },
+  { href: '/cancelled', label: 'Cancelled Tasks', icon: '🗑️', matchPrefix: true },
 ];
 
 export default function HamburgerMenu() {

@@ -1,26 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '@/lib/msalConfig';
 import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
 import { filterArrangeCalendars } from '@/lib/calendarUtils';
+import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
 import styles from './page.module.css';
 
 export default function BooksPage() {
-  const { instance, accounts, inProgress } = useMsal();
+  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin, instance } = useGraphToken();
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
 
-  const isAuthenticated = accounts.length > 0;
-
   const handleLogin = async () => {
     try {
-      await instance.loginPopup(loginRequest);
+      await graphLogin();
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
@@ -40,35 +37,19 @@ export default function BooksPage() {
     setError(null);
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
       // Fetch user info
-      const userInfo = await getUserInfo(response.accessToken);
+      const userInfo = await getUserInfo(accessToken);
       setUserName(userInfo.displayName || userInfo.userPrincipalName || '');
 
       // Fetch calendars and filter arrange books
-      const calendarsData = await getCalendars(response.accessToken);
+      const calendarsData = await getCalendars(accessToken);
       const filteredCalendars = filterArrangeCalendars(calendarsData);
       setCalendars(filteredCalendars);
     } catch (error: any) {
       console.error('Error fetching calendars:', error);
       setError(error.message || 'Failed to fetch books');
-      
-      // If token acquisition fails, try interactive login
-      if (error.name === 'InteractionRequiredAuthError') {
-        try {
-          const response = await instance.acquireTokenPopup(loginRequest);
-          const calendarsData = await getCalendars(response.accessToken);
-          const filteredCalendars = filterArrangeCalendars(calendarsData);
-          setCalendars(filteredCalendars);
-        } catch (popupError: any) {
-          setError(popupError.message || 'Failed to fetch books');
-        }
-      }
     } finally {
       setLoading(false);
     }
@@ -76,13 +57,8 @@ export default function BooksPage() {
 
   const handleCreateCalendar = async (name: string) => {
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
-
-      const newCalendar = await createCalendar(response.accessToken, name);
+      const accessToken = await acquireToken();
+      const newCalendar = await createCalendar(accessToken, name);
       setCalendars(prev => [...prev, newCalendar]);
     } catch (error: any) {
       console.error('Error creating calendar:', error);
@@ -92,13 +68,8 @@ export default function BooksPage() {
 
   const handleDeleteCalendar = async (calendarId: string) => {
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
-
-      await deleteCalendar(response.accessToken, calendarId);
+      const accessToken = await acquireToken();
+      await deleteCalendar(accessToken, calendarId);
       setCalendars(prev => prev.filter(c => c.id !== calendarId));
     } catch (error: any) {
       console.error('Error deleting calendar:', error);

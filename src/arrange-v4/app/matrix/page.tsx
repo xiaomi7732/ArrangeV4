@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '@/lib/msalConfig';
-import { getCalendars, getCalendarEvents, Calendar } from '@/lib/graphService';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { getCalendars, getCalendarEvents } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
-import { getLastBookId, setLastBookId, clearLastBookId, hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
+import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
+import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useBookId } from '@/lib/hooks/useBookId';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -184,23 +183,12 @@ export default function MatrixPage() {
 }
 
 function MatrixPageContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const bookId = searchParams.get('bookId');
+  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin, instance } = useGraphToken();
+  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError, setError: setCalendarError } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
   bookIdRef.current = bookId;
 
-  useEffect(() => {
-    if (!bookId) {
-      const saved = getLastBookId();
-      if (saved) {
-        router.replace(`/matrix?bookId=${encodeURIComponent(saved)}`);
-      }
-    }
-  }, [bookId, router]);
-  
-  const { instance, accounts, inProgress } = useMsal();
   const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,12 +197,12 @@ function MatrixPageContent() {
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
-  const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
 
-  const isAuthenticated = accounts.length > 0;
+  // Merge calendar-level errors into the page error state
+  const displayError = error || calendarError;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -251,49 +239,6 @@ function MatrixPageContent() {
     eliminate: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true),
   }), [filteredTodoItems]);
 
-  const currentCalendar = calendars.find(c => c.id === bookId);
-  const currentCalendarName = currentCalendar ? getCalendarDisplayName(currentCalendar) : bookId;
-
-  const fetchCalendars = useCallback(async () => {
-    if (!isAuthenticated) return;
-    try {
-      const account = accounts[0];
-      let accessToken: string;
-      try {
-        const response = await instance.acquireTokenSilent({ ...loginRequest, account });
-        accessToken = response.accessToken;
-      } catch (silentError: any) {
-        if (silentError.name === 'InteractionRequiredAuthError') {
-          const response = await instance.acquireTokenPopup(loginRequest);
-          accessToken = response.accessToken;
-        } else {
-          throw silentError;
-        }
-      }
-      const all = await getCalendars(accessToken);
-      const arrangeCalendars = filterArrangeCalendars(all);
-      setCalendars(arrangeCalendars);
-
-      if (bookId && !arrangeCalendars.some(c => c.id === bookId)) {
-        clearLastBookId();
-        router.replace('/books');
-      } else if (bookId && arrangeCalendars.some(c => c.id === bookId)) {
-        setLastBookId(bookId);
-      }
-    } catch (error: any) {
-      console.error('Error fetching calendars:', error);
-      setError(error.message || 'Failed to fetch calendars');
-    }
-  }, [isAuthenticated, accounts, instance, bookId, router]);
-
-  useEffect(() => {
-    fetchCalendars();
-  }, [fetchCalendars]);
-
-  const handleCalendarSwitch = (calendarId: string) => {
-    router.push(`/matrix?bookId=${encodeURIComponent(calendarId)}`);
-  };
-
   const fetchEvents = async () => {
     if (!isAuthenticated || !bookId) return;
 
@@ -301,11 +246,7 @@ function MatrixPageContent() {
     setError(null);
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
       // Fetch events from last 30 days to next 30 days
       const today = new Date();
@@ -314,7 +255,7 @@ function MatrixPageContent() {
       const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
       
       const eventsData = await getCalendarEvents(
-        response.accessToken,
+        accessToken,
         bookId,
         startDate.toISOString(),
         endDate.toISOString()
@@ -328,7 +269,7 @@ function MatrixPageContent() {
       if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
-        const sweepAccessToken = response.accessToken;
+        const sweepAccessToken = accessToken;
         const sweepBookId = bookId;
         const snapshotCalendars = calendars.length > 0 ? [...calendars] : null;
         void (async () => {
@@ -396,13 +337,9 @@ function MatrixPageContent() {
     }
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
-      const createdEvent = await createTodoItem(response.accessToken, bookId, todoItem);
+      const createdEvent = await createTodoItem(accessToken, bookId, todoItem);
       const newTodo = parseTodoData(createdEvent);
       setTodoItems(prev => [...prev, newTodo]);
     } catch (error: any) {
@@ -440,13 +377,9 @@ function MatrixPageContent() {
     setDraggedItem(null);
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
-      await updateTodoItem(response.accessToken, bookId, draggedItem.id, {
+      await updateTodoItem(accessToken, bookId, draggedItem.id, {
         urgent,
         important,
       });
@@ -505,13 +438,9 @@ function MatrixPageContent() {
     );
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
-      await updateTodoItem(response.accessToken, bookId, todo.id, {
+      await updateTodoItem(accessToken, bookId, todo.id, {
         status: newStatus,
       });
     } catch (error: any) {
@@ -534,13 +463,9 @@ function MatrixPageContent() {
     setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account: account,
-      });
+      const accessToken = await acquireToken();
 
-      await updateTodoItem(response.accessToken, bookId, selectedTodo.id, updatedFields);
+      await updateTodoItem(accessToken, bookId, selectedTodo.id, updatedFields);
     } catch (error: any) {
       console.error('Error updating TODO:', error);
       setTodoItems(previousItems);
@@ -572,15 +497,14 @@ function MatrixPageContent() {
     updateFilterState();
 
     try {
-      const account = accounts[0];
-      const response = await instance.acquireTokenSilent({ ...loginRequest, account });
+      const accessToken = await acquireToken();
       const CONCURRENCY = 5;
       let idx = 0;
       const worker = async () => {
         while (idx < affectedItems.length) {
           const item = affectedItems[idx++];
           if (!item.id) continue;
-          await updateTodoItem(response.accessToken, bookId, item.id, {
+          await updateTodoItem(accessToken, bookId, item.id, {
             categories: computeNewCategories(item),
           });
         }
@@ -634,7 +558,7 @@ function MatrixPageContent() {
 
   const handleLogin = async () => {
     try {
-      await instance.loginPopup(loginRequest);
+      await graphLogin();
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
@@ -706,10 +630,10 @@ function MatrixPageContent() {
             </div>
           </div>
 
-          {error && (
+          {displayError && (
             <div className={styles.error} role="alert">
               <span className={styles.errorTitle}>Error: </span>
-              <span>{error}</span>
+              <span>{displayError}</span>
             </div>
           )}
 
