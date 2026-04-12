@@ -55,16 +55,14 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
       console.error('Failed to delete book:', error);
       alert('Failed to delete book. Please try again.');
     } finally {
+      const calId = calendar.id;
       setDeletingId(null);
-      setConfirmingId(prev => {
-        if (prev === calendar.id) {
-          // Restore focus to delete button if the calendar still exists (e.g., on failure)
-          const btn = deleteButtonRefs.current.get(calendar.id!);
-          if (btn) requestAnimationFrame(() => btn.focus());
-          return null;
-        }
-        return prev;
-      });
+      setConfirmingId(prev => prev === calId ? null : prev);
+      // Restore focus to delete button if the calendar still exists (e.g., on failure)
+      if (calId) {
+        const btn = deleteButtonRefs.current.get(calId);
+        if (btn) requestAnimationFrame(() => btn.focus());
+      }
     }
   }, [onDeleteCalendar]);
   if (loading) {
@@ -156,8 +154,9 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
               </p>
             )}
             <div className={styles.calendarFooter}>
-              {calendar.id && (
-                confirmingId === calendar.id ? (
+              {calendar.id && (() => {
+                const bookName = getCalendarDisplayName(calendar);
+                return confirmingId === calendar.id ? (
                   <div
                     className={styles.deleteConfirmRow}
                     onClick={(e) => e.stopPropagation()}
@@ -171,6 +170,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                       }}
                       disabled={!!deletingId}
                       className={styles.deleteCancelButton}
+                      aria-label={`Cancel deleting ${bookName}`}
                     >
                       Cancel
                     </button>
@@ -179,6 +179,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                       onClick={() => handleDelete(calendar)}
                       disabled={!!deletingId}
                       className={styles.deleteConfirmButton}
+                      aria-label={`Confirm delete ${bookName}`}
                     >
                       {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
                     </button>
@@ -192,11 +193,12 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                     onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id ?? null); }}
                     disabled={!!deletingId}
                     className={styles.deleteButton}
+                    aria-label={`Delete ${bookName}`}
                   >
                     🗑 Delete
                   </button>
-                )
-              )}
+                );
+              })()}
             </div>
           </div>
         ))}
