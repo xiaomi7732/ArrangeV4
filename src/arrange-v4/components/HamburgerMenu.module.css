@@ -41,6 +41,7 @@
   pointer-events: none;
   user-select: none;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .topBarLeft {
