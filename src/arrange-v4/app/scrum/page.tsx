@@ -13,7 +13,7 @@ import ScrumCard from '@/components/ScrumCard';
 import Link from 'next/link';
 import styles from './page.module.css';
 
-const LANE_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished'];
+const LANE_STATUSES: TodoStatus[] = ['new', 'blocked', 'inProgress', 'finished'];
 
 const LANE_STYLES: Record<string, { lane: string; title: string }> = {
   new: { lane: styles.laneNew, title: styles.laneTitleNew },
