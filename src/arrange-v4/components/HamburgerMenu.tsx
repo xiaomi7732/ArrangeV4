@@ -121,7 +121,7 @@ export default function HamburgerMenu() {
           >
             ☰
           </button>
-          <span className={styles.pageLabel}>{pageLabel}</span>
+          <h1 className={styles.pageLabel}>{pageLabel}</h1>
           {leftActions}
         </div>
         <div className={styles.topBarMiddle} />
