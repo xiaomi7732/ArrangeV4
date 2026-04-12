@@ -18,6 +18,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home', icon: '🏠' },
   { href: '/books', label: 'My Books', icon: '📚' },
   { href: '/matrix', label: 'Matrix', icon: '📊', matchPrefix: true },
+  { href: '/cancelled', label: 'Cancelled Tasks', icon: '🗑️', matchPrefix: true },
 ];
 
 export default function HamburgerMenu() {
@@ -40,7 +41,7 @@ export default function HamburgerMenu() {
     const savedBookId = getLastBookId();
     if (savedBookId) {
       setNavItems(BASE_NAV_ITEMS.map(item =>
-        item.matchPrefix ? { ...item, href: `/matrix?bookId=${encodeURIComponent(savedBookId)}` } : item
+        item.matchPrefix ? { ...item, href: `${item.href}?bookId=${encodeURIComponent(savedBookId)}` } : item
       ));
     } else {
       setNavItems(BASE_NAV_ITEMS);
@@ -92,7 +93,8 @@ export default function HamburgerMenu() {
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
-      return pathname.startsWith('/matrix');
+      const basePath = item.href.split('?')[0];
+      return pathname.startsWith(basePath);
     }
     return pathname === item.href;
   }

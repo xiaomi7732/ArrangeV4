@@ -188,3 +188,36 @@ export async function getCalendarEvents(
     throw error;
   }
 }
+
+/**
+ * Fetches ALL events from a calendar (no date range filter).
+ * Uses the /events endpoint instead of /calendarView so that
+ * items whose dates fall outside a sliding window are still returned.
+ */
+export async function getAllCalendarEvents(
+  accessToken: string,
+  calendarId: string
+): Promise<CalendarEvent[]> {
+  const client = createGraphClient(accessToken);
+  const allEvents: CalendarEvent[] = [];
+
+  try {
+    let response = await client
+      .api(`/me/calendars/${calendarId}/events`)
+      .top(100)
+      .select('id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
+      .get();
+
+    allEvents.push(...(response.value || []));
+
+    while (response['@odata.nextLink']) {
+      response = await client.api(response['@odata.nextLink']).get();
+      allEvents.push(...(response.value || []));
+    }
+
+    return allEvents;
+  } catch (error) {
+    console.error('Error fetching all calendar events:', error);
+    throw error;
+  }
+}
