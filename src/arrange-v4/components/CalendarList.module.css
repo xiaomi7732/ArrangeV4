@@ -202,6 +202,11 @@
   background-color: #e5e7eb;
 }
 
+.deleteCancelButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .deleteConfirmButton {
   flex: 1;
   background-color: #dc2626;
