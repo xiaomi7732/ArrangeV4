@@ -158,23 +158,68 @@
 }
 
 .deleteButton {
-  width: 100%;
-  background-color: #fef2f2;
-  color: #991b1b;
-  font-weight: 500;
-  padding: 8px 16px;
-  border-radius: 4px;
+  background: none;
+  color: #9ca3af;
+  font-weight: 400;
+  padding: 4px 8px;
+  border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 0.875rem;
+  transition: all 0.2s;
+  font-size: 0.8rem;
 }
 
 .deleteButton:hover:not(:disabled) {
-  background-color: #fecaca;
+  color: #991b1b;
+  background-color: #fef2f2;
 }
 
 .deleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deleteConfirmRow {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.deleteCancelButton {
+  flex: 1;
+  background-color: #f3f4f6;
+  color: #374151;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 0.8rem;
+}
+
+.deleteCancelButton:hover {
+  background-color: #e5e7eb;
+}
+
+.deleteConfirmButton {
+  flex: 1;
+  background-color: #dc2626;
+  color: white;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 0.8rem;
+}
+
+.deleteConfirmButton:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.deleteConfirmButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

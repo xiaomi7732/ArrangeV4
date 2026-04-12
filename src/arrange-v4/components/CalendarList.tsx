@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
@@ -15,7 +15,15 @@ interface CalendarListProps {
 
 export default function CalendarList({ calendars, loading, error, onDeleteCalendar }: CalendarListProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const router = useRouter();
+
+  // Auto-dismiss confirmation after 5 seconds
+  useEffect(() => {
+    if (!confirmingId) return;
+    const timer = setTimeout(() => setConfirmingId(null), 5000);
+    return () => clearTimeout(timer);
+  }, [confirmingId]);
 
   const handleCalendarClick = (calendar: Calendar) => {
     if (calendar.id) {
@@ -23,13 +31,8 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     }
   };
 
-  const handleDelete = async (calendar: Calendar) => {
+  const handleDelete = useCallback(async (calendar: Calendar) => {
     if (!calendar.id) return;
-    
-    const displayName = getCalendarDisplayName(calendar);
-    if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
-      return;
-    }
 
     setDeletingId(calendar.id);
     try {
@@ -39,8 +42,9 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
       alert('Failed to delete book. Please try again.');
     } finally {
       setDeletingId(null);
+      setConfirmingId(null);
     }
-  };
+  }, [onDeleteCalendar]);
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -130,13 +134,31 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
               </p>
             )}
             <div className={styles.calendarFooter}>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(calendar); }}
-                disabled={deletingId === calendar.id}
-                className={styles.deleteButton}
-              >
-                {deletingId === calendar.id ? 'Deleting...' : 'Delete Book'}
-              </button>
+              {confirmingId === calendar.id ? (
+                <div className={styles.deleteConfirmRow}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmingId(null); }}
+                    className={styles.deleteCancelButton}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(calendar); }}
+                    disabled={deletingId === calendar.id}
+                    className={styles.deleteConfirmButton}
+                  >
+                    {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id!); }}
+                  disabled={deletingId === calendar.id}
+                  className={styles.deleteButton}
+                >
+                  🗑 Delete
+                </button>
+              )}
             </div>
           </div>
         ))}
