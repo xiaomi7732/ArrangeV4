@@ -29,10 +29,10 @@
 }
 
 .pageLabel {
-  flex: 1;
   font-size: 0.9rem;
   font-weight: 600;
   color: #374151;
+  flex-shrink: 0;
 }
 
 .version {
