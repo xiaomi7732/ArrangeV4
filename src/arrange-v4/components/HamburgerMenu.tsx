@@ -110,24 +110,25 @@ export default function HamburgerMenu() {
   return (
     <>
       <header className={styles.topBar}>
-        <button
-          ref={triggerRef}
-          className={styles.menuButton}
-          onClick={() => setIsOpen(true)}
-          aria-label="Open navigation menu"
-          aria-expanded={isOpen}
-          aria-controls="nav-sidebar"
-        >
-          ☰
-        </button>
-        <span className={styles.pageLabel}>{pageLabel}</span>
-        {leftActions && (
-          <div className={styles.topBarLeft}>{leftActions}</div>
-        )}
-        {rightActions && (
-          <div className={styles.topBarRight}>{rightActions}</div>
-        )}
-        <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>
+        <div className={styles.topBarLeft}>
+          <button
+            ref={triggerRef}
+            className={styles.menuButton}
+            onClick={() => setIsOpen(true)}
+            aria-label="Open navigation menu"
+            aria-expanded={isOpen}
+            aria-controls="nav-sidebar"
+          >
+            ☰
+          </button>
+          <span className={styles.pageLabel}>{pageLabel}</span>
+          {leftActions}
+        </div>
+        <div className={styles.topBarMiddle} />
+        <div className={styles.topBarRight}>
+          {rightActions}
+          <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>
+        </div>
       </header>
 
       {isOpen && (

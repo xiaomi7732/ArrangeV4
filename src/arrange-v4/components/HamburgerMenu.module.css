@@ -40,15 +40,17 @@
   color: #9ca3af;
   pointer-events: none;
   user-select: none;
-  flex-shrink: 0;
-  margin-left: auto;
 }
 
 .topBarLeft {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   flex-shrink: 0;
+}
+
+.topBarMiddle {
+  flex: 1;
 }
 
 .topBarRight {
@@ -56,7 +58,6 @@
   gap: 6px;
   align-items: center;
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 .overlay {
