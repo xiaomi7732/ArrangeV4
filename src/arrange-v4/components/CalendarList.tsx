@@ -56,7 +56,15 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
       alert('Failed to delete book. Please try again.');
     } finally {
       setDeletingId(null);
-      setConfirmingId(prev => prev === calendar.id ? null : prev);
+      setConfirmingId(prev => {
+        if (prev === calendar.id) {
+          // Restore focus to delete button if the calendar still exists (e.g., on failure)
+          const btn = deleteButtonRefs.current.get(calendar.id!);
+          if (btn) requestAnimationFrame(() => btn.focus());
+          return null;
+        }
+        return prev;
+      });
     }
   }, [onDeleteCalendar]);
   if (loading) {
@@ -177,7 +185,10 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                   </div>
                 ) : (
                   <button
-                    ref={(el) => { if (el && calendar.id) deleteButtonRefs.current.set(calendar.id, el); }}
+                    ref={(el) => {
+                      if (el && calendar.id) deleteButtonRefs.current.set(calendar.id, el);
+                      else if (!el && calendar.id) deleteButtonRefs.current.delete(calendar.id);
+                    }}
                     onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id ?? null); }}
                     disabled={!!deletingId}
                     className={styles.deleteButton}
