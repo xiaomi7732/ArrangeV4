@@ -156,16 +156,19 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
             <div className={styles.calendarFooter}>
               {calendar.id && (() => {
                 const bookName = getCalendarDisplayName(calendar);
-                return confirmingId === calendar.id ? (
+                const bookId = calendar.id;
+                return confirmingId === bookId ? (
                   <div
                     className={styles.deleteConfirmRow}
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
+                    onMouseMove={() => setConfirmingId(bookId)}
+                    onFocus={() => setConfirmingId(bookId)}
                   >
                     <button
                       onClick={() => {
                         setConfirmingId(null);
-                        const btn = deleteButtonRefs.current.get(calendar.id!);
+                        const btn = deleteButtonRefs.current.get(bookId);
                         if (btn) requestAnimationFrame(() => btn.focus());
                       }}
                       disabled={!!deletingId}
@@ -175,22 +178,22 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                       Cancel
                     </button>
                     <button
-                      ref={confirmingId === calendar.id ? confirmButtonRef : undefined}
+                      ref={confirmingId === bookId ? confirmButtonRef : undefined}
                       onClick={() => handleDelete(calendar)}
                       disabled={!!deletingId}
                       className={styles.deleteConfirmButton}
                       aria-label={`Confirm delete ${bookName}`}
                     >
-                      {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
+                      {deletingId === bookId ? 'Deleting...' : 'Confirm Delete'}
                     </button>
                   </div>
                 ) : (
                   <button
                     ref={(el) => {
-                      if (el && calendar.id) deleteButtonRefs.current.set(calendar.id, el);
-                      else if (!el && calendar.id) deleteButtonRefs.current.delete(calendar.id);
+                      if (el && bookId) deleteButtonRefs.current.set(bookId, el);
+                      else if (!el && bookId) deleteButtonRefs.current.delete(bookId);
                     }}
-                    onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id ?? null); }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmingId(bookId ?? null); }}
                     disabled={!!deletingId}
                     className={styles.deleteButton}
                     aria-label={`Delete ${bookName}`}
