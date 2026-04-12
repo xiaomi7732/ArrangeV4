@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
@@ -16,6 +16,7 @@ interface CalendarListProps {
 export default function CalendarList({ calendars, loading, error, onDeleteCalendar }: CalendarListProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
 
   // Auto-dismiss confirmation after 5 seconds, but keep it visible while deletion is in progress
@@ -24,6 +25,13 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     const timer = setTimeout(() => setConfirmingId(null), 5000);
     return () => clearTimeout(timer);
   }, [confirmingId, deletingId]);
+
+  // Move focus to the Confirm Delete button when confirmation row appears
+  useEffect(() => {
+    if (confirmingId) {
+      confirmButtonRef.current?.focus();
+    }
+  }, [confirmingId]);
 
   const handleCalendarClick = (calendar: Calendar) => {
     if (calendar.id) {
@@ -143,11 +151,13 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                   >
                     <button
                       onClick={() => setConfirmingId(null)}
+                      disabled={deletingId === calendar.id}
                       className={styles.deleteCancelButton}
                     >
                       Cancel
                     </button>
                     <button
+                      ref={confirmingId === calendar.id ? confirmButtonRef : undefined}
                       onClick={() => handleDelete(calendar)}
                       disabled={deletingId === calendar.id}
                       className={styles.deleteConfirmButton}
