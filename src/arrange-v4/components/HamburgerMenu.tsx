@@ -93,7 +93,8 @@ export default function HamburgerMenu() {
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
-      return pathname.startsWith('/matrix');
+      const basePath = item.href.split('?')[0];
+      return pathname.startsWith(basePath);
     }
     return pathname === item.href;
   }
