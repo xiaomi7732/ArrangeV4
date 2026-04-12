@@ -377,7 +377,9 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
           <div className={styles.actions}>
             {onUpdate && (
-              <button type="button" onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
+              <button type="button"
+                onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
+                disabled={checklistUpdating}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>
