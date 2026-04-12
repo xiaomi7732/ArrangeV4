@@ -6,10 +6,11 @@ import styles from './ScrumCard.module.css';
 interface ScrumCardProps {
   todo: TodoItem & { id?: string };
   onDragStart?: (todo: TodoItem & { id?: string }) => void;
+  onDragEnd?: () => void;
   onClick?: (todo: TodoItem & { id?: string }) => void;
 }
 
-export default function ScrumCard({ todo, onDragStart, onClick }: ScrumCardProps) {
+export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: ScrumCardProps) {
   const formatShortDate = (dateStr?: string) => {
     if (!dateStr) return null;
     const d = new Date(dateStr);
@@ -21,6 +22,7 @@ export default function ScrumCard({ todo, onDragStart, onClick }: ScrumCardProps
       className={styles.card}
       draggable={!!todo.id}
       onDragStart={() => onDragStart?.(todo)}
+      onDragEnd={() => onDragEnd?.()}
       onClick={() => onClick?.(todo)}
       role="button"
       tabIndex={0}

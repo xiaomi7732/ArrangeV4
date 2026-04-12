@@ -461,6 +461,7 @@ function ScrumPageContent() {
                           key={todo.id}
                           todo={todo}
                           onDragStart={handleDragStart}
+                          onDragEnd={() => setDraggedItem(null)}
                           onClick={setSelectedTodo}
                         />
                       ))}
