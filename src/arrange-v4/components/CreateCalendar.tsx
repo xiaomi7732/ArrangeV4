@@ -52,7 +52,11 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isCreating) handleCancel();
+      if (e.key === 'Escape' && !isCreating) {
+        setIsOpen(false);
+        setCalendarName('');
+        setError(null);
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);

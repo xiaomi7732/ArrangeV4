@@ -115,7 +115,9 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmitting) handleCancel();
+      if (e.key === 'Escape' && !isSubmitting) {
+        setIsOpen(false);
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);

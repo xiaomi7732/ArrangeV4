@@ -35,13 +35,6 @@
   }
 }
 
-@media (max-width: 480px) {
-  .tab {
-    padding: 8px 12px;
-    font-size: 0.8rem;
-  }
-}
-
 .title {
   font-size: 1.25rem;
   font-weight: bold;
@@ -416,6 +409,13 @@
 .tabActive {
   color: #2563eb;
   border-bottom-color: #2563eb;
+}
+
+@media (max-width: 480px) {
+  .tab {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
 }
 
 .tabContent {

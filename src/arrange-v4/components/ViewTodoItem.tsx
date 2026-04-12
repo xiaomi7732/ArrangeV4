@@ -116,7 +116,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const handleEsc = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     if (editing && !isSubmitting) {
-      handleCancelEdit();
+      setEditing(false);
+      setError(null);
     } else if (!editing) {
       onClose();
     }
