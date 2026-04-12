@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import SortableChecklistItem from './SortableChecklistItem';
@@ -15,6 +15,10 @@ interface ChecklistEditorProps {
   showAddInput?: boolean;
 }
 
+function generateIds(count: number, startFrom: number): string[] {
+  return Array.from({ length: count }, (_, i) => `cl-${startFrom + i}`);
+}
+
 export default function ChecklistEditor({
   items,
   onChange,
@@ -27,21 +31,38 @@ export default function ChecklistEditor({
   const [bulkAddMode, setBulkAddMode] = useState(false);
   const [bulkAddText, setBulkAddText] = useState('');
 
+  // Stable IDs for sortable items — tracked via ref so they persist across renders
+  const nextIdCounter = useRef(items.length);
+  const stableIds = useRef<string[]>(generateIds(items.length, 0));
+
+  // Sync stable IDs when items length changes from external updates
+  if (stableIds.current.length !== items.length) {
+    if (items.length > stableIds.current.length) {
+      const newIds = generateIds(items.length - stableIds.current.length, nextIdCounter.current);
+      nextIdCounter.current += newIds.length;
+      stableIds.current = [...stableIds.current, ...newIds];
+    } else {
+      stableIds.current = stableIds.current.slice(0, items.length);
+    }
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((_, i) => `checklist-${i}` === active.id);
-      const newIndex = items.findIndex((_, i) => `checklist-${i}` === over.id);
+      const ids = stableIds.current;
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
       if (oldIndex >= 0 && newIndex >= 0) {
+        stableIds.current = arrayMove(ids, oldIndex, newIndex);
         onChange(arrayMove(items, oldIndex, newIndex));
       }
     }
-  };
+  }, [items, onChange]);
 
   const handleToggle = (idx: number) => {
     const item = items[idx];
@@ -53,16 +74,21 @@ export default function ChecklistEditor({
   };
 
   const handleRemove = (idx: number) => {
+    stableIds.current = stableIds.current.filter((_, i) => i !== idx);
     onChange(items.filter((_, i) => i !== idx));
   };
 
   const handleAddSingle = (text: string) => {
+    stableIds.current = [...stableIds.current, `cl-${nextIdCounter.current++}`];
     onChange([...items, '-[] ' + text]);
   };
 
   const handleAddBulk = (text: string) => {
     const newItems = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => '-[] ' + l);
     if (newItems.length > 0) {
+      const newIds = generateIds(newItems.length, nextIdCounter.current);
+      nextIdCounter.current += newIds.length;
+      stableIds.current = [...stableIds.current, ...newIds];
       onChange([...items, ...newItems]);
     }
   };
@@ -71,13 +97,14 @@ export default function ChecklistEditor({
     <>
       {items.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((_, i) => `checklist-${i}`)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={stableIds.current} strategy={verticalListSortingStrategy}>
             <ul className={styles.checklistEdit}>
               {items.map((item, idx) => {
                 const checked = item.startsWith('-[x]');
                 const text = item.replace(/^-\[x?\]\s*/, '');
+                const itemId = stableIds.current[idx];
                 return (
-                  <SortableChecklistItem key={`checklist-${idx}`} id={`checklist-${idx}`} disabled={disabled}>
+                  <SortableChecklistItem key={itemId} id={itemId} disabled={disabled}>
                     {showCheckboxes ? (
                       <label className={styles.checklistCheckLabel}>
                         <input type="checkbox" checked={checked} disabled={disabled}
