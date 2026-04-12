@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
@@ -14,6 +14,13 @@ interface ViewTodoItemProps {
 }
 
 type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
+
+function formatLocalDateTime(isoString?: string) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
@@ -29,13 +36,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   useEffect(() => {
     setViewChecklist(null);
   }, [todo.id]);
-
-  const formatLocalDateTime = (isoString?: string) => {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
 
   // Edit form state
   const [subject, setSubject] = useState(todo.subject);
@@ -99,7 +99,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     }
   };
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setSubject(todo.subject);
     setUrgent(todo.urgent ?? false);
     setImportant(todo.important ?? false);
@@ -111,7 +111,21 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setCategories(todo.categories || []);
     setError(null);
     setEditing(false);
-  };
+  }, [todo]);
+
+  const handleEsc = useCallback((e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    if (editing && !isSubmitting) {
+      handleCancelEdit();
+    } else if (!editing) {
+      onClose();
+    }
+  }, [editing, isSubmitting, onClose, handleCancelEdit]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [handleEsc]);
 
   if (editing) {
     return (
