@@ -199,12 +199,18 @@
   flex-shrink: 0;
 }
 
-.checklistDragHandle:hover {
+.checklistDragHandle:not(:disabled):hover {
   color: #6b7280;
 }
 
-.checklistDragHandle:active {
+.checklistDragHandle:not(:disabled):active {
   cursor: grabbing;
+}
+
+.checklistDragHandle:disabled {
+  color: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .checklistBulkAdd {

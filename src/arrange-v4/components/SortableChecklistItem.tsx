@@ -9,9 +9,10 @@ interface SortableChecklistItemProps {
   id: string;
   children: ReactNode;
   disabled?: boolean;
+  itemLabel?: string;
 }
 
-export default function SortableChecklistItem({ id, children, disabled }: SortableChecklistItemProps) {
+export default function SortableChecklistItem({ id, children, disabled, itemLabel }: SortableChecklistItemProps) {
   const {
     attributes,
     listeners,
@@ -36,7 +37,7 @@ export default function SortableChecklistItem({ id, children, disabled }: Sortab
         {...listeners}
         disabled={disabled}
         aria-disabled={disabled}
-        aria-label="Drag to reorder"
+        aria-label={itemLabel ? `Drag to reorder: ${itemLabel}` : 'Drag to reorder'}
       >
         ⠿
       </button>

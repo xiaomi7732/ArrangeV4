@@ -158,7 +158,7 @@ export default function ChecklistEditor({
                 const text = item.replace(/^-\[x?\]\s*/, '');
                 const id = renderIds[idx];
                 return (
-                  <SortableChecklistItem key={id} id={id} disabled={disabled}>
+                  <SortableChecklistItem key={id} id={id} disabled={disabled} itemLabel={text}>
                     {showCheckboxes ? (
                       <label className={styles.checklistCheckLabel}>
                         <input type="checkbox" checked={checked} disabled={disabled}
