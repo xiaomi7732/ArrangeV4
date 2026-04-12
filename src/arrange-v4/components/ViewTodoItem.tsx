@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
+import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -20,6 +21,14 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
+  // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
+  const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
+  const displayChecklist = viewChecklist ?? todo.checklist;
+
+  // Reset optimistic state when the todo changes (different item selected)
+  useEffect(() => {
+    setViewChecklist(null);
+  }, [todo.id]);
 
   const formatLocalDateTime = (isoString?: string) => {
     if (!isoString) return '';
@@ -37,7 +46,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [etaDateTime, setEtaDateTime] = useState(formatLocalDateTime(todo.etaDateTime));
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
-  const [newChecklistItem, setNewChecklistItem] = useState('');
   const [categories, setCategories] = useState<string[]>(todo.categories || []);
 
   const getQuadrantLabel = (u: boolean, i: boolean) => {
@@ -100,7 +108,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
     setChecklist(todo.checklist || []);
-    setNewChecklistItem('');
     setCategories(todo.categories || []);
     setError(null);
     setEditing(false);
@@ -215,54 +222,14 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
               <div className={styles.tabContent}>
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Checklist</label>
-                  {checklist.length > 0 && (
-                    <ul className={styles.checklistEdit}>
-                      {checklist.map((item, idx) => {
-                        const checked = item.startsWith('-[x]');
-                        const text = item.replace(/^-\[x?\]\s*/, '');
-                        return (
-                          <li key={idx} className={styles.checklistEditItem}>
-                            <label className={styles.checklistCheckLabel}>
-                              <input type="checkbox" checked={checked} disabled={isSubmitting}
-                                className={styles.checkbox}
-                                onChange={() => setChecklist(prev => prev.map((it, i) =>
-                                  i === idx ? (checked ? '-[] ' + text : '-[x] ' + text) : it
-                                ))} />
-                              <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
-                            </label>
-                            <button type="button" className={styles.checklistRemove}
-                              disabled={isSubmitting}
-                              onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
-                              ✕
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  <div className={styles.checklistAdd}>
-                    <input type="text" value={newChecklistItem}
-                      onChange={(e) => setNewChecklistItem(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && newChecklistItem.trim()) {
-                          e.preventDefault();
-                          setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                          setNewChecklistItem('');
-                        }
-                      }}
-                      placeholder="Add checklist item..."
-                      className={styles.input} disabled={isSubmitting} />
-                    <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
-                      disabled={isSubmitting || !newChecklistItem.trim()}
-                      onClick={() => {
-                        if (newChecklistItem.trim()) {
-                          setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                          setNewChecklistItem('');
-                        }
-                      }}>
-                      Add
-                    </button>
-                  </div>
+                  <ChecklistEditor
+                    items={checklist}
+                    onChange={setChecklist}
+                    disabled={isSubmitting}
+                    showCheckboxes
+                    showRemoveButton
+                    showAddInput
+                  />
                 </div>
               </div>
             )}
@@ -287,6 +254,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h2 className={styles.title}>{todo.subject}</h2>
+
+        {error && (
+          <div className={styles.error} role="alert">{error}</div>
+        )}
 
         <div className={styles.form}>
           <div className={styles.tabBar}>
@@ -375,35 +346,28 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
           {activeTab === 'checklist' && (
             <div className={styles.tabContent}>
-              {todo.checklist && todo.checklist.length > 0 ? (
+              {displayChecklist && displayChecklist.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Checklist</span>
-                  <ul className={styles.checklistEdit}>
-                    {todo.checklist.map((item, idx) => {
-                      const checked = item.startsWith('-[x]');
-                      const text = item.replace(/^-\[x?\]\s*/, '');
-                      return (
-                        <li key={idx} className={styles.checklistEditItem}>
-                          <label className={styles.checklistCheckLabel}>
-                            <input type="checkbox" checked={checked} className={styles.checkbox}
-                              onChange={async () => {
-                                const updated = [...todo.checklist!];
-                                updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
-                                setChecklistUpdating(true);
-                                try {
-                                  await onUpdate?.({ checklist: updated });
-                                } catch (err: any) {
-                                  setError(err.message || 'Failed to update checklist');
-                                } finally {
-                                  setChecklistUpdating(false);
-                                }
-                              }} disabled={!onUpdate || checklistUpdating} />
-                            <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ChecklistEditor
+                    items={displayChecklist}
+                    onChange={async (updated) => {
+                      setViewChecklist(updated);
+                      setChecklistUpdating(true);
+                      setError(null);
+                      try {
+                        await onUpdate?.({ checklist: updated });
+                      } catch (err: unknown) {
+                        setViewChecklist(null);
+                        const message = err instanceof Error ? err.message : 'Failed to update checklist';
+                        setError(message);
+                      } finally {
+                        setChecklistUpdating(false);
+                      }
+                    }}
+                    disabled={!onUpdate || checklistUpdating}
+                    showCheckboxes
+                  />
                 </div>
               ) : (
                 <p className={styles.tabPlaceholder}>No checklist items</p>
@@ -413,7 +377,9 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
           <div className={styles.actions}>
             {onUpdate && (
-              <button type="button" onClick={() => setEditing(true)}
+              <button type="button"
+                onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
+                disabled={checklistUpdating}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>

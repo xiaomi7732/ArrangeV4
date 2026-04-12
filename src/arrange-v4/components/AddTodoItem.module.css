@@ -127,7 +127,7 @@
 .checklistEditItem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 6px 10px;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
@@ -171,11 +171,62 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  flex: 1;
+  min-width: 0;
 }
 
 .checklistCheckedText {
   text-decoration: line-through;
   color: #9ca3af;
+}
+
+.checklistItemText {
+  flex: 1;
+  min-width: 0;
+}
+
+.checklistDragHandle {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: grab;
+  font-size: 1rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+  line-height: 1;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.checklistDragHandle:not(:disabled):hover {
+  color: #6b7280;
+}
+
+.checklistDragHandle:not(:disabled):active {
+  cursor: grabbing;
+}
+
+.checklistDragHandle:disabled {
+  color: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.checklistBulkAdd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checklistBulkAdd .textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.checklistBulkActions {
+  display: flex;
+  gap: 8px;
 }
 
 .input,

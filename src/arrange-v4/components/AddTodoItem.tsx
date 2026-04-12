@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/todoDataService';
+import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -39,7 +40,6 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [status, setStatus] = useState<TodoStatus>('new');
   const [remarks, setRemarks] = useState('');
   const [checklist, setChecklist] = useState<string[]>([]);
-  const [newChecklistItem, setNewChecklistItem] = useState('');
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
   const [categories, setCategories] = useState<string[]>([]);
@@ -53,7 +53,6 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setStatus('new');
     setRemarks('');
     setChecklist([]);
-    setNewChecklistItem('');
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
     setEtsDateTime(getDateTimeString());
     setCategories([]);
@@ -245,43 +244,13 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
             <div className={styles.tabContent}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Checklist</label>
-                {checklist.length > 0 && (
-                  <ul className={styles.checklistEdit}>
-                    {checklist.map((item, idx) => (
-                      <li key={idx} className={styles.checklistEditItem}>
-                        <span>{item.replace(/^-\[x?\]\s*/, '')}</span>
-                        <button type="button" className={styles.checklistRemove}
-                          disabled={isSubmitting}
-                          onClick={() => setChecklist(prev => prev.filter((_, i) => i !== idx))}>
-                          ✕
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className={styles.checklistAdd}>
-                  <input type="text" value={newChecklistItem}
-                    onChange={(e) => setNewChecklistItem(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newChecklistItem.trim()) {
-                        e.preventDefault();
-                        setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                        setNewChecklistItem('');
-                      }
-                    }}
-                    placeholder="Add checklist item..."
-                    className={styles.input} disabled={isSubmitting} />
-                  <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
-                    disabled={isSubmitting || !newChecklistItem.trim()}
-                    onClick={() => {
-                      if (newChecklistItem.trim()) {
-                        setChecklist(prev => [...prev, '-[] ' + newChecklistItem.trim()]);
-                        setNewChecklistItem('');
-                      }
-                    }}>
-                    Add
-                  </button>
-                </div>
+                <ChecklistEditor
+                  items={checklist}
+                  onChange={setChecklist}
+                  disabled={isSubmitting}
+                  showRemoveButton
+                  showAddInput
+                />
               </div>
             </div>
           )}
