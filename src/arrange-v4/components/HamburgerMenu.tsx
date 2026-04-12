@@ -41,7 +41,7 @@ export default function HamburgerMenu() {
     const savedBookId = getLastBookId();
     if (savedBookId) {
       setNavItems(BASE_NAV_ITEMS.map(item =>
-        item.matchPrefix ? { ...item, href: `/matrix?bookId=${encodeURIComponent(savedBookId)}` } : item
+        item.matchPrefix ? { ...item, href: `${item.href}?bookId=${encodeURIComponent(savedBookId)}` } : item
       ));
     } else {
       setNavItems(BASE_NAV_ITEMS);
