@@ -21,7 +21,7 @@ export function useBookId(routePrefix: string) {
   const router = useRouter();
   const bookId = searchParams.get('bookId');
 
-  const { acquireToken, isAuthenticated } = useGraphToken();
+  const { acquireToken, isAuthenticated, inProgress } = useGraphToken();
 
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function useBookId(routePrefix: string) {
 
   // Fetch calendars and validate bookId
   const fetchCalendars = useCallback(async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || inProgress !== 'none') return;
     setError(null);
     try {
       const accessToken = await acquireToken();
@@ -57,7 +57,7 @@ export function useBookId(routePrefix: string) {
       console.error('Error fetching calendars:', err);
       setError(message);
     }
-  }, [isAuthenticated, acquireToken, bookId, router]);
+  }, [isAuthenticated, inProgress, acquireToken, bookId, router]);
 
   useEffect(() => {
     fetchCalendars(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetching sets state after await

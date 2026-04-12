@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import { useMsal } from '@azure/msal-react';
+import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { loginRequest } from '@/lib/msalConfig';
 
 /**
@@ -15,11 +16,14 @@ export function useGraphToken() {
 
   const acquireToken = useCallback(async (): Promise<string> => {
     const account = accounts[0];
+    if (!account) {
+      throw new Error('No signed-in Microsoft account is available. Sign in before requesting a Microsoft Graph access token.');
+    }
     try {
       const response = await instance.acquireTokenSilent({ ...loginRequest, account });
       return response.accessToken;
     } catch (silentError: unknown) {
-      if (silentError instanceof Error && silentError.name === 'InteractionRequiredAuthError') {
+      if (silentError instanceof InteractionRequiredAuthError) {
         const response = await instance.acquireTokenPopup(loginRequest);
         return response.accessToken;
       }

@@ -170,6 +170,7 @@ function CancelledPageContent() {
                   className={styles.bookSwitcher}
                   value={bookId || ''}
                   onChange={(e) => handleCalendarSwitch(e.target.value)}
+                  disabled={loading || deleting}
                 >
                   {calendars.map(cal => (
                     <option key={cal.id} value={cal.id}>
