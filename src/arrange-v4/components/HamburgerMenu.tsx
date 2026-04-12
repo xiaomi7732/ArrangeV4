@@ -7,6 +7,8 @@ import { useMsal } from '@azure/msal-react';
 import { getLastBookId } from '@/lib/bookStorage';
 import styles from './HamburgerMenu.module.css';
 
+const version = process.env.NEXT_PUBLIC_APP_VERSION || 'local';
+
 interface NavItem {
   href: string;
   label: string;
@@ -31,6 +33,17 @@ export default function HamburgerMenu() {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const isAuthenticated = accounts.length > 0;
+
+  function isActive(item: NavItem): boolean {
+    if (item.matchPrefix) {
+      const basePath = item.href.split('?')[0];
+      return pathname.startsWith(basePath);
+    }
+    return pathname === item.href;
+  }
+
+  const currentPage = navItems.find(item => isActive(item));
+  const pageLabel = currentPage?.label || 'Arrange';
 
   const handleSignOut = () => {
     setIsOpen(false);
@@ -92,26 +105,22 @@ export default function HamburgerMenu() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  function isActive(item: NavItem): boolean {
-    if (item.matchPrefix) {
-      const basePath = item.href.split('?')[0];
-      return pathname.startsWith(basePath);
-    }
-    return pathname === item.href;
-  }
-
   return (
     <>
-      <button
-        ref={triggerRef}
-        className={styles.menuButton}
-        onClick={() => setIsOpen(true)}
-        aria-label="Open navigation menu"
-        aria-expanded={isOpen}
-        aria-controls="nav-sidebar"
-      >
-        ☰
-      </button>
+      <header className={styles.topBar}>
+        <button
+          ref={triggerRef}
+          className={styles.menuButton}
+          onClick={() => setIsOpen(true)}
+          aria-label="Open navigation menu"
+          aria-expanded={isOpen}
+          aria-controls="nav-sidebar"
+        >
+          ☰
+        </button>
+        <span className={styles.pageLabel}>{pageLabel}</span>
+        <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>
+      </header>
 
       {isOpen && (
         <>
