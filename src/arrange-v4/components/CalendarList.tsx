@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar } from '@/lib/graphService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
@@ -15,7 +15,37 @@ interface CalendarListProps {
 
 export default function CalendarList({ calendars, loading, error, onDeleteCalendar }: CalendarListProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [dismissResetKey, setDismissResetKey] = useState(0);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const router = useRouter();
+
+  // Auto-dismiss confirmation after 5 seconds of inactivity
+  useEffect(() => {
+    if (!confirmingId || deletingId === confirmingId) return;
+    const savedId = confirmingId;
+    const timer = setTimeout(() => {
+      setConfirmingId(null);
+      // Defer focus restoration until delete button remounts
+      requestAnimationFrame(() => {
+        const btn = deleteButtonRefs.current.get(savedId);
+        if (btn) btn.focus();
+      });
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [confirmingId, deletingId, dismissResetKey]);
+
+  const resetDismissTimer = useCallback(() => {
+    setDismissResetKey(k => k + 1);
+  }, []);
+
+  // Move focus to the Confirm Delete button when confirmation row appears
+  useEffect(() => {
+    if (confirmingId) {
+      confirmButtonRef.current?.focus();
+    }
+  }, [confirmingId]);
 
   const handleCalendarClick = (calendar: Calendar) => {
     if (calendar.id) {
@@ -23,13 +53,8 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     }
   };
 
-  const handleDelete = async (calendar: Calendar) => {
+  const handleDelete = useCallback(async (calendar: Calendar) => {
     if (!calendar.id) return;
-    
-    const displayName = getCalendarDisplayName(calendar);
-    if (!confirm(`Are you sure you want to delete "${displayName}"?`)) {
-      return;
-    }
 
     setDeletingId(calendar.id);
     try {
@@ -38,9 +63,18 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
       console.error('Failed to delete book:', error);
       alert('Failed to delete book. Please try again.');
     } finally {
+      const calId = calendar.id;
       setDeletingId(null);
+      setConfirmingId(prev => prev === calId ? null : prev);
+      // Defer focus restoration until delete button remounts after confirmation row unmounts
+      if (calId) {
+        requestAnimationFrame(() => {
+          const btn = deleteButtonRefs.current.get(calId);
+          if (btn) btn.focus();
+        });
+      }
     }
-  };
+  }, [onDeleteCalendar]);
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -130,13 +164,56 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
               </p>
             )}
             <div className={styles.calendarFooter}>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(calendar); }}
-                disabled={deletingId === calendar.id}
-                className={styles.deleteButton}
-              >
-                {deletingId === calendar.id ? 'Deleting...' : 'Delete Book'}
-              </button>
+              {calendar.id && (() => {
+                const bookName = getCalendarDisplayName(calendar);
+                const bookId = calendar.id;
+                return confirmingId === bookId ? (
+                  <div
+                    className={styles.deleteConfirmRow}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseMove={resetDismissTimer}
+                    onFocus={resetDismissTimer}
+                  >
+                    <button
+                      onClick={() => {
+                        setConfirmingId(null);
+                        requestAnimationFrame(() => {
+                          const btn = deleteButtonRefs.current.get(bookId);
+                          if (btn) btn.focus();
+                        });
+                      }}
+                      disabled={!!deletingId}
+                      className={styles.deleteCancelButton}
+                      aria-label={`Cancel deleting ${bookName}`}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      ref={confirmingId === bookId ? confirmButtonRef : undefined}
+                      onClick={() => handleDelete(calendar)}
+                      disabled={!!deletingId}
+                      className={styles.deleteConfirmButton}
+                      aria-label={`Confirm delete ${bookName}`}
+                    >
+                      {deletingId === bookId ? 'Deleting...' : 'Confirm Delete'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    ref={(el) => {
+                      if (el && bookId) deleteButtonRefs.current.set(bookId, el);
+                      else if (!el && bookId) deleteButtonRefs.current.delete(bookId);
+                    }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmingId(bookId ?? null); }}
+                    disabled={!!deletingId}
+                    className={styles.deleteButton}
+                    aria-label={`Delete ${bookName}`}
+                  >
+                    🗑 Delete
+                  </button>
+                );
+              })()}
             </div>
           </div>
         ))}
