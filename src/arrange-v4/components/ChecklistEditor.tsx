@@ -192,6 +192,7 @@ export default function ChecklistEditor({
                 value={bulkAddText}
                 onChange={(e) => setBulkAddText(e.target.value)}
                 placeholder="Enter one item per line..."
+                aria-label="Bulk add checklist items"
                 className={styles.textarea}
                 disabled={disabled}
                 rows={4}
@@ -224,6 +225,7 @@ export default function ChecklistEditor({
                   }
                 }}
                 placeholder="Add checklist item..."
+                aria-label="Add checklist item"
                 className={styles.input} disabled={disabled} />
               <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
                 disabled={disabled || !newChecklistItem.trim()}
