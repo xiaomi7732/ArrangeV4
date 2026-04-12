@@ -16,22 +16,22 @@ interface AddTodoItemProps {
   availableCategories?: string[];
 }
 
+// Helper function to format datetime for input (accepts optional hours offset)
+function getDateTimeString(hoursOffset: number = 0) {
+  const now = new Date();
+  now.setHours(now.getHours() + hoursOffset);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Helper function to format datetime for input (accepts optional hours offset)
-  const getDateTimeString = (hoursOffset: number = 0) => {
-    const now = new Date();
-    now.setHours(now.getHours() + hoursOffset);
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
 
   // Form state
   const [subject, setSubject] = useState('');

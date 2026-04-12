@@ -15,6 +15,13 @@ interface ViewTodoItemProps {
 
 type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
 
+function formatLocalDateTime(isoString?: string) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,13 +36,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   useEffect(() => {
     setViewChecklist(null);
   }, [todo.id]);
-
-  const formatLocalDateTime = (isoString?: string) => {
-    if (!isoString) return '';
-    const d = new Date(isoString);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
 
   // Edit form state
   const [subject, setSubject] = useState(todo.subject);

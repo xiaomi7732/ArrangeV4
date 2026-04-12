@@ -40,7 +40,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented && !busy) onClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -147,7 +147,7 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleRename();
-                      if (e.key === 'Escape') setRenamingTag(null);
+                      if (e.key === 'Escape') { e.preventDefault(); setRenamingTag(null); }
                     }}
                     disabled={busy}
                     autoFocus
