@@ -21,6 +21,9 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
+  // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
+  const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
+  const displayChecklist = viewChecklist ?? todo.checklist;
 
   const formatLocalDateTime = (isoString?: string) => {
     if (!isoString) return '';
@@ -334,16 +337,18 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
           {activeTab === 'checklist' && (
             <div className={styles.tabContent}>
-              {todo.checklist && todo.checklist.length > 0 ? (
+              {displayChecklist && displayChecklist.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Checklist</span>
                   <ChecklistEditor
-                    items={todo.checklist}
+                    items={displayChecklist}
                     onChange={async (updated) => {
+                      setViewChecklist(updated);
                       setChecklistUpdating(true);
                       try {
                         await onUpdate?.({ checklist: updated });
                       } catch (err: unknown) {
+                        setViewChecklist(null);
                         const message = err instanceof Error ? err.message : 'Failed to update checklist';
                         setError(message);
                       } finally {
