@@ -37,7 +37,9 @@ export default function ChecklistEditor({
     if (over && active.id !== over.id) {
       const oldIndex = items.findIndex((_, i) => `checklist-${i}` === active.id);
       const newIndex = items.findIndex((_, i) => `checklist-${i}` === over.id);
-      onChange(arrayMove(items, oldIndex, newIndex));
+      if (oldIndex >= 0 && newIndex >= 0) {
+        onChange(arrayMove(items, oldIndex, newIndex));
+      }
     }
   };
 
@@ -123,6 +125,7 @@ export default function ChecklistEditor({
                   Add All
                 </button>
                 <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
+                  disabled={disabled}
                   onClick={() => { setBulkAddMode(false); setBulkAddText(''); }}>
                   Single Mode
                 </button>

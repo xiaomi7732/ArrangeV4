@@ -33,7 +33,8 @@ export default function SortableChecklistItem({ id, children, disabled }: Sortab
         className={styles.checklistDragHandle}
         {...attributes}
         {...listeners}
-        tabIndex={-1}
+        disabled={disabled}
+        aria-disabled={disabled}
         aria-label="Drag to reorder"
       >
         ⠿
