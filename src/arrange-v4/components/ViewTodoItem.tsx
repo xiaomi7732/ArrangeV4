@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
@@ -24,6 +24,11 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
   const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
   const displayChecklist = viewChecklist ?? todo.checklist;
+
+  // Reset optimistic state when the todo changes (different item selected)
+  useEffect(() => {
+    setViewChecklist(null);
+  }, [todo.id]);
 
   const formatLocalDateTime = (isoString?: string) => {
     if (!isoString) return '';
@@ -371,7 +376,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
           <div className={styles.actions}>
             {onUpdate && (
-              <button type="button" onClick={() => setEditing(true)}
+              <button type="button" onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>
