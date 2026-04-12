@@ -40,6 +40,14 @@
   color: #9ca3af;
   pointer-events: none;
   user-select: none;
+  flex-shrink: 0;
+}
+
+.topBarActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .overlay {

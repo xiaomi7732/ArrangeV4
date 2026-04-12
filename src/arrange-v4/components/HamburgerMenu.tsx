@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { getLastBookId } from '@/lib/bookStorage';
+import { useTopBarActions } from './TopBarProvider';
 import styles from './HamburgerMenu.module.css';
 
 const version = process.env.NEXT_PUBLIC_APP_VERSION || 'local';
@@ -31,6 +32,7 @@ export default function HamburgerMenu() {
   const { instance, accounts } = useMsal();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const { actions: topBarActions } = useTopBarActions();
 
   const isAuthenticated = accounts.length > 0;
 
@@ -119,6 +121,9 @@ export default function HamburgerMenu() {
           ☰
         </button>
         <span className={styles.pageLabel}>{pageLabel}</span>
+        {topBarActions && (
+          <div className={styles.topBarActions}>{topBarActions}</div>
+        )}
         <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>
       </header>
 
