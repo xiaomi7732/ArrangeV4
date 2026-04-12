@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/todoDataService';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
@@ -46,7 +46,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   type AddTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
   const [activeTab, setActiveTab] = useState<AddTab>('essentials');
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setSubject('');
     setUrgent(defaultUrgent);
     setImportant(defaultImportant);
@@ -58,7 +58,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setCategories([]);
     setActiveTab('essentials');
     setError(null);
-  };
+  }, [defaultUrgent, defaultImportant]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,12 +116,13 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isSubmitting) {
+        resetForm();
         setIsOpen(false);
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, isSubmitting]);
+  }, [isOpen, isSubmitting, resetForm]);
 
   if (!isOpen) {
     return (

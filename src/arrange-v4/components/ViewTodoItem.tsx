@@ -99,7 +99,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     }
   };
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setSubject(todo.subject);
     setUrgent(todo.urgent ?? false);
     setImportant(todo.important ?? false);
@@ -111,17 +111,16 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setCategories(todo.categories || []);
     setError(null);
     setEditing(false);
-  };
+  }, [todo]);
 
   const handleEsc = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     if (editing && !isSubmitting) {
-      setEditing(false);
-      setError(null);
+      handleCancelEdit();
     } else if (!editing) {
       onClose();
     }
-  }, [editing, isSubmitting, onClose]);
+  }, [editing, isSubmitting, onClose, handleCancelEdit]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleEsc);
