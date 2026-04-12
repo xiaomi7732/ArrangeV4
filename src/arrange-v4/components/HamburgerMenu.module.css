@@ -43,7 +43,18 @@
   flex-shrink: 0;
 }
 
-.topBarActions {
+.topBarLeft {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.topBarSpacer {
+  flex: 1;
+}
+
+.topBarRight {
   display: flex;
   gap: 6px;
   align-items: center;

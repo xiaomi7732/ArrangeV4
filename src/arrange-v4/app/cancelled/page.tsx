@@ -71,48 +71,46 @@ function CancelledPageContent() {
   };
 
   useSetTopBarActions(
-    <>
-      {calendars.length > 1 && (
-        <select
-          className={styles.bookSwitcher}
-          value={bookId || ''}
-          onChange={(e) => handleCalendarSwitch(e.target.value)}
-          disabled={loading || deleting}
-        >
-          {calendars.map(cal => (
-            <option key={cal.id} value={cal.id}>
-              {getCalendarDisplayName(cal)}
-            </option>
-          ))}
-        </select>
-      )}
-      {!isAuthenticated ? (
+    calendars.length > 1 ? (
+      <select
+        className={styles.bookSwitcher}
+        value={bookId || ''}
+        onChange={(e) => handleCalendarSwitch(e.target.value)}
+        disabled={loading || deleting}
+      >
+        {calendars.map(cal => (
+          <option key={cal.id} value={cal.id}>
+            {getCalendarDisplayName(cal)}
+          </option>
+        ))}
+      </select>
+    ) : null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
         <button
-          onClick={handleLogin}
-          disabled={inProgress !== 'none'}
-          className={`${styles.button} ${styles.buttonPrimary}`}
+          onClick={handleDeleteSelected}
+          disabled={loading || selectedIds.size === 0 || deleting}
+          className={`${styles.button} ${styles.buttonDanger}`}
         >
-          {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+          Delete ({selectedIds.size})
         </button>
-      ) : (
-        <>
-          <button
-            onClick={handleDeleteSelected}
-            disabled={loading || selectedIds.size === 0 || deleting}
-            className={`${styles.button} ${styles.buttonDanger}`}
-          >
-            Delete ({selectedIds.size})
-          </button>
-          <button
-            onClick={fetchEvents}
-            disabled={loading}
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
-            {loading ? '...' : '↻'}
-          </button>
-        </>
-      )}
-    </>,
+        <button
+          onClick={fetchEvents}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </>
+    ),
     [isAuthenticated, inProgress, loading, deleting, bookId, calendars, selectedIds.size],
   );
 

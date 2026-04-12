@@ -3,39 +3,51 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface TopBarContextType {
-  actions: ReactNode;
-  setActions: (actions: ReactNode) => void;
+  leftActions: ReactNode;
+  setLeftActions: (actions: ReactNode) => void;
+  rightActions: ReactNode;
+  setRightActions: (actions: ReactNode) => void;
 }
 
 const TopBarContext = createContext<TopBarContextType>({
-  actions: null,
-  setActions: () => {},
+  leftActions: null,
+  setLeftActions: () => {},
+  rightActions: null,
+  setRightActions: () => {},
 });
 
 /**
  * Hook for pages to inject action buttons into the shared top bar.
- * Call setActions in a useEffect and clean up on unmount.
  */
 export function useTopBarActions() {
   return useContext(TopBarContext);
 }
 
 /**
- * Convenience hook that sets actions on mount and clears on unmount.
+ * Convenience hook that sets left and right actions on mount and clears on unmount.
  */
-export function useSetTopBarActions(actions: ReactNode, deps: unknown[]) {
-  const { setActions } = useTopBarActions();
+export function useSetTopBarActions(
+  leftActions: ReactNode,
+  rightActions: ReactNode,
+  deps: unknown[],
+) {
+  const { setLeftActions, setRightActions } = useTopBarActions();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setActions(actions);
-    return () => setActions(null);
+    setLeftActions(leftActions);
+    setRightActions(rightActions);
+    return () => {
+      setLeftActions(null);
+      setRightActions(null);
+    };
   }, deps);
 }
 
 export function TopBarProvider({ children }: { children: ReactNode }) {
-  const [actions, setActions] = useState<ReactNode>(null);
+  const [leftActions, setLeftActions] = useState<ReactNode>(null);
+  const [rightActions, setRightActions] = useState<ReactNode>(null);
   return (
-    <TopBarContext.Provider value={{ actions, setActions }}>
+    <TopBarContext.Provider value={{ leftActions, setLeftActions, rightActions, setRightActions }}>
       {children}
     </TopBarContext.Provider>
   );

@@ -32,7 +32,7 @@ export default function HamburgerMenu() {
   const { instance, accounts } = useMsal();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const { actions: topBarActions } = useTopBarActions();
+  const { leftActions, rightActions } = useTopBarActions();
 
   const isAuthenticated = accounts.length > 0;
 
@@ -121,8 +121,12 @@ export default function HamburgerMenu() {
           ☰
         </button>
         <span className={styles.pageLabel}>{pageLabel}</span>
-        {topBarActions && (
-          <div className={styles.topBarActions}>{topBarActions}</div>
+        {leftActions && (
+          <div className={styles.topBarLeft}>{leftActions}</div>
+        )}
+        <div className={styles.topBarSpacer} />
+        {rightActions && (
+          <div className={styles.topBarRight}>{rightActions}</div>
         )}
         <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>
       </header>

@@ -144,41 +144,39 @@ function ScrumPageContent() {
   };
 
   useSetTopBarActions(
-    <>
-      {calendars.length > 1 && (
-        <select
-          className={styles.bookSwitcher}
-          value={bookId || ''}
-          onChange={(e) => handleCalendarSwitch(e.target.value)}
-        >
-          {calendars.map(cal => (
-            <option key={cal.id} value={cal.id}>
-              {getCalendarDisplayName(cal)}
-            </option>
-          ))}
-        </select>
-      )}
-      {!isAuthenticated ? (
+    calendars.length > 1 ? (
+      <select
+        className={styles.bookSwitcher}
+        value={bookId || ''}
+        onChange={(e) => handleCalendarSwitch(e.target.value)}
+      >
+        {calendars.map(cal => (
+          <option key={cal.id} value={cal.id}>
+            {getCalendarDisplayName(cal)}
+          </option>
+        ))}
+      </select>
+    ) : null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
+        <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
-          onClick={handleLogin}
-          disabled={inProgress !== 'none'}
-          className={`${styles.button} ${styles.buttonPrimary}`}
+          onClick={fetchEvents}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+          {loading ? 'Loading...' : 'Refresh'}
         </button>
-      ) : (
-        <>
-          <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
-          <button
-            onClick={fetchEvents}
-            disabled={loading}
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
-            {loading ? '...' : '↻'}
-          </button>
-        </>
-      )}
-    </>,
+      </>
+    ),
     [isAuthenticated, inProgress, loading, bookId, calendars, allCategories],
   );
 

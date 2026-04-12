@@ -85,37 +85,36 @@ export default function BooksPage() {
   }, [isAuthenticated, inProgress]);
 
   useSetTopBarActions(
-    <>
-      {!isAuthenticated ? (
+    null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
+        <CreateCalendar
+          onCreateCalendar={handleCreateCalendar}
+          disabled={loading}
+        />
         <button
-          onClick={handleLogin}
-          disabled={inProgress !== 'none'}
-          className={`${styles.button} ${styles.buttonPrimary}`}
+          onClick={fetchCalendars}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+          {loading ? 'Loading...' : 'Refresh'}
         </button>
-      ) : (
-        <>
-          <CreateCalendar
-            onCreateCalendar={handleCreateCalendar}
-            disabled={loading}
-          />
-          <button
-            onClick={fetchCalendars}
-            disabled={loading}
-            className={`${styles.button} ${styles.buttonSecondary}`}
-          >
-            {loading ? '...' : '↻'}
-          </button>
-          <button
-            onClick={handleLogout}
-            className={`${styles.button} ${styles.buttonDanger}`}
-          >
-            Sign Out
-          </button>
-        </>
-      )}
-    </>,
+        <button
+          onClick={handleLogout}
+          className={`${styles.button} ${styles.buttonDanger}`}
+        >
+          Sign Out
+        </button>
+      </>
+    ),
     [isAuthenticated, inProgress, loading],
   );
 
