@@ -354,7 +354,13 @@ function CancelledPageContent() {
 
 export default function CancelledPage() {
   return (
-    <Suspense>
+    <Suspense fallback={
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <div className={styles.loading}><div className={styles.spinner}></div></div>
+        </div>
+      </div>
+    }>
       <CancelledPageContent />
     </Suspense>
   );
