@@ -18,12 +18,12 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const router = useRouter();
 
-  // Auto-dismiss confirmation after 5 seconds
+  // Auto-dismiss confirmation after 5 seconds, but keep it visible while deletion is in progress
   useEffect(() => {
-    if (!confirmingId) return;
+    if (!confirmingId || deletingId === confirmingId) return;
     const timer = setTimeout(() => setConfirmingId(null), 5000);
     return () => clearTimeout(timer);
-  }, [confirmingId]);
+  }, [confirmingId, deletingId]);
 
   const handleCalendarClick = (calendar: Calendar) => {
     if (calendar.id) {
