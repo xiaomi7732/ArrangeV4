@@ -34,16 +34,34 @@ export default function ChecklistEditor({
   // Stable IDs for sortable items — tracked via ref so they persist across renders
   const nextIdCounter = useRef(items.length);
   const stableIds = useRef<string[]>(generateIds(items.length, 0));
+  const prevItems = useRef<string[]>(items);
 
-  // Sync stable IDs when items length changes from external updates
-  if (stableIds.current.length !== items.length) {
-    if (items.length > stableIds.current.length) {
-      const newIds = generateIds(items.length - stableIds.current.length, nextIdCounter.current);
-      nextIdCounter.current += newIds.length;
-      stableIds.current = [...stableIds.current, ...newIds];
+  // Reconcile stable IDs when items change externally (reorder, rollback, add, remove)
+  if (prevItems.current !== items) {
+    if (items.length === stableIds.current.length) {
+      // Same length but possibly reordered — reconcile by matching content
+      const oldItems = prevItems.current;
+      const oldIds = stableIds.current;
+      const usedIndices = new Set<number>();
+      const newIds: string[] = [];
+      for (const item of items) {
+        const matchIdx = oldItems.findIndex((old, i) => old === item && !usedIndices.has(i));
+        if (matchIdx >= 0) {
+          usedIndices.add(matchIdx);
+          newIds.push(oldIds[matchIdx]);
+        } else {
+          newIds.push(`cl-${nextIdCounter.current++}`);
+        }
+      }
+      stableIds.current = newIds;
+    } else if (items.length > stableIds.current.length) {
+      const added = generateIds(items.length - stableIds.current.length, nextIdCounter.current);
+      nextIdCounter.current += added.length;
+      stableIds.current = [...stableIds.current, ...added];
     } else {
       stableIds.current = stableIds.current.slice(0, items.length);
     }
+    prevItems.current = items;
   }
 
   const sensors = useSensors(

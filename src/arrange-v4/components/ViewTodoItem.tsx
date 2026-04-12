@@ -250,6 +250,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h2 className={styles.title}>{todo.subject}</h2>
 
+        {error && (
+          <div className={styles.error} role="alert">{error}</div>
+        )}
+
         <div className={styles.form}>
           <div className={styles.tabBar}>
             <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
