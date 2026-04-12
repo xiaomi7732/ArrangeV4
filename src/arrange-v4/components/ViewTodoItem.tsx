@@ -354,6 +354,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                     onChange={async (updated) => {
                       setViewChecklist(updated);
                       setChecklistUpdating(true);
+                      setError(null);
                       try {
                         await onUpdate?.({ checklist: updated });
                       } catch (err: unknown) {
