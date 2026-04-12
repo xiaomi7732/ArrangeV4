@@ -198,7 +198,7 @@
   font-size: 0.8rem;
 }
 
-.deleteCancelButton:hover {
+.deleteCancelButton:hover:not(:disabled) {
   background-color: #e5e7eb;
 }
 

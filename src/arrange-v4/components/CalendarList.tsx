@@ -17,12 +17,18 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const router = useRouter();
 
   // Auto-dismiss confirmation after 5 seconds, but keep it visible while deletion is in progress
   useEffect(() => {
     if (!confirmingId || deletingId === confirmingId) return;
-    const timer = setTimeout(() => setConfirmingId(null), 5000);
+    const timer = setTimeout(() => {
+      setConfirmingId(null);
+      // Restore focus to the delete button after auto-dismiss
+      const btn = deleteButtonRefs.current.get(confirmingId);
+      if (btn) requestAnimationFrame(() => btn.focus());
+    }, 5000);
     return () => clearTimeout(timer);
   }, [confirmingId, deletingId]);
 
@@ -150,8 +156,12 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     <button
-                      onClick={() => setConfirmingId(null)}
-                      disabled={deletingId === calendar.id}
+                      onClick={() => {
+                        setConfirmingId(null);
+                        const btn = deleteButtonRefs.current.get(calendar.id!);
+                        if (btn) requestAnimationFrame(() => btn.focus());
+                      }}
+                      disabled={!!deletingId}
                       className={styles.deleteCancelButton}
                     >
                       Cancel
@@ -159,7 +169,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                     <button
                       ref={confirmingId === calendar.id ? confirmButtonRef : undefined}
                       onClick={() => handleDelete(calendar)}
-                      disabled={deletingId === calendar.id}
+                      disabled={!!deletingId}
                       className={styles.deleteConfirmButton}
                     >
                       {deletingId === calendar.id ? 'Deleting...' : 'Confirm Delete'}
@@ -167,8 +177,9 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                   </div>
                 ) : (
                   <button
+                    ref={(el) => { if (el && calendar.id) deleteButtonRefs.current.set(calendar.id, el); }}
                     onClick={(e) => { e.stopPropagation(); setConfirmingId(calendar.id ?? null); }}
-                    disabled={deletingId === calendar.id}
+                    disabled={!!deletingId}
                     className={styles.deleteButton}
                   >
                     🗑 Delete
