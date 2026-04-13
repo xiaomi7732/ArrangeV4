@@ -6,6 +6,7 @@ import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useSetTopBarActions } from '@/components/TopBarProvider';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -55,6 +56,64 @@ function CancelledPageContent() {
     }
   }, [isAuthenticated, inProgress, bookId, fetchEvents]);
 
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    setShowConfirm(true);
+  };
+
+  const handleLogin = async () => {
+    try {
+      await graphLogin();
+    } catch (err) {
+      console.error('Login failed:', err);
+      setError('Login failed. Please try again.');
+    }
+  };
+
+  useSetTopBarActions(
+    calendars.length > 1 ? (
+      <select
+        className={styles.bookSwitcher}
+        value={bookId || ''}
+        onChange={(e) => handleCalendarSwitch(e.target.value)}
+        disabled={loading || deleting}
+      >
+        {calendars.map(cal => (
+          <option key={cal.id} value={cal.id}>
+            {getCalendarDisplayName(cal)}
+          </option>
+        ))}
+      </select>
+    ) : null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
+        <button
+          onClick={handleDeleteSelected}
+          disabled={loading || selectedIds.size === 0 || deleting}
+          className={`${styles.button} ${styles.buttonDanger}`}
+        >
+          Delete ({selectedIds.size})
+        </button>
+        <button
+          onClick={fetchEvents}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </>
+    ),
+    [isAuthenticated, inProgress, loading, deleting, bookId, calendars, selectedIds.size],
+  );
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -69,11 +128,6 @@ function CancelledPageContent() {
     } else {
       setSelectedIds(new Set(cancelledItems.filter(t => t.id).map(t => t.id!)));
     }
-  };
-
-  const handleDeleteSelected = () => {
-    if (selectedIds.size === 0) return;
-    setShowConfirm(true);
   };
 
   // Focus the confirm button when the dialog appears
@@ -137,15 +191,6 @@ function CancelledPageContent() {
     }
   };
 
-  const handleLogin = async () => {
-    try {
-      await graphLogin();
-    } catch (err) {
-      console.error('Login failed:', err);
-      setError('Login failed. Please try again.');
-    }
-  };
-
   if (!bookId) {
     return (
       <div className={styles.container}>
@@ -161,58 +206,6 @@ function CancelledPageContent() {
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
-        <div className={styles.card}>
-          <div className={styles.header}>
-            <div className={styles.headerInfo}>
-              <h1 className={styles.title}>Cancelled Tasks</h1>
-              {calendars.length > 1 ? (
-                <select
-                  className={styles.bookSwitcher}
-                  value={bookId || ''}
-                  onChange={(e) => handleCalendarSwitch(e.target.value)}
-                  disabled={loading || deleting}
-                >
-                  {calendars.map(cal => (
-                    <option key={cal.id} value={cal.id}>
-                      {getCalendarDisplayName(cal)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className={styles.subtitle}>{currentCalendarName}</p>
-              )}
-            </div>
-            <div className={styles.actions}>
-              {!isAuthenticated ? (
-                <button
-                  onClick={handleLogin}
-                  disabled={inProgress !== 'none'}
-                  className={`${styles.button} ${styles.buttonPrimary}`}
-                >
-                  {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={handleDeleteSelected}
-                    disabled={loading || selectedIds.size === 0 || deleting}
-                    className={`${styles.button} ${styles.buttonDanger}`}
-                  >
-                    Delete Selected ({selectedIds.size})
-                  </button>
-                  <button
-                    onClick={fetchEvents}
-                    disabled={loading}
-                    className={`${styles.button} ${styles.buttonSecondary}`}
-                  >
-                    {loading ? 'Loading...' : 'Refresh'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
         {displayError && (
           <div className={styles.error} role="alert">
             <span className={styles.errorTitle}>Error: </span>

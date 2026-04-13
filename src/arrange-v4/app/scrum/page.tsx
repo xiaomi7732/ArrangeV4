@@ -6,6 +6,7 @@ import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, ST
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -132,6 +133,52 @@ function ScrumPageContent() {
       throw new Error(message);
     }
   };
+
+  const handleLogin = async () => {
+    try {
+      await graphLogin();
+    } catch (err) {
+      console.error('Login failed:', err);
+      setError('Login failed. Please try again.');
+    }
+  };
+
+  useSetTopBarActions(
+    calendars.length > 1 ? (
+      <select
+        className={styles.bookSwitcher}
+        value={bookId || ''}
+        onChange={(e) => handleCalendarSwitch(e.target.value)}
+      >
+        {calendars.map(cal => (
+          <option key={cal.id} value={cal.id}>
+            {getCalendarDisplayName(cal)}
+          </option>
+        ))}
+      </select>
+    ) : null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
+        <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
+        <button
+          onClick={fetchEvents}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </>
+    ),
+    [isAuthenticated, inProgress, loading, bookId, calendars, allCategories],
+  );
 
   const handleDragStart = (todo: TodoItem & { id?: string }) => {
     setDraggedItem(todo);
@@ -291,15 +338,6 @@ function ScrumPageContent() {
     );
   };
 
-  const handleLogin = async () => {
-    try {
-      await graphLogin();
-    } catch (err) {
-      console.error('Login failed:', err);
-      setError('Login failed. Please try again.');
-    }
-  };
-
   if (!bookId) {
     return (
       <div className={styles.container}>
@@ -315,51 +353,6 @@ function ScrumPageContent() {
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
-        <div className={styles.card}>
-          <div className={styles.header}>
-            <div className={styles.headerInfo}>
-              <h1 className={styles.title}>Scrum Board</h1>
-              {calendars.length > 1 ? (
-                <select
-                  className={styles.bookSwitcher}
-                  value={bookId || ''}
-                  onChange={(e) => handleCalendarSwitch(e.target.value)}
-                >
-                  {calendars.map(cal => (
-                    <option key={cal.id} value={cal.id}>
-                      {getCalendarDisplayName(cal)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className={styles.subtitle}>{currentCalendarName}</p>
-              )}
-            </div>
-            <div className={styles.actions}>
-              {!isAuthenticated ? (
-                <button
-                  onClick={handleLogin}
-                  disabled={inProgress !== 'none'}
-                  className={`${styles.button} ${styles.buttonPrimary}`}
-                >
-                  {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
-                </button>
-              ) : (
-                <>
-                  <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
-                  <button
-                    onClick={fetchEvents}
-                    disabled={loading}
-                    className={`${styles.button} ${styles.buttonSecondary}`}
-                  >
-                    {loading ? 'Loading...' : 'Refresh'}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
         {displayError && (
           <div className={styles.error} role="alert">
             <span className={styles.errorTitle}>Error: </span>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
 import { filterArrangeCalendars } from '@/lib/calendarUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useSetTopBarActions } from '@/components/TopBarProvider';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
 import styles from './page.module.css';
@@ -83,56 +84,49 @@ export default function BooksPage() {
     }
   }, [isAuthenticated, inProgress]);
 
+  useSetTopBarActions(
+    null,
+    !isAuthenticated ? (
+      <button
+        onClick={handleLogin}
+        disabled={inProgress !== 'none'}
+        className={`${styles.button} ${styles.buttonPrimary}`}
+      >
+        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+      </button>
+    ) : (
+      <>
+        <CreateCalendar
+          onCreateCalendar={handleCreateCalendar}
+          disabled={loading}
+        />
+        <button
+          onClick={fetchCalendars}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+        <button
+          onClick={handleLogout}
+          className={`${styles.button} ${styles.buttonDanger}`}
+        >
+          Sign Out
+        </button>
+      </>
+    ),
+    [isAuthenticated, inProgress, loading],
+  );
+
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
-        <div className={styles.card}>
-          <div className={styles.header}>
-            <div>
-              <h1 className={styles.title}>My Books</h1>
-              {userName && (
-                <p className={styles.welcome}>Welcome, {userName}</p>
-              )}
-            </div>
-            <div className={styles.actions}>
-              {!isAuthenticated ? (
-                <button
-                  onClick={handleLogin}
-                  disabled={inProgress !== 'none'}
-                  className={`${styles.button} ${styles.buttonPrimary}`}
-                >
-                  {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
-                </button>
-              ) : (
-                <>
-                  <CreateCalendar 
-                    onCreateCalendar={handleCreateCalendar}
-                    disabled={loading}
-                  />
-                  <button
-                    onClick={fetchCalendars}
-                    disabled={loading}
-                    className={`${styles.button} ${styles.buttonSecondary}`}
-                  >
-                    {loading ? 'Loading...' : 'Refresh'}
-                  </button>
-                  <button
-                    onClick={handleLogout}
-                    className={`${styles.button} ${styles.buttonDanger}`}
-                  >
-                    Sign Out
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
         {isAuthenticated ? (
           <>
             <div className={styles.instructions}>
               <p className={styles.instructionsText}>
-                A <strong>book</strong> is where your tasks live. Pick a book below to open its Eisenhower Matrix, or create a new one to get started.
+                {userName && <><strong>{userName}</strong> — </>}
+                Pick a book below to open its Eisenhower Matrix, or create a new one to get started.
               </p>
             </div>
             <div className={styles.card}>
