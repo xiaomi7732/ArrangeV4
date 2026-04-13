@@ -275,7 +275,12 @@ function CancelledPageContent() {
                             {todo.etaDateTime && (() => {
                               const eta = formatRelativeDate(todo.etaDateTime);
                               return (
-                                <span title={`ETA: ${eta.fullDate}`}>ETA: {eta.text}</span>
+                                <span
+                                  title={`ETA: ${eta.fullDate}`}
+                                  style={eta.isOverdue ? { color: '#dc2626', fontWeight: 600 } : undefined}
+                                >
+                                  ETA: {eta.text}
+                                </span>
                               );
                             })()}
                           </div>

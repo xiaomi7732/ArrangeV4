@@ -624,6 +624,7 @@
 
 .todoDateOverdue:hover {
   color: #b91c1c;
+  border-bottom-color: #fca5a5;
 }
 
 .todoDateSep {
