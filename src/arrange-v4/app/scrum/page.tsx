@@ -376,13 +376,13 @@ function ScrumPageContent() {
                 {allCategories.length > 0 && (
                   <div className={styles.comboButton}>
                     <button
-                      className={`${styles.comboButtonMain} ${styles.filterToggle}`}
+                      className={styles.comboButtonMain}
                       onClick={() => setShowTags(prev => !prev)}
                     >
                       {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                     </button>
                     <button
-                      className={`${styles.comboButtonAction} ${styles.filterToggle}`}
+                      className={styles.comboButtonAction}
                       onClick={() => setShowManageTags(true)}
                       title="Manage tags"
                       aria-label="Manage tags"
