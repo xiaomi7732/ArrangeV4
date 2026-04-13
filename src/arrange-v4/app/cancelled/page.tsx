@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { getAllCalendarEvents } from '@/lib/graphService';
 import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
+import { formatRelativeDate } from '@/lib/dateUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -271,9 +272,17 @@ function CancelledPageContent() {
                             {todo.etsDateTime && (
                               <span>ETS: {new Date(todo.etsDateTime).toLocaleDateString()}</span>
                             )}
-                            {todo.etaDateTime && (
-                              <span>ETA: {new Date(todo.etaDateTime).toLocaleDateString()}</span>
-                            )}
+                            {todo.etaDateTime && (() => {
+                              const eta = formatRelativeDate(todo.etaDateTime);
+                              return (
+                                <span
+                                  title={`ETA: ${eta.fullDate}`}
+                                  style={eta.isOverdue ? { color: '#dc2626', fontWeight: 600 } : undefined}
+                                >
+                                  ETA: {eta.text}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                         {todo.categories && todo.categories.length > 0 && (

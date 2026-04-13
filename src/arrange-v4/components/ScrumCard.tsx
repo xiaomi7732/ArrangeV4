@@ -1,6 +1,7 @@
 'use client';
 
 import { TodoItem } from '@/lib/todoDataService';
+import { formatRelativeDate } from '@/lib/dateUtils';
 import styles from './ScrumCard.module.css';
 
 interface ScrumCardProps {
@@ -11,11 +12,6 @@ interface ScrumCardProps {
 }
 
 export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: ScrumCardProps) {
-  const formatShortDate = (dateStr?: string) => {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
 
   return (
     <div
@@ -37,9 +33,17 @@ export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: Scr
       <div className={styles.badges}>
         {todo.important && <span className={`${styles.badge} ${styles.badgeImportant}`}>Important</span>}
         {todo.urgent && <span className={`${styles.badge} ${styles.badgeUrgent}`}>Urgent</span>}
-        {todo.etaDateTime && (
-          <span className={styles.eta}>ETA: {formatShortDate(todo.etaDateTime)}</span>
-        )}
+        {todo.etaDateTime && (() => {
+          const eta = formatRelativeDate(todo.etaDateTime);
+          return (
+            <span
+              className={`${styles.eta} ${eta.isOverdue ? styles.etaOverdue : ''}`}
+              title={`ETA: ${eta.fullDate}`}
+            >
+              ETA: {eta.text}
+            </span>
+          );
+        })()}
       </div>
       {todo.categories && todo.categories.length > 0 && (
         <div className={styles.categories}>

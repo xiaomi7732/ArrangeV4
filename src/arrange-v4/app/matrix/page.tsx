@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { getCalendars, getCalendarEvents } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
+import { formatRelativeDate } from '@/lib/dateUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -105,14 +106,17 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
                 </span>
               )}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
-              {todo.etaDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`ETA: ${new Date(todo.etaDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.etaDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.etaDateTime && (() => {
+                const eta = formatRelativeDate(todo.etaDateTime);
+                return (
+                  <span 
+                    className={`${styles.todoDateValue} ${eta.isOverdue ? styles.todoDateOverdue : ''}`}
+                    title={`ETA: ${eta.fullDate}`}
+                  >
+                    {eta.text}
+                  </span>
+                );
+              })()}
             </div>
           )}
           {/* Actual times */}
