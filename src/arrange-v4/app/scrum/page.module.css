@@ -199,6 +199,10 @@
   background-color: #d1d5db;
 }
 
+.comboButtonMain:focus-visible {
+  background-color: #d1d5db;
+}
+
 .comboButtonAction {
   font-size: 0.8rem;
   padding: 4px 8px;
@@ -211,6 +215,10 @@
 }
 
 .comboButtonAction:hover {
+  background-color: #d1d5db;
+}
+
+.comboButtonAction:focus-visible {
   background-color: #d1d5db;
 }
 
