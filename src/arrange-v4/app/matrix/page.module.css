@@ -616,6 +616,16 @@
   border-bottom-color: #9ca3af;
 }
 
+.todoDateOverdue {
+  color: #dc2626;
+  font-weight: 600;
+  border-bottom-color: #fca5a5;
+}
+
+.todoDateOverdue:hover {
+  color: #b91c1c;
+}
+
 .todoDateSep {
   color: #d1d5db;
 }

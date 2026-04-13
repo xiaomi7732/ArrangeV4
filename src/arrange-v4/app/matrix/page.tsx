@@ -106,14 +106,17 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
                 </span>
               )}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
-              {todo.etaDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`ETA: ${new Date(todo.etaDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {formatRelativeDate(todo.etaDateTime)}
-                </span>
-              )}
+              {todo.etaDateTime && (() => {
+                const eta = formatRelativeDate(todo.etaDateTime);
+                return (
+                  <span 
+                    className={`${styles.todoDateValue} ${eta.isOverdue ? styles.todoDateOverdue : ''}`}
+                    title={`ETA: ${eta.fullDate}`}
+                  >
+                    {eta.text}
+                  </span>
+                );
+              })()}
             </div>
           )}
           {/* Actual times */}

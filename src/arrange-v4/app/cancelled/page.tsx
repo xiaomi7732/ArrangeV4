@@ -272,9 +272,12 @@ function CancelledPageContent() {
                             {todo.etsDateTime && (
                               <span>ETS: {new Date(todo.etsDateTime).toLocaleDateString()}</span>
                             )}
-                            {todo.etaDateTime && (
-                              <span>ETA: {formatRelativeDate(todo.etaDateTime)}</span>
-                            )}
+                            {todo.etaDateTime && (() => {
+                              const eta = formatRelativeDate(todo.etaDateTime);
+                              return (
+                                <span title={`ETA: ${eta.fullDate}`}>ETA: {eta.text}</span>
+                              );
+                            })()}
                           </div>
                         </div>
                         {todo.categories && todo.categories.length > 0 && (

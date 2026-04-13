@@ -34,10 +34,14 @@ export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: Scr
         {todo.important && <span className={`${styles.badge} ${styles.badgeImportant}`}>Important</span>}
         {todo.urgent && <span className={`${styles.badge} ${styles.badgeUrgent}`}>Urgent</span>}
         {todo.etaDateTime && (() => {
-          const label = formatRelativeDate(todo.etaDateTime);
-          const isOverdue = label.includes('overdue');
+          const eta = formatRelativeDate(todo.etaDateTime);
           return (
-            <span className={`${styles.eta} ${isOverdue ? styles.etaOverdue : ''}`}>ETA: {label}</span>
+            <span
+              className={`${styles.eta} ${eta.isOverdue ? styles.etaOverdue : ''}`}
+              title={`ETA: ${eta.fullDate}`}
+            >
+              ETA: {eta.text}
+            </span>
           );
         })()}
       </div>
