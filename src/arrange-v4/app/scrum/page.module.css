@@ -165,11 +165,6 @@
   color: #6b7280;
 }
 
-.filterToggle {
-  font-size: 0.8rem;
-  padding: 4px 12px;
-}
-
 /* Combo button: two buttons joined as one */
 .comboButton {
   display: inline-flex;
