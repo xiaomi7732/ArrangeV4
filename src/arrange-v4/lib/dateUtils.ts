@@ -24,6 +24,11 @@ export interface RelativeDateInfo {
  */
 export function formatRelativeDate(dateStr: string): RelativeDateInfo {
   const target = new Date(dateStr);
+
+  if (isNaN(target.getTime())) {
+    return { text: dateStr, isOverdue: false, fullDate: dateStr };
+  }
+
   const now = new Date();
   const fullDate = target.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
