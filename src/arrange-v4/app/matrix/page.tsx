@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { getCalendars, getCalendarEvents } from '@/lib/graphService';
 import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
+import { formatRelativeDate } from '@/lib/dateUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -110,7 +111,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
                   className={styles.todoDateValue}
                   title={`ETA: ${new Date(todo.etaDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
                 >
-                  {new Date(todo.etaDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {formatRelativeDate(todo.etaDateTime)}
                 </span>
               )}
             </div>

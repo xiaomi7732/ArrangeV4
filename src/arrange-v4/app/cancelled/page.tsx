@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react
 import { getAllCalendarEvents } from '@/lib/graphService';
 import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
+import { formatRelativeDate } from '@/lib/dateUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -272,7 +273,7 @@ function CancelledPageContent() {
                               <span>ETS: {new Date(todo.etsDateTime).toLocaleDateString()}</span>
                             )}
                             {todo.etaDateTime && (
-                              <span>ETA: {new Date(todo.etaDateTime).toLocaleDateString()}</span>
+                              <span>ETA: {formatRelativeDate(todo.etaDateTime)}</span>
                             )}
                           </div>
                         </div>
