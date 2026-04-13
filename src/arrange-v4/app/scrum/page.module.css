@@ -178,6 +178,10 @@
   border: 1px solid #d1d5db;
 }
 
+.comboButton:focus-within {
+  box-shadow: 0 0 0 2px #2563eb;
+}
+
 .comboButtonMain {
   font-weight: 500;
   font-size: 0.8rem;
@@ -188,6 +192,7 @@
   cursor: pointer;
   transition: background-color 0.2s;
   border-right: 1px solid #d1d5db;
+  outline: none;
 }
 
 .comboButtonMain:hover {
@@ -202,6 +207,7 @@
   border: none;
   cursor: pointer;
   transition: background-color 0.2s;
+  outline: none;
 }
 
 .comboButtonAction:hover {

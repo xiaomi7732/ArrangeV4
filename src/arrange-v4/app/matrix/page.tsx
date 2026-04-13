@@ -652,6 +652,7 @@ function MatrixPageContent() {
                       <button
                         className={styles.comboButtonMain}
                         onClick={() => setShowTags(prev => !prev)}
+                        aria-expanded={showTags}
                       >
                         {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                       </button>
