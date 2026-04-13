@@ -32,10 +32,10 @@ export function formatRelativeDate(dateStr: string): RelativeDateInfo {
   const now = new Date();
   const fullDate = target.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
 
-  // Compare calendar days (strip time)
-  const targetDay = new Date(target.getFullYear(), target.getMonth(), target.getDate());
-  const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffMs = targetDay.getTime() - todayDay.getTime();
+  // Compare calendar days using UTC to match the app's "today" semantics elsewhere
+  const targetDayUtcMs = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  const todayDayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const diffMs = targetDayUtcMs - todayDayUtcMs;
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
   const isOverdue = diffDays < 0;
