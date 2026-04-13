@@ -374,15 +374,15 @@ function ScrumPageContent() {
               </span>
               <div className={styles.boardHeaderActions}>
                 {allCategories.length > 0 && (
-                  <>
+                  <div className={styles.comboButton}>
                     <button
-                      className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                      className={`${styles.comboButtonMain} ${styles.filterToggle}`}
                       onClick={() => setShowTags(prev => !prev)}
                     >
                       {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                     </button>
                     <button
-                      className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                      className={`${styles.comboButtonAction} ${styles.filterToggle}`}
                       onClick={() => setShowManageTags(true)}
                       title="Manage tags"
                       aria-label="Manage tags"
@@ -390,7 +390,7 @@ function ScrumPageContent() {
                     >
                       ⚙
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
