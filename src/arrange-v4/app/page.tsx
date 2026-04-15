@@ -128,12 +128,20 @@ export default function Home() {
                 Go to My Books
               </button>
               {matrixAvailable.show && (
-                <button
-                  onClick={handleNavigateToMatrix}
-                  className={`${styles.button} ${styles.buttonSecondary}`}
-                >
-                  Go to Matrix
-                </button>
+                <>
+                  <button
+                    onClick={handleNavigateToMatrix}
+                    className={`${styles.button} ${styles.buttonSecondary}`}
+                  >
+                    Go to Matrix
+                  </button>
+                  <button
+                    onClick={() => router.push(`/scrum?bookId=${encodeURIComponent(matrixAvailable.bookId!)}`)}
+                    className={`${styles.button} ${styles.buttonSecondary}`}
+                  >
+                    Go to Scrum Board
+                  </button>
+                </>
               )}
             </>
           )}
