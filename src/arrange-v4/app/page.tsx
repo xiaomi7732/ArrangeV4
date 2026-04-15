@@ -103,6 +103,12 @@ export default function Home() {
     }
   };
 
+  const handleNavigateToScrum = () => {
+    if (matrixAvailable.bookId) {
+      router.push(`/scrum?bookId=${encodeURIComponent(matrixAvailable.bookId)}`);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.card}>
@@ -128,12 +134,20 @@ export default function Home() {
                 Go to My Books
               </button>
               {matrixAvailable.show && (
-                <button
-                  onClick={handleNavigateToMatrix}
-                  className={`${styles.button} ${styles.buttonSecondary}`}
-                >
-                  Go to Matrix
-                </button>
+                <>
+                  <button
+                    onClick={handleNavigateToMatrix}
+                    className={`${styles.button} ${styles.buttonSecondary}`}
+                  >
+                    Go to Matrix
+                  </button>
+                  <button
+                    onClick={handleNavigateToScrum}
+                    className={`${styles.button} ${styles.buttonSecondary}`}
+                  >
+                    Go to Scrum Board
+                  </button>
+                </>
               )}
             </>
           )}
