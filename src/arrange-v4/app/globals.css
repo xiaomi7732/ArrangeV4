@@ -16,6 +16,19 @@ body {
   overflow-x: hidden;
 }
 
+@media (min-width: 768px) {
+  html,
+  body {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 body {
   color: var(--foreground);
   background: var(--background);

@@ -5,7 +5,7 @@
 
 @media (min-width: 768px) {
   .container {
-    height: 100vh;
+    flex: 1;
     overflow: hidden;
     display: flex;
     flex-direction: column;
