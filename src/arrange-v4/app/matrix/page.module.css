@@ -3,10 +3,29 @@
   background-color: #f9fafb;
 }
 
+@media (min-width: 768px) {
+  .container {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .inner {
   max-width: 100%;
   margin: 0 auto;
   padding: 32px 16px;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
+  }
 }
 
 .card {
@@ -192,6 +211,16 @@
 /* Eisenhower Matrix Layout */
 .matrixSection {
   margin-top: 16px;
+}
+
+@media (min-width: 768px) {
+  .matrixSection {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-top: 8px;
+  }
 }
 
 .matrixHeader {
@@ -401,7 +430,8 @@
   .matrix {
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    height: calc(100vh - 280px);
+    flex: 1;
+    min-height: 0;
   }
 }
 
