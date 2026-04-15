@@ -6,6 +6,13 @@
   justify-content: center;
 }
 
+@media (min-width: 768px) {
+  .container {
+    min-height: 0;
+    flex: 1;
+  }
+}
+
 .card {
   background-color: white;
   border-radius: 12px;

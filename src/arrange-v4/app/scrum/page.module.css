@@ -3,10 +3,30 @@
   background-color: #f9fafb;
 }
 
+@media (min-width: 768px) {
+  .container {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .inner {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 32px 16px;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
+  }
 }
 
 .card {
@@ -147,6 +167,15 @@
   margin-top: 0;
 }
 
+@media (min-width: 768px) {
+  .boardSection {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+}
+
 .boardHeader {
   display: flex;
   justify-content: space-between;
@@ -224,6 +253,8 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   padding: 10px 16px;
   margin-bottom: 16px;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .categoryFilterChips {
@@ -272,7 +303,8 @@
 @media (min-width: 768px) {
   .board {
     grid-template-columns: repeat(4, 1fr);
-    height: calc(100vh - 280px);
+    flex: 1;
+    min-height: 0;
   }
 }
 

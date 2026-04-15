@@ -3,10 +3,25 @@
   background-color: #f9fafb;
 }
 
+@media (min-width: 768px) {
+  .container {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .inner {
-  max-width: 960px;
-  margin: 0 auto;
+  width: 100%;
   padding: 32px 16px;
+}
+
+@media (min-width: 768px) {
+  .inner {
+    padding: 16px;
+  }
 }
 
 .card {
