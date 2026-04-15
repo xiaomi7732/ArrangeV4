@@ -33,7 +33,7 @@ export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: Scr
       <div className={styles.badges}>
         {todo.important && <span className={`${styles.badge} ${styles.badgeImportant}`}>Important</span>}
         {todo.urgent && <span className={`${styles.badge} ${styles.badgeUrgent}`}>Urgent</span>}
-        {todo.etaDateTime && (() => {
+        {todo.etaDateTime && todo.status !== 'finished' && todo.status !== 'cancelled' && (() => {
           const eta = formatRelativeDate(todo.etaDateTime);
           return (
             <span
