@@ -163,6 +163,24 @@ Report to the user:
 - Total number of comments resolved.
 - Final status: all review threads resolved.
 
+#### Step 11: Post Summary to PR
+
+After the loop completes, post a summary comment on the PR for the record:
+
+```bash
+gh pr comment <PR_NUMBER> --body "## PR Review Loop Summary
+
+- **N review rounds** completed
+- **M issues** raised across all rounds — all fixed with code changes:
+  - **Round 1** (X issues): <brief description of issues and fixes>
+  - **Round 2** (Y issues): <brief description>
+  - ...
+  - **Round N**: Clean — zero unresolved comments ✅
+- **Final status:** All review threads resolved"
+```
+
+This provides a permanent record of the review process on the PR itself.
+
 ### Safety Rules
 
 - **Check-in with user:** After every 15 consecutive review rounds, pause and ask the user if they'd like to continue or stop. This prevents runaway loops while not imposing a hard limit.
