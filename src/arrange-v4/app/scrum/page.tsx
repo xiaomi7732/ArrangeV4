@@ -420,8 +420,9 @@ function ScrumPageContent() {
               </span>
               <div className={styles.boardHeaderActions}>
                 <button
-                  className={`${styles.comboButtonMain} ${styles.filterToggle}`}
+                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                   onClick={() => setShowStatusFilters(prev => !prev)}
+                  aria-expanded={showStatusFilters}
                 >
                   {showStatusFilters ? '▲' : '▼'} Status{statusFilterActive ? ' ●' : ''}
                 </button>
@@ -457,7 +458,9 @@ function ScrumPageContent() {
                       {FILTER_MODES.map(mode => (
                         <button
                           key={mode}
+                          type="button"
                           className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                          aria-pressed={statusFilters[status] === mode}
                           onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
                         >
                           {FILTER_MODE_LABELS[mode]}
