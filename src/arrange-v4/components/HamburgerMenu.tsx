@@ -40,11 +40,12 @@ export default function HamburgerMenu() {
   const isOnScrum = pathname.startsWith('/scrum');
   const showViewSwitcher = isOnMatrix || isOnScrum;
 
-  const urlBookId = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('bookId')
-    : null;
-  const viewSwitcherBookId = urlBookId || getLastBookId();
-  const viewSwitcherQuery = viewSwitcherBookId ? `?bookId=${encodeURIComponent(viewSwitcherBookId)}` : '';
+  const [viewSwitcherQuery, setViewSwitcherQuery] = useState('');
+  useEffect(() => {
+    const urlBookId = new URLSearchParams(window.location.search).get('bookId');
+    const bookId = urlBookId || getLastBookId();
+    setViewSwitcherQuery(bookId ? `?bookId=${encodeURIComponent(bookId)}` : '');
+  }, [pathname]);
   const matrixHref = `/matrix${viewSwitcherQuery}`;
   const scrumHref = `/scrum${viewSwitcherQuery}`;
 
