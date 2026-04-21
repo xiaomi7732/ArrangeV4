@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useMsal } from '@azure/msal-react';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useTopBarActions } from './TopBarProvider';
@@ -25,6 +25,33 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/cancelled', label: 'Cancelled Tasks', icon: '🗑️', matchPrefix: true },
 ];
 
+function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isOnScrum: boolean }) {
+  const searchParams = useSearchParams();
+  const bookId = searchParams.get('bookId') || getLastBookId();
+  const query = bookId ? `?bookId=${encodeURIComponent(bookId)}` : '';
+
+  return (
+    <div className={styles.viewSwitcher} role="navigation" aria-label="Switch view">
+      <Link
+        href={`/matrix${query}`}
+        className={`${styles.viewSwitcherButton} ${isOnMatrix ? styles.viewSwitcherActive : ''}`}
+        aria-label="Matrix view"
+        aria-current={isOnMatrix ? 'page' : undefined}
+      >
+        📊
+      </Link>
+      <Link
+        href={`/scrum${query}`}
+        className={`${styles.viewSwitcherButton} ${isOnScrum ? styles.viewSwitcherActive : ''}`}
+        aria-label="Scrum view"
+        aria-current={isOnScrum ? 'page' : undefined}
+      >
+        🏃
+      </Link>
+    </div>
+  );
+}
+
 export default function HamburgerMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
@@ -35,6 +62,10 @@ export default function HamburgerMenu() {
   const { leftActions, rightActions } = useTopBarActions();
 
   const isAuthenticated = accounts.length > 0;
+
+  const isOnMatrix = pathname.startsWith('/matrix');
+  const isOnScrum = pathname.startsWith('/scrum');
+  const showViewSwitcher = isOnMatrix || isOnScrum;
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
@@ -122,6 +153,11 @@ export default function HamburgerMenu() {
             ☰
           </button>
           <h1 className={styles.pageLabel}>{pageLabel}</h1>
+          {showViewSwitcher && (
+            <Suspense fallback={null}>
+              <ViewSwitcherInner isOnMatrix={isOnMatrix} isOnScrum={isOnScrum} />
+            </Suspense>
+          )}
           {leftActions}
         </div>
         <div className={styles.topBarMiddle} />
