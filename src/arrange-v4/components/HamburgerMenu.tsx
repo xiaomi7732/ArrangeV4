@@ -154,7 +154,7 @@ export default function HamburgerMenu() {
           </button>
           <h1 className={styles.pageLabel}>{pageLabel}</h1>
           {showViewSwitcher && (
-            <Suspense>
+            <Suspense fallback={null}>
               <ViewSwitcherInner isOnMatrix={isOnMatrix} isOnScrum={isOnScrum} />
             </Suspense>
           )}
