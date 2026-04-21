@@ -331,5 +331,6 @@
 
   .viewSwitcherActive {
     background-color: #2563eb;
+    color: #ffffff;
   }
 }
