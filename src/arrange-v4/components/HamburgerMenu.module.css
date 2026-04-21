@@ -87,13 +87,18 @@
   border-right: 1px solid #e5e7eb;
 }
 
+.viewSwitcherButton:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #1d4ed8;
+}
+
 .viewSwitcherButton:hover:not(.viewSwitcherActive) {
   background-color: #f3f4f6;
 }
 
 .viewSwitcherActive {
   background-color: #2563eb;
-  pointer-events: none;
+  color: #ffffff;
 }
 
 .overlay {
