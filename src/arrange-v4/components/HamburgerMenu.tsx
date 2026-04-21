@@ -36,6 +36,15 @@ export default function HamburgerMenu() {
 
   const isAuthenticated = accounts.length > 0;
 
+  const isOnMatrix = pathname.startsWith('/matrix');
+  const isOnScrum = pathname.startsWith('/scrum');
+  const showViewSwitcher = isOnMatrix || isOnScrum;
+
+  const viewSwitcherBookId = getLastBookId();
+  const viewSwitcherQuery = viewSwitcherBookId ? `?bookId=${encodeURIComponent(viewSwitcherBookId)}` : '';
+  const matrixHref = `/matrix${viewSwitcherQuery}`;
+  const scrumHref = `/scrum${viewSwitcherQuery}`;
+
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
       const basePath = item.href.split('?')[0];
@@ -122,6 +131,26 @@ export default function HamburgerMenu() {
             ☰
           </button>
           <h1 className={styles.pageLabel}>{pageLabel}</h1>
+          {showViewSwitcher && (
+            <div className={styles.viewSwitcher} role="navigation" aria-label="Switch view">
+              <Link
+                href={matrixHref}
+                className={`${styles.viewSwitcherButton} ${isOnMatrix ? styles.viewSwitcherActive : ''}`}
+                aria-label="Matrix view"
+                aria-current={isOnMatrix ? 'page' : undefined}
+              >
+                📊
+              </Link>
+              <Link
+                href={scrumHref}
+                className={`${styles.viewSwitcherButton} ${isOnScrum ? styles.viewSwitcherActive : ''}`}
+                aria-label="Scrum view"
+                aria-current={isOnScrum ? 'page' : undefined}
+              >
+                🏃
+              </Link>
+            </div>
+          )}
           {leftActions}
         </div>
         <div className={styles.topBarMiddle} />

@@ -61,6 +61,41 @@
   flex-shrink: 0;
 }
 
+/* View switcher (Matrix ↔ Scrum) */
+.viewSwitcher {
+  display: inline-flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.viewSwitcherButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 30px;
+  font-size: 0.95rem;
+  background: transparent;
+  color: #6b7280;
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+
+.viewSwitcherButton:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+
+.viewSwitcherButton:hover:not(.viewSwitcherActive) {
+  background-color: #f3f4f6;
+}
+
+.viewSwitcherActive {
+  background-color: #2563eb;
+  pointer-events: none;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -271,5 +306,25 @@
 
   .overlay {
     background: rgba(0, 0, 0, 0.5);
+  }
+
+  .viewSwitcher {
+    border-color: #374151;
+  }
+
+  .viewSwitcherButton {
+    color: #9ca3af;
+  }
+
+  .viewSwitcherButton:not(:last-child) {
+    border-right-color: #374151;
+  }
+
+  .viewSwitcherButton:hover:not(.viewSwitcherActive) {
+    background-color: #374151;
+  }
+
+  .viewSwitcherActive {
+    background-color: #2563eb;
   }
 }
