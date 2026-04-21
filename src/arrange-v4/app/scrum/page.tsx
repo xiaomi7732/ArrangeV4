@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, STATUS_LABELS } from '@/lib/todoDataService';
+import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
 import { getCalendarDisplayName } from '@/lib/calendarUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -14,7 +14,40 @@ import ScrumCard from '@/components/ScrumCard';
 import Link from 'next/link';
 import styles from './page.module.css';
 
-const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished'] as const satisfies readonly TodoStatus[];
+type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+
+const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
+
+const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
+  showAll: 'All',
+  todayOnly: 'Today',
+  hide: 'Hide',
+};
+
+const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
+  new: 'showAll',
+  inProgress: 'showAll',
+  blocked: 'showAll',
+  finished: 'todayOnly',
+  cancelled: 'hide',
+};
+
+function isToday(dateStr: string | undefined | null): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  const now = new Date();
+  return d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate();
+}
+
+function passesTodayFilter(todo: TodoItem): boolean {
+  const status = todo.status || 'new';
+  if (status === 'finished') return isToday(todo.finishDateTime);
+  return isToday(todo.etsDateTime);
+}
+
+const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
 type LaneStatus = (typeof LANE_STATUSES)[number];
 
 const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
@@ -22,6 +55,7 @@ const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
   inProgress: { lane: styles.laneInProgress, title: styles.laneTitleInProgress },
   blocked: { lane: styles.laneBlocked, title: styles.laneTitleBlocked },
   finished: { lane: styles.laneFinished, title: styles.laneTitleFinished },
+  cancelled: { lane: styles.laneCancelled, title: styles.laneTitleCancelled },
 };
 
 function sortByPriority(items: (TodoItem & { id?: string })[]) {
@@ -49,6 +83,8 @@ function ScrumPageContent() {
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
+  const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
+  const [showStatusFilters, setShowStatusFilters] = useState(false);
 
   const displayError = error || calendarError;
 
@@ -64,10 +100,16 @@ function ScrumPageContent() {
 
   const categoryFilterActive = selectedCategories.size > 0 || showUncategorized;
 
+  const statusFilterActive = ALL_STATUSES.some(s => statusFilters[s] !== DEFAULT_STATUS_FILTERS[s]);
+
   const filteredItems = useMemo(() => {
     return todoItems.filter(todo => {
       const status = todo.status || 'new';
       if (!(LANE_STATUSES as readonly string[]).includes(status)) return false;
+
+      const mode = statusFilters[status as LaneStatus];
+      if (mode === 'hide') return false;
+      if (mode === 'todayOnly' && !passesTodayFilter(todo)) return false;
 
       if (categoryFilterActive) {
         const hasCats = todo.categories && todo.categories.length > 0;
@@ -77,7 +119,11 @@ function ScrumPageContent() {
       }
       return true;
     });
-  }, [todoItems, selectedCategories, showUncategorized, categoryFilterActive]);
+  }, [todoItems, selectedCategories, showUncategorized, categoryFilterActive, statusFilters]);
+
+  const visibleLanes = useMemo(() => {
+    return LANE_STATUSES.filter(s => statusFilters[s] !== 'hide');
+  }, [statusFilters]);
 
   const lanes = useMemo(() => {
     const result = {} as Record<LaneStatus, (TodoItem & { id?: string })[]>;
@@ -373,6 +419,13 @@ function ScrumPageContent() {
                 Showing {filteredItems.length} of {todoItems.length} items
               </span>
               <div className={styles.boardHeaderActions}>
+                <button
+                  className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
+                  onClick={() => setShowStatusFilters(prev => !prev)}
+                  aria-expanded={showStatusFilters}
+                >
+                  {showStatusFilters ? '▲' : '▼'} Status{statusFilterActive ? ' ●' : ''}
+                </button>
                 {allCategories.length > 0 && (
                   <div className={styles.comboButton}>
                     <button
@@ -395,6 +448,37 @@ function ScrumPageContent() {
                 )}
               </div>
             </div>
+
+            {showStatusFilters && (
+              <div className={styles.filterBar}>
+                {ALL_STATUSES.map(status => (
+                  <div key={status} className={styles.filterGroup}>
+                    <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
+                    <div className={styles.filterModes}>
+                      {FILTER_MODES.map(mode => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                          aria-pressed={statusFilters[status] === mode}
+                          onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
+                        >
+                          {FILTER_MODE_LABELS[mode]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {statusFilterActive && (
+                  <button
+                    className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
+                    onClick={() => setStatusFilters(DEFAULT_STATUS_FILTERS)}
+                  >
+                    ✕ Reset
+                  </button>
+                )}
+              </div>
+            )}
 
             {showTags && allCategories.length > 0 && (
               <div className={styles.tagBar}>
@@ -433,8 +517,11 @@ function ScrumPageContent() {
               </div>
             )}
 
-            <div className={styles.board}>
-              {LANE_STATUSES.map(status => {
+            <div
+              className={styles.board}
+              style={{ '--lane-columns': `repeat(${visibleLanes.length || 1}, 1fr)` } as React.CSSProperties}
+            >
+              {visibleLanes.map(status => {
                 const items = lanes[status] || [];
                 const laneStyle = LANE_STYLES[status];
                 return (

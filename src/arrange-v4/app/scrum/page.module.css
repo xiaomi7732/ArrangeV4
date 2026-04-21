@@ -14,8 +14,7 @@
 }
 
 .inner {
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
   padding: 32px 16px;
 }
 
@@ -302,7 +301,7 @@
 
 @media (min-width: 768px) {
   .board {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: var(--lane-columns, repeat(4, 1fr));
     flex: 1;
     min-height: 0;
   }
@@ -347,6 +346,11 @@
   border-color: #bbf7d0;
 }
 
+.laneCancelled {
+  background-color: #faf5ff;
+  border-color: #e9d5ff;
+}
+
 /* Drop zone */
 .laneDropZone {
   border: 3px dashed currentColor;
@@ -367,6 +371,10 @@
 
 .laneFinished.laneDropZone {
   border-color: #16a34a;
+}
+
+.laneCancelled.laneDropZone {
+  border-color: #9333ea;
 }
 
 @keyframes pulse {
@@ -394,6 +402,7 @@
 .laneTitleInProgress { color: #2563eb; }
 .laneTitleBlocked { color: #dc2626; }
 .laneTitleFinished { color: #16a34a; }
+.laneTitleCancelled { color: #9333ea; }
 
 .laneCount {
   font-size: 0.75rem;
@@ -437,3 +446,78 @@
     padding: 16px;
   }
 }
+
+/* Filter toggle */
+.filterToggle {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+/* Status filter bar */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filterLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 70px;
+}
+
+.filterModes {
+  display: flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filterMode {
+  font-size: 0.625rem;
+  padding: 2px 8px;
+  border: none;
+  background-color: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.filterMode:not(:last-child) {
+  border-right: 1px solid #e5e7eb;
+}
+
+.filterMode:hover {
+  background-color: #f3f4f6;
+}
+
+.filterModeActive {
+  background-color: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+
+.filterModeActive:hover {
+  background-color: #1d4ed8;
+}
+
+/* Status label colors in filter bar */
+.status_new { color: #6b7280; }
+.status_inProgress { color: #2563eb; }
+.status_blocked { color: #dc2626; }
+.status_finished { color: #16a34a; }
+.status_cancelled { color: #9333ea; }
