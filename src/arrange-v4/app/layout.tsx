@@ -18,6 +18,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Arrange V4",
   description: "Task management with Eisenhower Matrix",
+  themeColor: "#2563eb",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Arrange",
+  },
   icons: {
     icon: [
       { url: `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/icon-192.png`, sizes: "192x192", type: "image/png" },
