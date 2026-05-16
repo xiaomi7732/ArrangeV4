@@ -57,9 +57,14 @@ export class CalendarStore implements TodoStore {
     if (this.tokenInFlight) return this.tokenInFlight;
     const p = this.acquireToken();
     this.tokenInFlight = p;
-    void p.finally(() => {
+    // Attach both fulfillment and rejection handlers so we don't create an
+    // unhandled rejection from a chained promise. The returned chained
+    // promise from .then(clear, clear) cannot reject because we handle both
+    // settlement cases with a no-throw clear function.
+    const clear = () => {
       if (this.tokenInFlight === p) this.tokenInFlight = null;
-    });
+    };
+    p.then(clear, clear);
     return p;
   }
 

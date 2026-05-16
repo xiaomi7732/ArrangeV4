@@ -39,15 +39,20 @@ export function useBookId(routePrefix: string) {
     }
   }, [rawBookId, bookId, router, routePrefix]);
 
-  // Redirect to saved book if no bookId in URL
+  // Redirect logic: distinguish missing URL param from invalid URL param.
+  // Only fall back to saved-book localStorage when there's no `?bookId` at
+  // all. An invalid value (present but unknown prefix) must not silently load
+  // a different book — that's misleading. Send to /books in that case.
   useEffect(() => {
-    if (!bookId) {
+    if (!rawBookId) {
       const saved = normalizeBookId(getLastBookId());
       if (saved) {
         router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
       }
+    } else if (!bookId) {
+      router.replace('/books');
     }
-  }, [bookId, router, routePrefix]);
+  }, [rawBookId, bookId, router, routePrefix]);
 
   const fetchBooks = useCallback(async () => {
     if (!isAuthenticated || inProgress !== 'none') return;
