@@ -223,22 +223,41 @@ export class CalendarStore implements TodoStore {
       important: updates.important !== undefined ? updates.important : existingStored.important,
       checklist: updates.checklist !== undefined ? updates.checklist : existingStored.checklist,
       remarks: updates.remarks !== undefined ? updates.remarks : existingStored.remarks,
+      // Honor caller-provided values for the timestamp/original-date body fields.
+      // The status-transition logic below may further adjust startDateTime /
+      // finishDateTime when status changes, but only when the caller didn't set
+      // them explicitly.
+      startDateTime:
+        updates.startDateTime !== undefined ? updates.startDateTime ?? null : existingStored.startDateTime,
+      finishDateTime:
+        updates.finishDateTime !== undefined ? updates.finishDateTime ?? null : existingStored.finishDateTime,
+      originalEtsDateTime:
+        updates.originalEtsDateTime !== undefined
+          ? updates.originalEtsDateTime ?? null
+          : existingStored.originalEtsDateTime,
+      originalEtaDateTime:
+        updates.originalEtaDateTime !== undefined
+          ? updates.originalEtaDateTime ?? null
+          : existingStored.originalEtaDateTime,
     };
 
-    // Timestamp transitions based on status changes
+    // Timestamp transitions based on status changes — only fill in fields the
+    // caller didn't explicitly set. Lets pages pass `{ status: 'inProgress' }`
+    // and have the store derive startDateTime, while still allowing an explicit
+    // override when needed.
     if (updates.status !== undefined) {
-      if (updates.status === 'inProgress' && !existingStored.startDateTime) {
+      if (updates.status === 'inProgress' && !existingStored.startDateTime && updates.startDateTime === undefined) {
         merged.startDateTime = new Date().toISOString();
       }
-      if (updates.status === 'new') {
+      if (updates.status === 'new' && updates.startDateTime === undefined) {
         merged.startDateTime = null;
       }
       if (updates.status === 'finished') {
         const now = new Date().toISOString();
-        if (!existingStored.startDateTime) merged.startDateTime = now;
-        if (!existingStored.finishDateTime) merged.finishDateTime = now;
+        if (!existingStored.startDateTime && updates.startDateTime === undefined) merged.startDateTime = now;
+        if (!existingStored.finishDateTime && updates.finishDateTime === undefined) merged.finishDateTime = now;
       }
-      if (updates.status !== 'finished' && existingStored.status === 'finished') {
+      if (updates.status !== 'finished' && existingStored.status === 'finished' && updates.finishDateTime === undefined) {
         merged.finishDateTime = null;
       }
     }

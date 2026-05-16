@@ -1,13 +1,16 @@
 /**
  * Date-bump logic for the Calendar backend.
  *
- * Non-terminal items (`new`, `inProgress`, `blocked`) that have fallen outside
- * the ±30-day calendarView window are bumped forward to today on update.
- * The original planned dates are preserved on the item so the user can see
- * when it was first scheduled.
+ * Any non-terminal item (`new`, `inProgress`, `blocked`) whose ETS is before
+ * the start of today (UTC) is bumped forward to today. This compensates for
+ * the ±30-day calendarView window used by the Matrix/Scrum fetches: without
+ * bumping, items that fall behind would drift out of view. The bump applies
+ * the moment an item becomes stale (i.e. its ETS rolls into yesterday) — not
+ * only after it falls outside the window. The original planned dates are
+ * preserved on the item so the user can see when it was first scheduled.
  *
- * This is calendar-backend-specific because it compensates for the calendarView
- * window; other backends that return all items don't need it.
+ * This is calendar-backend-specific because it compensates for the
+ * calendarView window; other backends that return all items don't need it.
  */
 
 export function computeBumpedDates(
