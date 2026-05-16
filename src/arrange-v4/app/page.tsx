@@ -20,7 +20,10 @@ export default function Home() {
   // open an unexpected popup from a useEffect. If the silent acquisition fails
   // (e.g. the cached token expired and interaction is needed), we just don't
   // show the matrix buttons — the user can sign in via the Get Started button.
+  // The `cancelled` flag prevents a slow listBooks() response from a previous
+  // account from clobbering newer state if the user switches accounts mid-flight.
   useEffect(() => {
+    let cancelled = false;
     const check = async () => {
       if (!isAuthenticated || !accounts[0]) return;
       try {
@@ -28,10 +31,12 @@ export default function Home() {
           ...loginRequest,
           account: accounts[0],
         });
+        if (cancelled) return;
         const silentStore = new MultiBackendStore({
           acquireToken: async () => response.accessToken,
         });
         const books = await silentStore.listBooks();
+        if (cancelled) return;
 
         if (books.length === 1) {
           setMatrixAvailable({ show: true, bookId: books[0].id });
@@ -46,6 +51,7 @@ export default function Home() {
 
         setMatrixAvailable({ show: false });
       } catch (error) {
+        if (cancelled) return;
         // Silent failure is fine for this background check — don't open a popup.
         // But reset matrixAvailable so stale data from a previous account or
         // a previously-successful check doesn't linger.
@@ -55,6 +61,9 @@ export default function Home() {
     };
 
     check();
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated, accounts, instance]);
 
   const handleLogin = async () => {
