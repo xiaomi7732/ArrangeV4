@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
-import { getCalendars, getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, sweepStaleTodos, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
-import { filterArrangeCalendars, getCalendarDisplayName } from '@/lib/calendarUtils';
+import { useStore } from '@/lib/store/useStore';
+import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
@@ -49,11 +48,11 @@ function passesTodayFilter(todo: TodoItem): boolean {
 }
 
 // TodoCard component for rendering individual todo items
-function TodoCard({ todo, onDragStart, onClick, onStatusChange }: { 
-  todo: TodoItem & { id?: string }, 
-  onDragStart?: (todo: TodoItem & { id?: string }) => void,
-  onClick?: (todo: TodoItem & { id?: string }) => void,
-  onStatusChange?: (todo: TodoItem & { id?: string }, newStatus: TodoStatus) => void 
+function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
+  todo: TodoItemWithId,
+  onDragStart?: (todo: TodoItemWithId) => void,
+  onClick?: (todo: TodoItemWithId) => void,
+  onStatusChange?: (todo: TodoItemWithId, newStatus: TodoStatus) => void
 }) {
   const currentStatus = todo.status || 'new';
 
@@ -65,7 +64,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
   };
 
   return (
-    <div 
+    <div
       className={styles.todoCard}
       draggable={!!todo.id}
       onDragStart={() => onDragStart?.(todo)}
@@ -188,17 +187,18 @@ export default function MatrixPage() {
 }
 
 function MatrixPageContent() {
-  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
-  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError } = useBookId('/matrix');
+  const { isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const store = useStore();
+  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
   bookIdRef.current = bookId;
 
-  const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
+  const [todoItems, setTodoItems] = useState<TodoItemWithId[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
-  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
+  const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
@@ -206,8 +206,8 @@ function MatrixPageContent() {
   const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
 
-  // Merge calendar-level errors into the page error state
-  const displayError = error || calendarError;
+  // Merge book-level errors into the page error state
+  const displayError = error || bookError;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -251,53 +251,44 @@ function MatrixPageContent() {
     setError(null);
 
     try {
-      const accessToken = await acquireToken();
-
       // Fetch events from last 30 days to next 30 days
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-      
-      const eventsData = await getCalendarEvents(
-        accessToken,
-        bookId,
-        startDate.toISOString(),
-        endDate.toISOString()
-      );
-      
-      // Parse events to TodoItems
-      const todos = eventsData.map(event => parseTodoData(event));
+
+      const todos = await store.listItems(bookId, {
+        range: 'window',
+        fromDate: startDate.toISOString(),
+        toDate: endDate.toISOString(),
+      });
       setTodoItems(todos);
 
-      // Sweep stale items across ALL calendars once per session (non-blocking; per-load ref prevents retries on failure)
+      // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
-        const sweepAccessToken = accessToken;
         const sweepBookId = bookId;
-        const snapshotCalendars = calendars.length > 0 ? [...calendars] : null;
+        const snapshotBooks = books.length > 0 ? [...books] : null;
         void (async () => {
           try {
-            const sweepCalendars = snapshotCalendars
-              ?? filterArrangeCalendars(await getCalendars(sweepAccessToken));
-            const calendarQueue = sweepCalendars.filter(c => c.id);
+            const sweepBooks = snapshotBooks ?? (await store.listBooks());
             const CONCURRENCY = 5;
             let i = 0;
             let hasFailure = false;
             const processNext = async () => {
-              while (i < calendarQueue.length) {
-                const cal = calendarQueue[i++];
+              while (i < sweepBooks.length) {
+                const book = sweepBooks[i++];
                 try {
-                  const calEvents = await getCalendarEvents(
-                    sweepAccessToken, cal.id!,
-                    startDate.toISOString(), endDate.toISOString()
-                  );
-                  const calTodos = calEvents.map(event => parseTodoData(event));
-                  await sweepStaleTodos(sweepAccessToken, cal.id!, calTodos);
+                  const calItems = await store.listItems(book.id, {
+                    range: 'window',
+                    fromDate: startDate.toISOString(),
+                    toDate: endDate.toISOString(),
+                  });
+                  await store.calendar.sweepStaleItems(book.id, calItems);
                 } catch (calError) {
                   hasFailure = true;
-                  console.error(`Error sweeping calendar ${cal.id}:`, calError);
+                  console.error(`Error sweeping book ${book.id}:`, calError);
                 }
               }
             };
@@ -311,12 +302,13 @@ function MatrixPageContent() {
             // Refresh current view if still on the same book (independent of sweep status)
             try {
               if (bookIdRef.current === sweepBookId) {
-                const refreshedEvents = await getCalendarEvents(
-                  sweepAccessToken, sweepBookId,
-                  startDate.toISOString(), endDate.toISOString()
-                );
+                const refreshed = await store.listItems(sweepBookId, {
+                  range: 'window',
+                  fromDate: startDate.toISOString(),
+                  toDate: endDate.toISOString(),
+                });
                 if (bookIdRef.current === sweepBookId) {
-                  setTodoItems(refreshedEvents.map(event => parseTodoData(event)));
+                  setTodoItems(refreshed);
                 }
               }
             } catch (refreshError) {
@@ -328,9 +320,10 @@ function MatrixPageContent() {
           }
         })();
       }
-    } catch (error: any) {
-      console.error('Error fetching events:', error);
-      setError(error.message || 'Failed to fetch events');
+    } catch (err: unknown) {
+      console.error('Error fetching events:', err);
+      const message = err instanceof Error ? err.message : 'Failed to fetch events';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -342,18 +335,16 @@ function MatrixPageContent() {
     }
 
     try {
-      const accessToken = await acquireToken();
-
-      const createdEvent = await createTodoItem(accessToken, bookId, todoItem);
-      const newTodo = parseTodoData(createdEvent);
+      const newTodo = await store.createItem(bookId, todoItem);
       setTodoItems(prev => [...prev, newTodo]);
-    } catch (error: any) {
-      console.error('Error creating TODO item:', error);
-      throw new Error(error.message || 'Failed to create TODO item');
+    } catch (err: unknown) {
+      console.error('Error creating TODO item:', err);
+      const message = err instanceof Error ? err.message : 'Failed to create TODO item';
+      throw new Error(message);
     }
   };
 
-  const handleDragStart = (todo: TodoItem & { id?: string }) => {
+  const handleDragStart = (todo: TodoItemWithId) => {
     setDraggedItem(todo);
   };
 
@@ -362,7 +353,7 @@ function MatrixPageContent() {
   };
 
   const handleDrop = async (urgent: boolean, important: boolean) => {
-    if (!draggedItem || !draggedItem.id || !bookId) return;
+    if (!draggedItem || !bookId) return;
 
     // Don't update if already in correct quadrant
     if (draggedItem.urgent === urgent && draggedItem.important === important) {
@@ -372,9 +363,9 @@ function MatrixPageContent() {
 
     // Optimistic update - update UI immediately
     const previousItems = [...todoItems];
-    setTodoItems(items => 
-      items.map(item => 
-        item.id === draggedItem.id 
+    setTodoItems(items =>
+      items.map(item =>
+        item.id === draggedItem.id
           ? { ...item, urgent, important }
           : item
       )
@@ -382,57 +373,38 @@ function MatrixPageContent() {
     setDraggedItem(null);
 
     try {
-      const accessToken = await acquireToken();
-
-      await updateTodoItem(accessToken, bookId, draggedItem.id, {
-        urgent,
-        important,
-      });
-    } catch (error: any) {
-      console.error('Error updating TODO item:', error);
-      // Revert on error
+      await store.updateItem(bookId, draggedItem.id, { urgent, important });
+    } catch (err: unknown) {
+      console.error('Error updating TODO item:', err);
       setTodoItems(previousItems);
-      setError(error.message || 'Failed to update TODO item');
+      const message = err instanceof Error ? err.message : 'Failed to update TODO item';
+      setError(message);
     }
   };
 
-  const handleStatusChange = async (todo: TodoItem & { id?: string }, newStatus: TodoStatus) => {
-    if (!todo.id || !bookId) return;
+  const handleStatusChange = async (todo: TodoItemWithId, newStatus: TodoStatus) => {
+    if (!bookId) return;
 
     const currentStatus = todo.status || 'new';
     const now = new Date().toISOString();
 
     // Calculate timestamp changes based on status transition
-    let updatedTimestamps: Partial<TodoItem> = {};
-    
-    // Set startDateTime when status changes to inProgress (if not already set)
+    const updatedTimestamps: Partial<TodoItem> = {};
+
     if (newStatus === 'inProgress' && !todo.startDateTime) {
       updatedTimestamps.startDateTime = now;
     }
-    
-    // Remove startDateTime when status changes to new
     if (newStatus === 'new') {
       updatedTimestamps.startDateTime = undefined;
     }
-    
-    // Set timestamps when status changes to finished
     if (newStatus === 'finished') {
-      // Set startDateTime if not already set (direct new → finished)
-      if (!todo.startDateTime) {
-        updatedTimestamps.startDateTime = now;
-      }
-      // Set finishDateTime if not already set
-      if (!todo.finishDateTime) {
-        updatedTimestamps.finishDateTime = now;
-      }
+      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
+      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
     }
-    
-    // Remove finishDateTime when status changes from finished to anything else
     if (newStatus !== 'finished' && currentStatus === 'finished') {
       updatedTimestamps.finishDateTime = undefined;
     }
 
-    // Optimistic update - update UI immediately
     const previousItems = [...todoItems];
     setTodoItems(items =>
       items.map(item =>
@@ -443,16 +415,12 @@ function MatrixPageContent() {
     );
 
     try {
-      const accessToken = await acquireToken();
-
-      await updateTodoItem(accessToken, bookId, todo.id, {
-        status: newStatus,
-      });
-    } catch (error: any) {
-      console.error('Error updating TODO status:', error);
-      // Revert on error
+      await store.updateItem(bookId, todo.id, { status: newStatus });
+    } catch (err: unknown) {
+      console.error('Error updating TODO status:', err);
       setTodoItems(previousItems);
-      setError(error.message || 'Failed to update status');
+      const message = err instanceof Error ? err.message : 'Failed to update status';
+      setError(message);
     }
   };
 
@@ -468,21 +436,19 @@ function MatrixPageContent() {
     setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
 
     try {
-      const accessToken = await acquireToken();
-
-      await updateTodoItem(accessToken, bookId, selectedTodo.id, updatedFields);
-    } catch (error: any) {
-      console.error('Error updating TODO:', error);
+      await store.updateItem(bookId, selectedTodo.id, updatedFields);
+    } catch (err: unknown) {
+      console.error('Error updating TODO:', err);
       setTodoItems(previousItems);
       const reverted = previousItems.find(i => i.id === selectedTodo.id);
       if (reverted) setSelectedTodo(reverted);
-      throw error;
+      throw err;
     }
   };
 
   const bulkUpdateCategories = async (
-    affectedItems: (TodoItem & { id?: string })[],
-    computeNewCategories: (item: TodoItem & { id?: string }) => string[],
+    affectedItems: TodoItemWithId[],
+    computeNewCategories: (item: TodoItemWithId) => string[],
     updateFilterState: () => void,
   ) => {
     if (!bookId || affectedItems.length === 0) return;
@@ -490,7 +456,7 @@ function MatrixPageContent() {
     const previousItems = [...todoItems];
     const previousSelectedCategories = new Set(selectedCategories);
     const previousShowUncategorized = showUncategorized;
-    const affectedIds = new Set(affectedItems.filter(a => a.id).map(a => a.id));
+    const affectedIds = new Set(affectedItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -502,25 +468,23 @@ function MatrixPageContent() {
     updateFilterState();
 
     try {
-      const accessToken = await acquireToken();
       const CONCURRENCY = 5;
       let idx = 0;
       const worker = async () => {
         while (idx < affectedItems.length) {
           const item = affectedItems[idx++];
-          if (!item.id) continue;
-          await updateTodoItem(accessToken, bookId, item.id, {
+          await store.updateItem(bookId, item.id, {
             categories: computeNewCategories(item),
           });
         }
       };
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
-    } catch (error: any) {
-      console.error('Error updating tags:', error);
+    } catch (err: unknown) {
+      console.error('Error updating tags:', err);
       setTodoItems(previousItems);
       setSelectedCategories(previousSelectedCategories);
       setShowUncategorized(previousShowUncategorized);
-      throw error;
+      throw err;
     }
   };
 
@@ -578,15 +542,15 @@ function MatrixPageContent() {
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
-    calendars.length > 1 ? (
+    books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
-        onChange={(e) => handleCalendarSwitch(e.target.value)}
+        onChange={(e) => handleBookSwitch(e.target.value)}
       >
-        {calendars.map(cal => (
-          <option key={cal.id} value={cal.id}>
-            {getCalendarDisplayName(cal)}
+        {books.map(b => (
+          <option key={b.id} value={b.id}>
+            {b.name}
           </option>
         ))}
       </select>
@@ -611,7 +575,7 @@ function MatrixPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading, bookId, calendars, allCategories],
+    [isAuthenticated, inProgress, loading, bookId, books, allCategories],
   );
 
   if (!bookId) {

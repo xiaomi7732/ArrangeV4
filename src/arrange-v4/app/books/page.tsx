@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getCalendars, getUserInfo, createCalendar, deleteCalendar, Calendar } from '@/lib/graphService';
-import { filterArrangeCalendars } from '@/lib/calendarUtils';
+import { getUserInfo } from '@/lib/graphService';
+import { useStore } from '@/lib/store/useStore';
+import type { Book } from '@/lib/store/types';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import CalendarList from '@/components/CalendarList';
@@ -11,7 +12,8 @@ import styles from './page.module.css';
 
 export default function BooksPage() {
   const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin, instance } = useGraphToken();
-  const [calendars, setCalendars] = useState<Calendar[]>([]);
+  const store = useStore();
+  const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
@@ -31,7 +33,7 @@ export default function BooksPage() {
     });
   };
 
-  const fetchCalendars = async () => {
+  const fetchBooks = async () => {
     if (!isAuthenticated) return;
 
     setLoading(true);
@@ -39,48 +41,45 @@ export default function BooksPage() {
 
     try {
       const accessToken = await acquireToken();
-
-      // Fetch user info
       const userInfo = await getUserInfo(accessToken);
       setUserName(userInfo.displayName || userInfo.userPrincipalName || '');
 
-      // Fetch calendars and filter arrange books
-      const calendarsData = await getCalendars(accessToken);
-      const filteredCalendars = filterArrangeCalendars(calendarsData);
-      setCalendars(filteredCalendars);
-    } catch (error: any) {
-      console.error('Error fetching calendars:', error);
-      setError(error.message || 'Failed to fetch books');
+      const allBooks = await store.listBooks();
+      setBooks(allBooks);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch books';
+      console.error('Error fetching books:', err);
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateCalendar = async (name: string) => {
+  const handleCreateBook = async (name: string) => {
     try {
-      const accessToken = await acquireToken();
-      const newCalendar = await createCalendar(accessToken, name);
-      setCalendars(prev => [...prev, newCalendar]);
-    } catch (error: any) {
-      console.error('Error creating calendar:', error);
-      throw new Error(error.message || 'Failed to create book');
+      const newBook = await store.createBook(name, { backend: 'calendar' });
+      setBooks(prev => [...prev, newBook]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create book';
+      console.error('Error creating book:', err);
+      throw new Error(message);
     }
   };
 
-  const handleDeleteCalendar = async (calendarId: string) => {
+  const handleDeleteBook = async (bookId: string) => {
     try {
-      const accessToken = await acquireToken();
-      await deleteCalendar(accessToken, calendarId);
-      setCalendars(prev => prev.filter(c => c.id !== calendarId));
-    } catch (error: any) {
-      console.error('Error deleting calendar:', error);
-      throw new Error(error.message || 'Failed to delete book');
+      await store.deleteBook(bookId);
+      setBooks(prev => prev.filter(b => b.id !== bookId));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete book';
+      console.error('Error deleting book:', err);
+      throw new Error(message);
     }
   };
 
   useEffect(() => {
     if (isAuthenticated && inProgress === 'none') {
-      fetchCalendars();
+      fetchBooks();
     }
   }, [isAuthenticated, inProgress]);
 
@@ -97,11 +96,11 @@ export default function BooksPage() {
     ) : (
       <>
         <CreateCalendar
-          onCreateCalendar={handleCreateCalendar}
+          onCreateCalendar={handleCreateBook}
           disabled={loading}
         />
         <button
-          onClick={fetchCalendars}
+          onClick={fetchBooks}
           disabled={loading}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
@@ -130,11 +129,11 @@ export default function BooksPage() {
               </p>
             </div>
             <div className={styles.card}>
-              <CalendarList 
-                calendars={calendars} 
-                loading={loading} 
+              <CalendarList
+                books={books}
+                loading={loading}
                 error={error}
-                onDeleteCalendar={handleDeleteCalendar}
+                onDeleteBook={handleDeleteBook}
               />
             </div>
           </>

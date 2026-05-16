@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
-import { getCalendarEvents } from '@/lib/graphService';
-import { createTodoItem, updateTodoItem, TodoItem, parseTodoData, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/todoDataService';
-import { getCalendarDisplayName } from '@/lib/calendarUtils';
+import { useStore } from '@/lib/store/useStore';
+import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -58,7 +57,7 @@ const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
   cancelled: { lane: styles.laneCancelled, title: styles.laneTitleCancelled },
 };
 
-function sortByPriority(items: (TodoItem & { id?: string })[]) {
+function sortByPriority(items: TodoItemWithId[]) {
   return [...items].sort((a, b) => {
     const ai = a.important ? 1 : 0;
     const bi = b.important ? 1 : 0;
@@ -71,14 +70,15 @@ function sortByPriority(items: (TodoItem & { id?: string })[]) {
 }
 
 function ScrumPageContent() {
-  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
-  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError } = useBookId('/scrum');
+  const { isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const store = useStore();
+  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/scrum');
 
-  const [todoItems, setTodoItems] = useState<(TodoItem & { id?: string })[]>([]);
+  const [todoItems, setTodoItems] = useState<TodoItemWithId[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<(TodoItem & { id?: string }) | null>(null);
-  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
+  const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [showTags, setShowTags] = useState(true);
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
@@ -86,7 +86,7 @@ function ScrumPageContent() {
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showStatusFilters, setShowStatusFilters] = useState(false);
 
-  const displayError = error || calendarError;
+  const displayError = error || bookError;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -126,7 +126,7 @@ function ScrumPageContent() {
   }, [statusFilters]);
 
   const lanes = useMemo(() => {
-    const result = {} as Record<LaneStatus, (TodoItem & { id?: string })[]>;
+    const result = {} as Record<LaneStatus, TodoItemWithId[]>;
     for (const status of LANE_STATUSES) {
       result[status] = sortByPriority(filteredItems.filter(t => (t.status || 'new') === status));
     }
@@ -140,17 +140,17 @@ function ScrumPageContent() {
     setError(null);
 
     try {
-      const accessToken = await acquireToken();
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      const eventsData = await getCalendarEvents(
-        accessToken, bookId,
-        startDate.toISOString(), endDate.toISOString()
-      );
-      setTodoItems(eventsData.map(event => parseTodoData(event)));
+      const items = await store.listItems(bookId, {
+        range: 'window',
+        fromDate: startDate.toISOString(),
+        toDate: endDate.toISOString(),
+      });
+      setTodoItems(items);
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
@@ -158,7 +158,7 @@ function ScrumPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, bookId, acquireToken]);
+  }, [isAuthenticated, bookId, store]);
 
   useEffect(() => {
     if (isAuthenticated && inProgress === 'none' && bookId) {
@@ -169,9 +169,7 @@ function ScrumPageContent() {
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) throw new Error('No book selected');
     try {
-      const accessToken = await acquireToken();
-      const createdEvent = await createTodoItem(accessToken, bookId, todoItem);
-      const newTodo = parseTodoData(createdEvent);
+      const newTodo = await store.createItem(bookId, todoItem);
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
@@ -190,15 +188,15 @@ function ScrumPageContent() {
   };
 
   useSetTopBarActions(
-    calendars.length > 1 ? (
+    books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
-        onChange={(e) => handleCalendarSwitch(e.target.value)}
+        onChange={(e) => handleBookSwitch(e.target.value)}
       >
-        {calendars.map(cal => (
-          <option key={cal.id} value={cal.id}>
-            {getCalendarDisplayName(cal)}
+        {books.map(b => (
+          <option key={b.id} value={b.id}>
+            {b.name}
           </option>
         ))}
       </select>
@@ -223,10 +221,10 @@ function ScrumPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading, bookId, calendars, allCategories],
+    [isAuthenticated, inProgress, loading, bookId, books, allCategories],
   );
 
-  const handleDragStart = (todo: TodoItem & { id?: string }) => {
+  const handleDragStart = (todo: TodoItemWithId) => {
     setDraggedItem(todo);
   };
 
@@ -235,7 +233,7 @@ function ScrumPageContent() {
   };
 
   const handleDrop = async (newStatus: TodoStatus) => {
-    if (!draggedItem || !draggedItem.id || !bookId) return;
+    if (!draggedItem || !bookId) return;
 
     const currentStatus = draggedItem.status || 'new';
     if (currentStatus === newStatus) {
@@ -271,8 +269,7 @@ function ScrumPageContent() {
     setDraggedItem(null);
 
     try {
-      const accessToken = await acquireToken();
-      await updateTodoItem(accessToken, bookId, draggedItem.id, { status: newStatus });
+      await store.updateItem(bookId, draggedItem.id, { status: newStatus });
     } catch (err: unknown) {
       console.error('Error updating TODO status:', err);
       setTodoItems(previousItems);
@@ -292,8 +289,7 @@ function ScrumPageContent() {
     setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
 
     try {
-      const accessToken = await acquireToken();
-      await updateTodoItem(accessToken, bookId, selectedTodo.id, updatedFields);
+      await store.updateItem(bookId, selectedTodo.id, updatedFields);
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       setTodoItems(previousItems);
@@ -304,8 +300,8 @@ function ScrumPageContent() {
   };
 
   const bulkUpdateCategories = async (
-    affectedItems: (TodoItem & { id?: string })[],
-    computeNewCategories: (item: TodoItem & { id?: string }) => string[],
+    affectedItems: TodoItemWithId[],
+    computeNewCategories: (item: TodoItemWithId) => string[],
     updateFilterState: () => void,
   ) => {
     if (!bookId || affectedItems.length === 0) return;
@@ -313,7 +309,7 @@ function ScrumPageContent() {
     const previousItems = [...todoItems];
     const previousSelectedCategories = new Set(selectedCategories);
     const previousShowUncategorized = showUncategorized;
-    const affectedIds = new Set(affectedItems.filter(a => a.id).map(a => a.id));
+    const affectedIds = new Set(affectedItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -325,14 +321,12 @@ function ScrumPageContent() {
     updateFilterState();
 
     try {
-      const accessToken = await acquireToken();
       const CONCURRENCY = 5;
       let idx = 0;
       const worker = async () => {
         while (idx < affectedItems.length) {
           const item = affectedItems[idx++];
-          if (!item.id) continue;
-          await updateTodoItem(accessToken, bookId, item.id, {
+          await store.updateItem(bookId, item.id, {
             categories: computeNewCategories(item),
           });
         }

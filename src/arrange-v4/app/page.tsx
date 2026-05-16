@@ -3,91 +3,63 @@
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
-import { getCalendars } from '@/lib/graphService';
-import { filterArrangeCalendars } from '@/lib/calendarUtils';
+import { useStore } from '@/lib/store/useStore';
+import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
-/**
- * Determines the appropriate landing page after user authentication
- * @returns The path to navigate to after login
- */
-async function getPostLoginRoute(accessToken: string): Promise<string> {
-  try {
-    const calendars = await getCalendars(accessToken);
-    const arrangeCalendars = filterArrangeCalendars(calendars);
-    
-    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
-      return `/matrix?bookId=${encodeURIComponent(arrangeCalendars[0].id)}`;
-    }
-
-    const savedBookId = getLastBookId();
-    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
-      return `/matrix?bookId=${encodeURIComponent(savedBookId)}`;
-    }
-  } catch (error) {
-    console.error('Error fetching calendars for route decision:', error);
-  }
-  
-  return '/books';
-}
-
-/**
- * Checks if the matrix view should be available
- */
-async function shouldShowMatrixButton(accessToken: string): Promise<{ show: boolean; bookId?: string }> {
-  try {
-    const calendars = await getCalendars(accessToken);
-    const arrangeCalendars = filterArrangeCalendars(calendars);
-    
-    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
-      return { show: true, bookId: arrangeCalendars[0].id };
-    }
-
-    const savedBookId = getLastBookId();
-    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
-      return { show: true, bookId: savedBookId };
-    }
-  } catch (error) {
-    console.error('Error checking matrix availability:', error);
-  }
-  
-  return { show: false };
-}
-
 export default function Home() {
   const { instance, accounts, inProgress } = useMsal();
   const router = useRouter();
+  const store = useStore();
   const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
 
   const isAuthenticated = accounts.length > 0;
 
   useEffect(() => {
-    const checkMatrixAvailability = async () => {
-      if (isAuthenticated && accounts[0]) {
-        try {
-          const response = await instance.acquireTokenSilent({
-            ...loginRequest,
-            account: accounts[0],
-          });
-          const result = await shouldShowMatrixButton(response.accessToken);
-          setMatrixAvailable(result);
-        } catch (error) {
-          console.error('Error checking matrix availability:', error);
+    const check = async () => {
+      if (!isAuthenticated || !accounts[0]) return;
+      try {
+        const books = await store.listBooks();
+
+        if (books.length === 1) {
+          setMatrixAvailable({ show: true, bookId: books[0].id });
+          return;
         }
+
+        const savedBookId = normalizeBookId(getLastBookId());
+        if (savedBookId && books.some(b => b.id === savedBookId)) {
+          setMatrixAvailable({ show: true, bookId: savedBookId });
+          return;
+        }
+
+        setMatrixAvailable({ show: false });
+      } catch (error) {
+        console.error('Error checking matrix availability:', error);
       }
     };
 
-    checkMatrixAvailability();
-  }, [isAuthenticated, accounts, instance]);
+    check();
+  }, [isAuthenticated, accounts, store]);
 
   const handleLogin = async () => {
     try {
-      const result = await instance.loginPopup(loginRequest);
-      const accessToken = result.accessToken;
-      const route = await getPostLoginRoute(accessToken);
-      router.push(route);
+      await instance.loginPopup(loginRequest);
+      const books = await store.listBooks();
+
+      if (books.length === 1) {
+        router.push(`/matrix?bookId=${encodeURIComponent(books[0].id)}`);
+        return;
+      }
+
+      const savedBookId = normalizeBookId(getLastBookId());
+      if (savedBookId && books.some(b => b.id === savedBookId)) {
+        router.push(`/matrix?bookId=${encodeURIComponent(savedBookId)}`);
+        return;
+      }
+
+      router.push('/books');
     } catch (error) {
       console.error('Login failed:', error);
     }
