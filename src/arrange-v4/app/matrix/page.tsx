@@ -5,7 +5,7 @@ import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
-import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AddTodoItem from '@/components/AddTodoItem';
@@ -187,7 +187,8 @@ export default function MatrixPage() {
 }
 
 function MatrixPageContent() {
-  const { isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const auth = useAuthClient();
+  const { isAuthenticated, busy } = auth;
   const store = useStore();
   const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
@@ -527,7 +528,7 @@ function MatrixPageContent() {
 
   const handleLogin = async () => {
     try {
-      await graphLogin();
+      await auth.login();
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
@@ -535,10 +536,10 @@ function MatrixPageContent() {
   };
 
   useEffect(() => {
-    if (isAuthenticated && inProgress === 'none' && bookId) {
+    if (isAuthenticated && !busy && bookId) {
       fetchEvents();
     }
-  }, [isAuthenticated, inProgress, bookId]);
+  }, [isAuthenticated, busy, bookId]);
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
@@ -558,10 +559,10 @@ function MatrixPageContent() {
     !isAuthenticated ? (
       <button
         onClick={handleLogin}
-        disabled={inProgress !== 'none'}
+        disabled={busy}
         className={`${styles.button} ${styles.buttonPrimary}`}
       >
-        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+        {busy ? 'Signing in...' : 'Sign In'}
       </button>
     ) : (
       <>
@@ -575,7 +576,7 @@ function MatrixPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading, bookId, books, allCategories],
+    [isAuthenticated, busy, loading, bookId, books, allCategories],
   );
 
   if (!bookId) {
