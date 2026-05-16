@@ -56,13 +56,15 @@ export function useMicrosoftAuthClient(): AuthClient {
   }, [instance]);
 
   const getUser = useCallback((): AuthUser | null => {
-    const account = accounts[0];
+    // Read fresh from the MSAL instance for the same reason acquireToken does:
+    // captured React state can lag immediately after loginPopup/logoutPopup.
+    const account = instance.getAllAccounts()[0];
     if (!account) return null;
     return {
       displayName: account.name || account.username,
       email: account.username,
     };
-  }, [accounts]);
+  }, [instance]);
 
   return useMemo<AuthClient>(
     () => ({
