@@ -121,6 +121,10 @@ export function makeBookId(backend: BackendKind, nativeId: string): string {
  * Parses a prefixed book ID. Accepts unprefixed values (treated as legacy
  * calendar IDs) so old URLs and localStorage entries from before the
  * abstraction landed keep working.
+ *
+ * Returns `null` for values that look prefixed (contain `:`) but use an
+ * unknown prefix — these should not be silently normalized to a Calendar
+ * ID, since that would undermine the prefix-dispatch contract.
  */
 export function parseBookId(bookId: string): { backend: BackendKind; nativeId: string } | null {
   if (!bookId) return null;
@@ -134,6 +138,11 @@ export function parseBookId(bookId: string): { backend: BackendKind; nativeId: s
     }
   }
 
+  // If the value contains a prefix separator but didn't match any known backend,
+  // reject it — Graph calendar IDs are base64-flavored and don't contain ':'.
+  if (bookId.includes(PREFIX_SEPARATOR)) return null;
+
+  // Legacy / unprefixed: treat as a raw calendar ID for backward compatibility.
   return { backend: 'calendar', nativeId: bookId };
 }
 

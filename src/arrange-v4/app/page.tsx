@@ -47,6 +47,9 @@ export default function Home() {
         setMatrixAvailable({ show: false });
       } catch (error) {
         // Silent failure is fine for this background check — don't open a popup.
+        // But reset matrixAvailable so stale data from a previous account or
+        // a previously-successful check doesn't linger.
+        setMatrixAvailable({ show: false });
         console.error('Error checking matrix availability:', error);
       }
     };

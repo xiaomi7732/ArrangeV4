@@ -39,13 +39,32 @@ interface StoredTodoBody {
  */
 export class CalendarStore implements TodoStore {
   private readonly acquireToken: AcquireToken;
+  /**
+   * In-flight token acquisition. Concurrent calls share the same promise to
+   * avoid (a) redundant silent acquisitions and (b) — in the worst case where
+   * silent acquisition has failed and a popup is required — multiple
+   * simultaneous popup attempts that would all error with `interaction_in_progress`.
+   * Cleared as soon as the in-flight promise settles, so subsequent calls
+   * re-validate the token freshness.
+   */
+  private tokenInFlight: Promise<string> | null = null;
 
   constructor(opts: StoreOptions) {
     this.acquireToken = opts.acquireToken;
   }
 
+  private getToken(): Promise<string> {
+    if (this.tokenInFlight) return this.tokenInFlight;
+    const p = this.acquireToken();
+    this.tokenInFlight = p;
+    void p.finally(() => {
+      if (this.tokenInFlight === p) this.tokenInFlight = null;
+    });
+    return p;
+  }
+
   private async client(): Promise<Client> {
-    const token = await this.acquireToken();
+    const token = await this.getToken();
     return createGraphClient(token);
   }
 
