@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { TodoItem, TodoStatus } from '@/lib/todoDataService';
+import { TodoItem, TodoStatus } from '@/lib/store/types';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';

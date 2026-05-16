@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { TodoItem } from '@/lib/todoDataService';
+import { TodoItem } from '@/lib/store/types';
 import styles from './ManageTags.module.css';
 
 interface ManageTagsProps {

@@ -2,18 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Calendar } from '@/lib/graphService';
-import { getCalendarDisplayName } from '@/lib/calendarUtils';
+import type { Book } from '@/lib/store/types';
 import styles from './CalendarList.module.css';
 
 interface CalendarListProps {
-  calendars: Calendar[];
+  books: Book[];
   loading: boolean;
   error: string | null;
-  onDeleteCalendar: (calendarId: string) => Promise<void>;
+  onDeleteBook: (bookId: string) => Promise<void>;
 }
 
-export default function CalendarList({ calendars, loading, error, onDeleteCalendar }: CalendarListProps) {
+export default function CalendarList({ books, loading, error, onDeleteBook }: CalendarListProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [dismissResetKey, setDismissResetKey] = useState(0);
@@ -47,34 +46,28 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     }
   }, [confirmingId]);
 
-  const handleCalendarClick = (calendar: Calendar) => {
-    if (calendar.id) {
-      router.push(`/matrix?bookId=${encodeURIComponent(calendar.id)}`);
-    }
+  const handleBookClick = (book: Book) => {
+    router.push(`/matrix?bookId=${encodeURIComponent(book.id)}`);
   };
 
-  const handleDelete = useCallback(async (calendar: Calendar) => {
-    if (!calendar.id) return;
-
-    setDeletingId(calendar.id);
+  const handleDelete = useCallback(async (book: Book) => {
+    setDeletingId(book.id);
     try {
-      await onDeleteCalendar(calendar.id);
+      await onDeleteBook(book.id);
     } catch (error) {
       console.error('Failed to delete book:', error);
       alert('Failed to delete book. Please try again.');
     } finally {
-      const calId = calendar.id;
+      const bookId = book.id;
       setDeletingId(null);
-      setConfirmingId(prev => prev === calId ? null : prev);
+      setConfirmingId(prev => prev === bookId ? null : prev);
       // Defer focus restoration until delete button remounts after confirmation row unmounts
-      if (calId) {
-        requestAnimationFrame(() => {
-          const btn = deleteButtonRefs.current.get(calId);
-          if (btn) btn.focus();
-        });
-      }
+      requestAnimationFrame(() => {
+        const btn = deleteButtonRefs.current.get(bookId);
+        if (btn) btn.focus();
+      });
     }
-  }, [onDeleteCalendar]);
+  }, [onDeleteBook]);
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -92,7 +85,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     );
   }
 
-  if (calendars.length === 0) {
+  if (books.length === 0) {
     return (
       <div className={styles.empty}>
         <p className={styles.emptyTitle}>No books yet</p>
@@ -107,66 +100,64 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
     <div>
       <h2 className={styles.sectionTitle}>Your Books</h2>
       <div className={styles.grid}>
-        {calendars.map((calendar) => (
+        {books.map((book) => (
           <div
-            key={calendar.id}
+            key={book.id}
             className={styles.calendarCard}
-            onClick={() => handleCalendarClick(calendar)}
+            onClick={() => handleBookClick(book)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if ((e.target as HTMLElement).closest('button')) return;
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                handleCalendarClick(calendar);
+                handleBookClick(book);
               }
             }}
           >
             <div className={styles.calendarTop}>
               <div>
                 <h3 className={styles.calendarName}>
-                  {getCalendarDisplayName(calendar)}
+                  {book.name}
                 </h3>
-                {calendar.owner && (
+                {book.owner && (
                   <p className={styles.calendarOwner}>
-                    Owner: {calendar.owner.name || calendar.owner.address}
+                    Owner: {book.owner.name || book.owner.address}
                   </p>
                 )}
                 <div className={styles.badges}>
-                  {calendar.canEdit && (
+                  {book.canEdit && (
                     <span className={`${styles.badge} ${styles.badgeGreen}`}>
                       Can Edit
                     </span>
                   )}
-                  {calendar.canShare && (
+                  {book.canShare && (
                     <span className={`${styles.badge} ${styles.badgeBlue}`}>
                       Can Share
                     </span>
                   )}
-                  {calendar.canViewPrivateItems && (
+                  {book.canViewPrivateItems && (
                     <span className={`${styles.badge} ${styles.badgePurple}`}>
                       View Private
                     </span>
                   )}
                 </div>
               </div>
-              {calendar.color && (
+              {book.color && (
                 <div
                   className={styles.colorDot}
-                  style={{ backgroundColor: calendar.color }}
-                  title={`Color: ${calendar.color}`}
+                  style={{ backgroundColor: book.color }}
+                  title={`Color: ${book.color}`}
                 />
               )}
             </div>
-            {calendar.id && (
-              <p className={styles.calendarId} title={calendar.id}>
-                ID: {calendar.id}
-              </p>
-            )}
+            <p className={styles.calendarId} title={book.id}>
+              ID: {book.id}
+            </p>
             <div className={styles.calendarFooter}>
-              {calendar.id && (() => {
-                const bookName = getCalendarDisplayName(calendar);
-                const bookId = calendar.id;
+              {(() => {
+                const bookName = book.name;
+                const bookId = book.id;
                 return confirmingId === bookId ? (
                   <div
                     className={styles.deleteConfirmRow}
@@ -191,7 +182,7 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                     </button>
                     <button
                       ref={confirmingId === bookId ? confirmButtonRef : undefined}
-                      onClick={() => handleDelete(calendar)}
+                      onClick={() => handleDelete(book)}
                       disabled={!!deletingId}
                       className={styles.deleteConfirmButton}
                       aria-label={`Confirm delete ${bookName}`}
@@ -202,10 +193,10 @@ export default function CalendarList({ calendars, loading, error, onDeleteCalend
                 ) : (
                   <button
                     ref={(el) => {
-                      if (el && bookId) deleteButtonRefs.current.set(bookId, el);
-                      else if (!el && bookId) deleteButtonRefs.current.delete(bookId);
+                      if (el) deleteButtonRefs.current.set(bookId, el);
+                      else deleteButtonRefs.current.delete(bookId);
                     }}
-                    onClick={(e) => { e.stopPropagation(); setConfirmingId(bookId ?? null); }}
+                    onClick={(e) => { e.stopPropagation(); setConfirmingId(bookId); }}
                     disabled={!!deletingId}
                     className={styles.deleteButton}
                     aria-label={`Delete ${bookName}`}

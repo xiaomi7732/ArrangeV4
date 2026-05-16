@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { getAllCalendarEvents } from '@/lib/graphService';
-import { deleteTodoItem, TodoItem, parseTodoData } from '@/lib/todoDataService';
-import { getCalendarDisplayName } from '@/lib/calendarUtils';
+import { useStore } from '@/lib/store/useStore';
+import type { TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { useGraphToken } from '@/lib/hooks/useGraphToken';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -13,10 +12,11 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 function CancelledPageContent() {
-  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
-  const { bookId, calendars, currentCalendarName, handleCalendarSwitch, error: calendarError } = useBookId('/cancelled');
+  const { isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const store = useStore();
+  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/cancelled');
 
-  const [cancelledItems, setCancelledItems] = useState<(TodoItem & { id?: string })[]>([]);
+  const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -26,9 +26,9 @@ function CancelledPageContent() {
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
-  const displayError = error || calendarError;
+  const displayError = error || bookError;
 
-  const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => t.id && selectedIds.has(t.id));
+  const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
 
   const fetchEvents = useCallback(async () => {
     if (!isAuthenticated || !bookId) return;
@@ -37,10 +37,8 @@ function CancelledPageContent() {
     setError(null);
 
     try {
-      const accessToken = await acquireToken();
-      const eventsData = await getAllCalendarEvents(accessToken, bookId);
-      const todos = eventsData.map(event => parseTodoData(event));
-      setCancelledItems(todos.filter(t => t.status === 'cancelled'));
+      const items = await store.listItems(bookId, { range: 'all' });
+      setCancelledItems(items.filter(t => t.status === 'cancelled'));
       setSelectedIds(new Set());
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
@@ -49,7 +47,7 @@ function CancelledPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, bookId, acquireToken]);
+  }, [isAuthenticated, bookId, store]);
 
   useEffect(() => {
     if (isAuthenticated && inProgress === 'none' && bookId) {
@@ -72,16 +70,16 @@ function CancelledPageContent() {
   };
 
   useSetTopBarActions(
-    calendars.length > 1 ? (
+    books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
-        onChange={(e) => handleCalendarSwitch(e.target.value)}
+        onChange={(e) => handleBookSwitch(e.target.value)}
         disabled={loading || deleting}
       >
-        {calendars.map(cal => (
-          <option key={cal.id} value={cal.id}>
-            {getCalendarDisplayName(cal)}
+        {books.map(b => (
+          <option key={b.id} value={b.id}>
+            {b.name}
           </option>
         ))}
       </select>
@@ -112,7 +110,7 @@ function CancelledPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading, deleting, bookId, calendars, selectedIds.size],
+    [isAuthenticated, inProgress, loading, deleting, bookId, books, selectedIds.size],
   );
 
   const toggleSelect = (id: string) => {
@@ -127,11 +125,10 @@ function CancelledPageContent() {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(cancelledItems.filter(t => t.id).map(t => t.id!)));
+      setSelectedIds(new Set(cancelledItems.map(t => t.id)));
     }
   };
 
-  // Focus the confirm button when the dialog appears
   useEffect(() => {
     if (showConfirm) {
       confirmButtonRef.current?.focus();
@@ -145,9 +142,8 @@ function CancelledPageContent() {
     const idsToDelete = Array.from(selectedIds);
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
-    // Optimistic removal — keep a snapshot for rollback
     const previousItems = [...cancelledItems];
-    setCancelledItems(items => items.filter(item => !item.id || !selectedIds.has(item.id)));
+    setCancelledItems(items => items.filter(item => !selectedIds.has(item.id)));
 
     const CONCURRENCY = 5;
     let idx = 0;
@@ -155,13 +151,11 @@ function CancelledPageContent() {
     let hasFailure = false;
 
     try {
-      const accessToken = await acquireToken();
-
       const worker = async () => {
         while (idx < idsToDelete.length) {
           const eventId = idsToDelete[idx++];
           try {
-            await deleteTodoItem(accessToken, bookId, eventId);
+            await store.deleteItem(bookId, eventId);
           } catch (err) {
             hasFailure = true;
             console.error(`Error deleting event ${eventId}:`, err);

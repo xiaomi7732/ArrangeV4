@@ -3,58 +3,11 @@
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
-import { getCalendars } from '@/lib/graphService';
-import { filterArrangeCalendars } from '@/lib/calendarUtils';
+import { MultiBackendStore } from '@/lib/store/multiStore';
+import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
-
-/**
- * Determines the appropriate landing page after user authentication
- * @returns The path to navigate to after login
- */
-async function getPostLoginRoute(accessToken: string): Promise<string> {
-  try {
-    const calendars = await getCalendars(accessToken);
-    const arrangeCalendars = filterArrangeCalendars(calendars);
-    
-    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
-      return `/matrix?bookId=${encodeURIComponent(arrangeCalendars[0].id)}`;
-    }
-
-    const savedBookId = getLastBookId();
-    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
-      return `/matrix?bookId=${encodeURIComponent(savedBookId)}`;
-    }
-  } catch (error) {
-    console.error('Error fetching calendars for route decision:', error);
-  }
-  
-  return '/books';
-}
-
-/**
- * Checks if the matrix view should be available
- */
-async function shouldShowMatrixButton(accessToken: string): Promise<{ show: boolean; bookId?: string }> {
-  try {
-    const calendars = await getCalendars(accessToken);
-    const arrangeCalendars = filterArrangeCalendars(calendars);
-    
-    if (arrangeCalendars.length === 1 && arrangeCalendars[0].id) {
-      return { show: true, bookId: arrangeCalendars[0].id };
-    }
-
-    const savedBookId = getLastBookId();
-    if (savedBookId && arrangeCalendars.some(cal => cal.id === savedBookId)) {
-      return { show: true, bookId: savedBookId };
-    }
-  } catch (error) {
-    console.error('Error checking matrix availability:', error);
-  }
-  
-  return { show: false };
-}
 
 export default function Home() {
   const { instance, accounts, inProgress } = useMsal();
@@ -63,31 +16,88 @@ export default function Home() {
 
   const isAuthenticated = accounts.length > 0;
 
+  // Background availability check: silent-only token acquisition so we never
+  // open an unexpected popup from a useEffect. If the silent acquisition fails
+  // (e.g. the cached token expired and interaction is needed), we just don't
+  // show the matrix buttons — the user can sign in via the Get Started button.
+  // The `cancelled` flag prevents a slow listBooks() response from a previous
+  // account from clobbering newer state if the user switches accounts mid-flight.
   useEffect(() => {
-    const checkMatrixAvailability = async () => {
-      if (isAuthenticated && accounts[0]) {
-        try {
-          const response = await instance.acquireTokenSilent({
-            ...loginRequest,
-            account: accounts[0],
-          });
-          const result = await shouldShowMatrixButton(response.accessToken);
-          setMatrixAvailable(result);
-        } catch (error) {
-          console.error('Error checking matrix availability:', error);
+    let cancelled = false;
+    const check = async () => {
+      if (!isAuthenticated || !accounts[0]) return;
+      try {
+        const response = await instance.acquireTokenSilent({
+          ...loginRequest,
+          account: accounts[0],
+        });
+        if (cancelled) return;
+        const silentStore = new MultiBackendStore({
+          acquireToken: async () => response.accessToken,
+        });
+        const books = await silentStore.listBooks();
+        if (cancelled) return;
+
+        if (books.length === 1) {
+          setMatrixAvailable({ show: true, bookId: books[0].id });
+          return;
         }
+
+        const savedBookId = normalizeBookId(getLastBookId());
+        if (savedBookId && books.some(b => b.id === savedBookId)) {
+          setMatrixAvailable({ show: true, bookId: savedBookId });
+          return;
+        }
+
+        setMatrixAvailable({ show: false });
+      } catch (error) {
+        if (cancelled) return;
+        // Silent failure is fine for this background check — don't open a popup.
+        // But reset matrixAvailable so stale data from a previous account or
+        // a previously-successful check doesn't linger.
+        setMatrixAvailable({ show: false });
+        console.error('Error checking matrix availability:', error);
       }
     };
 
-    checkMatrixAvailability();
+    check();
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated, accounts, instance]);
 
   const handleLogin = async () => {
     try {
       const result = await instance.loginPopup(loginRequest);
-      const accessToken = result.accessToken;
-      const route = await getPostLoginRoute(accessToken);
-      router.push(route);
+
+      // MSAL's React state hasn't re-rendered yet — useGraphToken would still
+      // return a stale closure that throws "no account". Build a one-shot store
+      // bound to the access token we just got back from loginPopup.
+      const postLoginStore = new MultiBackendStore({
+        acquireToken: async () => result.accessToken,
+      });
+
+      // Wrap the post-login routing decision in its own try/catch. A transient
+      // Graph error must not leave the user stuck on the landing page after a
+      // successful login — fall back to /books in that case.
+      try {
+        const books = await postLoginStore.listBooks();
+
+        if (books.length === 1) {
+          router.push(`/matrix?bookId=${encodeURIComponent(books[0].id)}`);
+          return;
+        }
+
+        const savedBookId = normalizeBookId(getLastBookId());
+        if (savedBookId && books.some(b => b.id === savedBookId)) {
+          router.push(`/matrix?bookId=${encodeURIComponent(savedBookId)}`);
+          return;
+        }
+      } catch (routingError) {
+        console.error('Error during post-login routing — falling back to /books:', routingError);
+      }
+
+      router.push('/books');
     } catch (error) {
       console.error('Login failed:', error);
     }

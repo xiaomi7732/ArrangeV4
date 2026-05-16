@@ -1,14 +1,14 @@
 'use client';
 
-import { TodoItem } from '@/lib/todoDataService';
+import { TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import styles from './ScrumCard.module.css';
 
 interface ScrumCardProps {
-  todo: TodoItem & { id?: string };
-  onDragStart?: (todo: TodoItem & { id?: string }) => void;
+  todo: TodoItemWithId;
+  onDragStart?: (todo: TodoItemWithId) => void;
   onDragEnd?: () => void;
-  onClick?: (todo: TodoItem & { id?: string }) => void;
+  onClick?: (todo: TodoItemWithId) => void;
 }
 
 export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: ScrumCardProps) {
