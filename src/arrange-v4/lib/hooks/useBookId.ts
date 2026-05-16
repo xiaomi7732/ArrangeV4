@@ -6,7 +6,7 @@ import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
 import type { Book } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
-import { useGraphToken } from './useGraphToken';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 
 /**
  * Shared hook for resolving the selected book.
@@ -26,7 +26,7 @@ export function useBookId(routePrefix: string) {
   const rawBookId = searchParams.get('bookId');
   const bookId = normalizeBookId(rawBookId);
 
-  const { isAuthenticated, inProgress } = useGraphToken();
+  const { isAuthenticated, busy } = useAuthClient();
   const store = useStore();
 
   const [books, setBooks] = useState<Book[]>([]);
@@ -55,7 +55,7 @@ export function useBookId(routePrefix: string) {
   }, [rawBookId, bookId, router, routePrefix]);
 
   const fetchBooks = useCallback(async () => {
-    if (!isAuthenticated || inProgress !== 'none') return;
+    if (!isAuthenticated || busy) return;
     setError(null);
     try {
       const all = await store.listBooks();
@@ -72,7 +72,7 @@ export function useBookId(routePrefix: string) {
       console.error('Error fetching books:', err);
       setError(message);
     }
-  }, [isAuthenticated, inProgress, store, bookId, router]);
+  }, [isAuthenticated, busy, store, bookId, router]);
 
   useEffect(() => {
     fetchBooks(); // eslint-disable-line react-hooks/set-state-in-effect -- async data fetching sets state after await

@@ -4,8 +4,9 @@ import { Client } from '@microsoft/microsoft-graph-client';
  * Low-level Microsoft Graph utilities.
  *
  * After the storage abstraction landed, this file is intentionally minimal:
- * just an authenticated client factory plus the one user-info endpoint that
- * the Books page calls directly. All calendar CRUD lives in `lib/store/calendar/`.
+ * just an authenticated client factory used by the calendar store. All
+ * calendar CRUD lives in `lib/store/calendar/`. User info is sourced from
+ * the active AuthClient (`auth.getUser()`) instead of `/me`.
  */
 
 export function createGraphClient(accessToken: string): Client {
@@ -14,14 +15,4 @@ export function createGraphClient(accessToken: string): Client {
       done(null, accessToken);
     },
   });
-}
-
-export interface UserInfo {
-  displayName?: string;
-  userPrincipalName?: string;
-}
-
-export async function getUserInfo(accessToken: string): Promise<UserInfo> {
-  const client = createGraphClient(accessToken);
-  return client.api('/me').get();
 }

@@ -1,20 +1,20 @@
 'use client';
 
-import { useMsal } from '@azure/msal-react';
-import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
-import { MultiBackendStore } from '@/lib/store/multiStore';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 
 export default function Home() {
-  const { instance, accounts, inProgress } = useMsal();
+  const auth = useAuthClient();
+  const store = useStore();
   const router = useRouter();
   const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
 
-  const isAuthenticated = accounts.length > 0;
+  const { isAuthenticated, busy } = auth;
 
   // Background availability check: silent-only token acquisition so we never
   // open an unexpected popup from a useEffect. If the silent acquisition fails
@@ -25,17 +25,12 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
-      if (!isAuthenticated || !accounts[0]) return;
+      if (!isAuthenticated) return;
       try {
-        const response = await instance.acquireTokenSilent({
-          ...loginRequest,
-          account: accounts[0],
-        });
+        // silentOnly: true — never open a popup from this background check.
+        await auth.acquireToken({ silentOnly: true });
         if (cancelled) return;
-        const silentStore = new MultiBackendStore({
-          acquireToken: async () => response.accessToken,
-        });
-        const books = await silentStore.listBooks();
+        const books = await store.listBooks();
         if (cancelled) return;
 
         if (books.length === 1) {
@@ -53,8 +48,8 @@ export default function Home() {
       } catch (error) {
         if (cancelled) return;
         // Silent failure is fine for this background check — don't open a popup.
-        // But reset matrixAvailable so stale data from a previous account or
-        // a previously-successful check doesn't linger.
+        // Reset matrixAvailable so stale data from a previous account or a
+        // previously-successful check doesn't linger.
         setMatrixAvailable({ show: false });
         console.error('Error checking matrix availability:', error);
       }
@@ -64,24 +59,20 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, accounts, instance]);
+  }, [isAuthenticated, auth, store]);
 
   const handleLogin = async () => {
     try {
-      const result = await instance.loginPopup(loginRequest);
-
-      // MSAL's React state hasn't re-rendered yet — useGraphToken would still
-      // return a stale closure that throws "no account". Build a one-shot store
-      // bound to the access token we just got back from loginPopup.
-      const postLoginStore = new MultiBackendStore({
-        acquireToken: async () => result.accessToken,
-      });
+      await auth.login();
 
       // Wrap the post-login routing decision in its own try/catch. A transient
-      // Graph error must not leave the user stuck on the landing page after a
+      // backend error must not leave the user stuck on the landing page after a
       // successful login — fall back to /books in that case.
+      // Safe to call store methods here: AuthClient.acquireToken reads its
+      // underlying SDK state fresh, so the post-login token works even before
+      // React has re-rendered with the new auth state.
       try {
-        const books = await postLoginStore.listBooks();
+        const books = await store.listBooks();
 
         if (books.length === 1) {
           router.push(`/matrix?bookId=${encodeURIComponent(books[0].id)}`);
@@ -130,10 +121,10 @@ export default function Home() {
           {!isAuthenticated ? (
             <button
               onClick={handleLogin}
-              disabled={inProgress !== 'none'}
+              disabled={busy}
               className={`${styles.button} ${styles.buttonPrimary}`}
             >
-              {inProgress !== 'none' ? 'Signing in...' : 'Get Started'}
+              {busy ? 'Signing in...' : 'Get Started'}
             </button>
           ) : (
             <>

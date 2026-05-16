@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useMsal } from '@azure/msal-react';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useTopBarActions } from './TopBarProvider';
 import styles from './HamburgerMenu.module.css';
@@ -56,12 +56,12 @@ export default function HamburgerMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
-  const { instance, accounts } = useMsal();
+  const auth = useAuthClient();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const { leftActions, rightActions } = useTopBarActions();
 
-  const isAuthenticated = accounts.length > 0;
+  const isAuthenticated = auth.isAuthenticated;
 
   const isOnMatrix = pathname.startsWith('/matrix');
   const isOnScrum = pathname.startsWith('/scrum');
@@ -78,10 +78,13 @@ export default function HamburgerMenu() {
   const currentPage = navItems.find(item => isActive(item));
   const pageLabel = currentPage?.label || 'Arrange';
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     setIsOpen(false);
-    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
-    instance.logoutPopup({ postLogoutRedirectUri: `${window.location.origin}${basePath}/` });
+    try {
+      await auth.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   useEffect(() => {
