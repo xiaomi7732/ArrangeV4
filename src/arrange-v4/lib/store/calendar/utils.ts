@@ -3,6 +3,7 @@ import { makeBookId } from '../types';
 import type { Calendar } from './types';
 
 const ARRANGE_SUFFIX_REGEX = / by arrange$/i;
+export { ARRANGE_SUFFIX_REGEX };
 
 /** The suffix appended to a calendar name to mark it as an Arrange book. */
 export const ARRANGE_SUFFIX = ' by arrange';

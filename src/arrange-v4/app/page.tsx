@@ -4,6 +4,7 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '@/lib/msalConfig';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
+import { MultiBackendStore } from '@/lib/store/multiStore';
 import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
 import { useState, useEffect } from 'react';
@@ -45,8 +46,14 @@ export default function Home() {
 
   const handleLogin = async () => {
     try {
-      await instance.loginPopup(loginRequest);
-      const books = await store.listBooks();
+      const result = await instance.loginPopup(loginRequest);
+      // MSAL's React state hasn't re-rendered yet — useGraphToken would still
+      // return a stale closure that throws "no account". Build a one-shot store
+      // bound to the access token we just got back from loginPopup.
+      const postLoginStore = new MultiBackendStore({
+        acquireToken: async () => result.accessToken,
+      });
+      const books = await postLoginStore.listBooks();
 
       if (books.length === 1) {
         router.push(`/matrix?bookId=${encodeURIComponent(books[0].id)}`);

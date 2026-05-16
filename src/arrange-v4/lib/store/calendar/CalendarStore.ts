@@ -12,13 +12,7 @@ import type {
 } from '../types';
 import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
-import {
-  ARRANGE_SUFFIX,
-  calendarToBook,
-  convertGraphDateTimeToISO,
-  filterArrangeCalendars,
-  getCalendarDisplayName,
-} from './utils';
+import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
 import { computeBumpedDates } from './bump';
 
 const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
@@ -78,7 +72,9 @@ export class CalendarStore implements TodoStore {
       throw new Error(`CalendarStore cannot create a book with backend '${opts.backend}'.`);
     }
     const client = await this.client();
-    const calendarName = name.endsWith(ARRANGE_SUFFIX) ? name : `${name}${ARRANGE_SUFFIX}`;
+    // Case-insensitive suffix check so names like "Project by Arrange" don't get a
+    // duplicate " by arrange" appended.
+    const calendarName = ARRANGE_SUFFIX_REGEX.test(name) ? name : `${name}${ARRANGE_SUFFIX}`;
     const calendar: Calendar = await client.api('/me/calendars').post({ name: calendarName });
     const book = calendarToBook(calendar);
     if (!book) {
