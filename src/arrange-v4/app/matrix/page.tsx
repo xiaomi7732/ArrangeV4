@@ -7,7 +7,8 @@ import {
   DragOverlay,
   DragStartEvent,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -32,6 +33,7 @@ import ManageTags from '@/components/ManageTags';
 import {
   SortableTodo,
   SortableTodoList,
+  SortableTodoOverlay,
   sortableTodoCollisionDetection,
   sortableTodoKeyboardCoordinates,
 } from '@/components/SortableTodo';
@@ -240,7 +242,8 @@ function MatrixPageContent() {
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
   );
 
@@ -1129,7 +1132,11 @@ function MatrixPageContent() {
                 </div>
               </div>
               <DragOverlay>
-                {draggedItem ? <TodoCard todo={draggedItem} /> : null}
+                {draggedItem ? (
+                  <SortableTodoOverlay>
+                    <TodoCard todo={draggedItem} />
+                  </SortableTodoOverlay>
+                ) : null}
               </DragOverlay>
               </DndContext>
             </div>
