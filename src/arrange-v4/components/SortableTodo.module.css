@@ -1,0 +1,38 @@
+.wrapper {
+  position: relative;
+}
+
+.dragHandle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 2px 5px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #6b7280;
+  cursor: grab;
+  font-weight: 700;
+  line-height: 1;
+  touch-action: none;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandle[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.endTarget {
+  min-height: 12px;
+  border-radius: 4px;
+}
+
+.endTarget[data-drag-over] {
+  outline: 2px dashed currentColor;
+  outline-offset: -2px;
+}
