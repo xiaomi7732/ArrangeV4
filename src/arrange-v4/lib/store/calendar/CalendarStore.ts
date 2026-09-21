@@ -17,6 +17,27 @@ import { computeBumpedDates } from './bump';
 
 const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
 const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
+const itemUpdateQueues = new Map<string, Promise<void>>();
+const itemUpdateWaiters: Array<() => void> = [];
+let activeItemUpdates = 0;
+const MAX_CONCURRENT_ITEM_UPDATES = 5;
+
+async function acquireItemUpdateSlot(): Promise<void> {
+  if (activeItemUpdates < MAX_CONCURRENT_ITEM_UPDATES) {
+    activeItemUpdates += 1;
+    return;
+  }
+  await new Promise<void>(resolve => itemUpdateWaiters.push(resolve));
+}
+
+function releaseItemUpdateSlot(): void {
+  const next = itemUpdateWaiters.shift();
+  if (next) {
+    next();
+    return;
+  }
+  activeItemUpdates -= 1;
+}
 
 interface StoredTodoBody {
   status: string;
@@ -28,6 +49,8 @@ interface StoredTodoBody {
   finishDateTime: string | null;
   originalEtsDateTime: string | null;
   originalEtaDateTime: string | null;
+  matrixOrder?: number;
+  scrumOrder?: number;
 }
 
 /**
@@ -170,6 +193,8 @@ export class CalendarStore implements TodoStore {
       finishDateTime: null,
       originalEtsDateTime: null,
       originalEtaDateTime: null,
+      matrixOrder: item.matrixOrder,
+      scrumOrder: item.scrumOrder,
     };
 
     const now = new Date();
@@ -194,6 +219,33 @@ export class CalendarStore implements TodoStore {
 
   async updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId> {
     const calendarId = unwrap(bookId);
+    const queueKey = `${calendarId}:${itemId}`;
+    const previous = itemUpdateQueues.get(queueKey) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const queued = previous.then(() => gate, () => gate);
+    itemUpdateQueues.set(queueKey, queued);
+
+    await previous.catch(() => undefined);
+    await acquireItemUpdateSlot();
+    try {
+      return await this.updateItemCore(calendarId, itemId, updates);
+    } finally {
+      releaseItemUpdateSlot();
+      release();
+      if (itemUpdateQueues.get(queueKey) === queued) {
+        itemUpdateQueues.delete(queueKey);
+      }
+    }
+  }
+
+  private async updateItemCore(
+    calendarId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+  ): Promise<TodoItemWithId> {
     const client = await this.client();
 
     const existingEvent: CalendarEvent = await client
@@ -210,6 +262,8 @@ export class CalendarStore implements TodoStore {
       finishDateTime: null,
       originalEtsDateTime: null,
       originalEtaDateTime: null,
+      matrixOrder: undefined,
+      scrumOrder: undefined,
     };
     if (existingEvent.body?.content) {
       const parsed = parseStoredBody(existingEvent.body);
@@ -239,6 +293,8 @@ export class CalendarStore implements TodoStore {
         updates.originalEtaDateTime !== undefined
           ? updates.originalEtaDateTime ?? null
           : existingStored.originalEtaDateTime,
+      matrixOrder: updates.matrixOrder !== undefined ? updates.matrixOrder : existingStored.matrixOrder,
+      scrumOrder: updates.scrumOrder !== undefined ? updates.scrumOrder : existingStored.scrumOrder,
     };
 
     // Timestamp transitions based on status changes — only fill in fields the
@@ -265,10 +321,14 @@ export class CalendarStore implements TodoStore {
     // Date-bump: move stale non-terminal items forward, preserving originals
     const effectiveStatus = (merged.status || 'new') as TodoItem['status'];
     const callerSetDates = updates.etsDateTime !== undefined || updates.etaDateTime !== undefined;
+    const updateKeys = Object.keys(updates);
+    const orderOnlyUpdate = updateKeys.length > 0 && updateKeys.every(
+      key => key === 'matrixOrder' || key === 'scrumOrder',
+    );
     let nextEts = updates.etsDateTime;
     let nextEta = updates.etaDateTime;
 
-    if (isNonTerminalStatus(effectiveStatus) && !callerSetDates) {
+    if (isNonTerminalStatus(effectiveStatus) && !callerSetDates && !orderOnlyUpdate) {
       const currentEts = convertGraphDateTimeToISO(existingEvent.start);
       const currentEta = convertGraphDateTimeToISO(existingEvent.end);
       const bumped = computeBumpedDates(currentEts, currentEta);
@@ -432,6 +492,12 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
       item.finishDateTime = stored.finishDateTime ?? undefined;
       item.originalEtsDateTime = stored.originalEtsDateTime ?? null;
       item.originalEtaDateTime = stored.originalEtaDateTime ?? null;
+      if (typeof stored.matrixOrder === 'number' && Number.isFinite(stored.matrixOrder)) {
+        item.matrixOrder = stored.matrixOrder;
+      }
+      if (typeof stored.scrumOrder === 'number' && Number.isFinite(stored.scrumOrder)) {
+        item.scrumOrder = stored.scrumOrder;
+      }
     }
   }
 

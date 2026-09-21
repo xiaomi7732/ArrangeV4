@@ -40,6 +40,8 @@ export interface TodoItem {
   finishDateTime?: string | null;
   originalEtsDateTime?: string | null;
   originalEtaDateTime?: string | null;
+  matrixOrder?: number;
+  scrumOrder?: number;
   checklist?: string[];
   remarks?: {
     type: 'text' | 'markdown';

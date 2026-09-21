@@ -351,37 +351,6 @@
   border-color: #e9d5ff;
 }
 
-/* Drop zone */
-.laneDropZone {
-  border: 3px dashed currentColor;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.laneNew.laneDropZone {
-  border-color: #6b7280;
-}
-
-.laneInProgress.laneDropZone {
-  border-color: #2563eb;
-}
-
-.laneBlocked.laneDropZone {
-  border-color: #dc2626;
-}
-
-.laneFinished.laneDropZone {
-  border-color: #16a34a;
-}
-
-.laneCancelled.laneDropZone {
-  border-color: #9333ea;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
 /* Lane header */
 .laneHeader {
   display: flex;
@@ -421,6 +390,12 @@
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+}
+
+.laneContent[data-drag-over] {
+  outline: 2px dashed currentColor;
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
 .laneEmpty {
