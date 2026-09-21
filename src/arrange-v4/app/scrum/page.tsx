@@ -7,7 +7,8 @@ import {
   DragOverlay,
   DragStartEvent,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -31,6 +32,7 @@ import ScrumCard from '@/components/ScrumCard';
 import {
   SortableTodo,
   SortableTodoList,
+  SortableTodoOverlay,
   sortableTodoCollisionDetection,
   sortableTodoKeyboardCoordinates,
 } from '@/components/SortableTodo';
@@ -118,7 +120,8 @@ function ScrumPageContent() {
   const [showStatusFilters, setShowStatusFilters] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
   );
 
@@ -796,7 +799,11 @@ function ScrumPageContent() {
               })}
             </div>
             <DragOverlay>
-              {draggedItem ? <ScrumCard todo={draggedItem} /> : null}
+              {draggedItem ? (
+                <SortableTodoOverlay>
+                  <ScrumCard todo={draggedItem} />
+                </SortableTodoOverlay>
+              ) : null}
             </DragOverlay>
             </DndContext>
           </div>

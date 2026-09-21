@@ -19,11 +19,22 @@ interface SortableTodoProps {
   children: ReactNode;
 }
 
+function GripIcon() {
+  return (
+    <svg className={styles.gripIcon} viewBox="0 0 12 30" aria-hidden="true">
+      {[3, 9].flatMap(x =>
+        [3, 9, 15, 21, 27].map(y => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" />),
+      )}
+    </svg>
+  );
+}
+
 export function SortableTodo({ id, containerId, disabled = false, children }: SortableTodoProps) {
   const {
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -43,16 +54,28 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
         opacity: isDragging ? 0.35 : 1,
       }}
     >
+      <div className={styles.content}>{children}</div>
       <button
+        ref={setActivatorNodeRef}
         type="button"
         className={styles.dragHandle}
         aria-label="Drag to reorder"
         {...attributes}
         {...listeners}
       >
-        ::
+        <GripIcon />
       </button>
-      {children}
+    </div>
+  );
+}
+
+export function SortableTodoOverlay({ children }: { children: ReactNode }) {
+  return (
+    <div className={styles.wrapper}>
+      <div className={styles.content}>{children}</div>
+      <div className={styles.dragHandle} aria-hidden="true">
+        <GripIcon />
+      </div>
     </div>
   );
 }
