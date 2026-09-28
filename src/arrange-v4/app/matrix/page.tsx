@@ -381,7 +381,12 @@ function MatrixPageContent() {
       setItemsBookId(requestedBookId);
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
-      if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
+      if (
+        interaction === 'allow-interactive' &&
+        !hasSessionSweepRun() &&
+        !isSessionSweepInProgress() &&
+        !sweepAttemptedRef.current
+      ) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
         const sweepBookId = requestedBookId;

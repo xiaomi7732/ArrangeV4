@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useStore } from '@/lib/store/useStore';
-import type { TodoItem, TodoItemWithId } from '@/lib/store/types';
-import type { StoreOperationOptions } from '@/lib/store/types';
+import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -35,6 +34,10 @@ function CancelledPageContent() {
   const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const bookIdRef = useRef(bookId);
+  const fetchSequenceRef = useRef(0);
+
+  bookIdRef.current = bookId;
 
   const displayError = error || bookError;
 
@@ -45,29 +48,44 @@ function CancelledPageContent() {
     preserveSelection = false,
     interaction = 'allow-interactive',
   }: FetchEventsOptions = {}) => {
-    if (!isAuthenticated || !bookId) return;
+    const requestedBookId = bookIdRef.current;
+    if (!isAuthenticated || !requestedBookId) return;
+    const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
     if (!preserveError) setError(null);
 
     try {
-      const items = await store.listItems(bookId, {
+      const items = await store.listItems(requestedBookId, {
         range: 'all',
         interaction,
       });
+      if (
+        fetchSequenceRef.current !== fetchSequence ||
+        bookIdRef.current !== requestedBookId
+      ) return;
       const nextItems = items.filter(t => t.status === 'cancelled');
       setCancelledItems(nextItems);
       setSelectedIds(previous => preserveSelection
         ? retainExistingIds(previous, nextItems.map(item => item.id))
-        : new Set());
+        : new Set<string>());
     } catch (err: unknown) {
+      if (
+        fetchSequenceRef.current !== fetchSequence ||
+        bookIdRef.current !== requestedBookId
+      ) return;
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
       setError(message);
     } finally {
-      setLoading(false);
+      if (
+        fetchSequenceRef.current === fetchSequence &&
+        bookIdRef.current === requestedBookId
+      ) {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, bookId, store]);
+  }, [isAuthenticated, store]);
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
