@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
+import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate, isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
@@ -43,6 +44,7 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
 
 const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
   showAll: 'All',
@@ -219,6 +221,7 @@ function MatrixPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
 
@@ -307,12 +310,27 @@ function MatrixPageContent() {
     eliminate: canonicalQuadrants.eliminate.filter(todo => visibleTodoIds.has(todo.id)),
   }), [canonicalQuadrants, visibleTodoIds]);
 
-  const fetchEvents = async ({ preserveError = false }: { preserveError?: boolean } = {}) => {
+  const queuePendingFetch = (
+    preserveError: boolean,
+    interaction: AuthInteraction,
+  ) => {
+    if (!pendingFetchRef.current) {
+      pendingFetchInteractionRef.current = interaction;
+    } else if (interaction === 'allow-interactive') {
+      pendingFetchInteractionRef.current = 'allow-interactive';
+    }
+    pendingFetchRef.current = true;
+    pendingFetchPreserveErrorRef.current ||= preserveError;
+  };
+
+  const fetchEvents = async ({
+    preserveError = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
-      pendingFetchRef.current = true;
-      pendingFetchPreserveErrorRef.current ||= preserveError;
+      queuePendingFetch(preserveError, interaction);
       return;
     }
     const requestedMutationVersion = mutationVersionRef.current;
@@ -332,6 +350,7 @@ function MatrixPageContent() {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
+        interaction,
       });
       if (fetchSequenceRef.current !== fetchSequence) return;
       if (
@@ -339,15 +358,19 @@ function MatrixPageContent() {
         mutationVersionRef.current !== requestedMutationVersion
       ) {
         if (bookIdRef.current === requestedBookId) {
-          pendingFetchRef.current = true;
-          pendingFetchPreserveErrorRef.current ||= preserveError;
+          queuePendingFetch(preserveError, interaction);
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
-                void fetchEvents({ preserveError: replayPreserveError });
+                pendingFetchInteractionRef.current = 'allow-interactive';
+                void fetchEvents({
+                  preserveError: replayPreserveError,
+                  interaction: replayInteraction,
+                });
               }
             });
           }
@@ -442,9 +465,11 @@ function MatrixPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
-      void fetchEvents({ preserveError });
+      pendingFetchInteractionRef.current = 'allow-interactive';
+      void fetchEvents({ preserveError, interaction });
     }
   };
 
@@ -811,7 +836,10 @@ function MatrixPageContent() {
   }, [isAuthenticated, busy, bookId]);
 
   useRefreshOnPageActivation(
-    () => void fetchEvents({ preserveError: true }),
+    () => void fetchEvents({
+      preserveError: true,
+      interaction: 'silent-only',
+    }),
     isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
   );
 

@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
+import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
@@ -43,6 +44,7 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
 
 const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
 
@@ -98,6 +100,7 @@ function ScrumPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
 
@@ -184,12 +187,18 @@ function ScrumPageContent() {
     return result;
   }, [canonicalLanes, visibleItemIds]);
 
-  const fetchEvents = useCallback(async (
-    { preserveError = false }: { preserveError?: boolean } = {},
-  ) => {
+  const fetchEvents = useCallback(async ({
+    preserveError = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
+      if (!pendingFetchRef.current) {
+        pendingFetchInteractionRef.current = interaction;
+      } else if (interaction === 'allow-interactive') {
+        pendingFetchInteractionRef.current = 'allow-interactive';
+      }
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current ||= preserveError;
       return;
@@ -210,6 +219,7 @@ function ScrumPageContent() {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
+        interaction,
       });
       if (fetchSequenceRef.current !== fetchSequence) return;
       if (
@@ -217,15 +227,25 @@ function ScrumPageContent() {
         mutationVersionRef.current !== requestedMutationVersion
       ) {
         if (bookIdRef.current === requestedBookId) {
+          if (!pendingFetchRef.current) {
+            pendingFetchInteractionRef.current = interaction;
+          } else if (interaction === 'allow-interactive') {
+            pendingFetchInteractionRef.current = 'allow-interactive';
+          }
           pendingFetchRef.current = true;
           pendingFetchPreserveErrorRef.current ||= preserveError;
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
-                void fetchEvents({ preserveError: replayPreserveError });
+                pendingFetchInteractionRef.current = 'allow-interactive';
+                void fetchEvents({
+                  preserveError: replayPreserveError,
+                  interaction: replayInteraction,
+                });
               }
             });
           }
@@ -258,9 +278,11 @@ function ScrumPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
-      void fetchEvents({ preserveError });
+      pendingFetchInteractionRef.current = 'allow-interactive';
+      void fetchEvents({ preserveError, interaction });
     }
   };
 
@@ -279,7 +301,10 @@ function ScrumPageContent() {
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
   useRefreshOnPageActivation(
-    () => void fetchEvents({ preserveError: true }),
+    () => void fetchEvents({
+      preserveError: true,
+      interaction: 'silent-only',
+    }),
     isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
   );
 

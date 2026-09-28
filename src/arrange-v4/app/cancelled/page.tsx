@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import type { TodoItem, TodoItemWithId } from '@/lib/store/types';
+import type { StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
+import { retainExistingIds } from '@/lib/selectionUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
@@ -12,6 +14,11 @@ import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
 import styles from './page.module.css';
+
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+  preserveSelection?: boolean;
+};
 
 function CancelledPageContent() {
   const auth = useAuthClient();
@@ -33,18 +40,26 @@ function CancelledPageContent() {
 
   const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
 
-  const fetchEvents = useCallback(async (
-    { preserveError = false }: { preserveError?: boolean } = {},
-  ) => {
+  const fetchEvents = useCallback(async ({
+    preserveError = false,
+    preserveSelection = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
     if (!isAuthenticated || !bookId) return;
 
     setLoading(true);
     if (!preserveError) setError(null);
 
     try {
-      const items = await store.listItems(bookId, { range: 'all' });
-      setCancelledItems(items.filter(t => t.status === 'cancelled'));
-      setSelectedIds(new Set());
+      const items = await store.listItems(bookId, {
+        range: 'all',
+        interaction,
+      });
+      const nextItems = items.filter(t => t.status === 'cancelled');
+      setCancelledItems(nextItems);
+      setSelectedIds(previous => preserveSelection
+        ? retainExistingIds(previous, nextItems.map(item => item.id))
+        : new Set());
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
@@ -61,8 +76,12 @@ function CancelledPageContent() {
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
   useRefreshOnPageActivation(
-    () => void fetchEvents({ preserveError: true }),
-    isAuthenticated && !busy && !!bookId && !loading && !deleting,
+    () => void fetchEvents({
+      preserveError: true,
+      preserveSelection: true,
+      interaction: 'silent-only',
+    }),
+    isAuthenticated && !busy && !!bookId && !loading && !deleting && !showConfirm,
   );
 
   const handleDeleteSelected = () => {

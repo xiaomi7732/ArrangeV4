@@ -69,7 +69,7 @@ export interface Book {
 
 export type ListItemsRange = 'all' | 'window';
 
-export interface ListItemsOptions {
+export interface ListItemsOptions extends StoreOperationOptions {
   /**
    * Explicit range. No implicit defaults — callers must pick.
    * - 'window' requires `fromDate` and `toDate`.

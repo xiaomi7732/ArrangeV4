@@ -22,6 +22,8 @@
     "lib/dateUtils.test.ts",
     "lib/hooks/useRefreshOnPageActivation.ts",
     "lib/hooks/useRefreshOnPageActivation.test.ts",
+    "lib/selectionUtils.ts",
+    "lib/selectionUtils.test.ts",
     "lib/store/tokenAcquisition.ts",
     "lib/store/tokenAcquisition.test.ts"
   ]

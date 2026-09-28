@@ -117,7 +117,7 @@ export class CalendarStore implements TodoStore {
 
   async listItems(bookId: string, opts: ListItemsOptions): Promise<TodoItemWithId[]> {
     const calendarId = unwrap(bookId);
-    const client = await this.client();
+    const client = await this.client(opts);
 
     const events: CalendarEvent[] = [];
 
