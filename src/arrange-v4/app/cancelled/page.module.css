@@ -187,6 +187,12 @@
   color: #374151;
   background-color: white;
   cursor: pointer;
+  color-scheme: light;
+}
+
+.bookSwitcher option {
+  color: #374151;
+  background-color: #ffffff;
 }
 
 /* Task list */

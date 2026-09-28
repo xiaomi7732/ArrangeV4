@@ -72,6 +72,12 @@
   padding: 4px 8px;
   cursor: pointer;
   max-width: 300px;
+  color-scheme: light;
+}
+
+.bookSwitcher option {
+  color: #374151;
+  background-color: #ffffff;
 }
 
 .bookSwitcher:hover {
