@@ -26,6 +26,7 @@ import {
 } from '@/lib/orderUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -229,6 +230,7 @@ function MatrixPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
@@ -379,6 +381,7 @@ function MatrixPageContent() {
       }
       setTodoItems(todos);
       setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (
@@ -458,6 +461,14 @@ function MatrixPageContent() {
         fetchSequenceRef.current === fetchSequence &&
         bookIdRef.current === requestedBookId
       ) {
+        if (
+          interaction === 'silent-only' &&
+          isInteractiveAuthenticationRequiredError(err)
+        ) {
+          setAuthRecoveryRequired(true);
+          setError(null);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
         setError(message);
       }
@@ -832,6 +843,14 @@ function MatrixPageContent() {
     }
   };
 
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      await fetchEvents();
+      return;
+    }
+    await handleLogin();
+  };
+
   useEffect(() => {
     if (bookId && bookId !== itemsBookId) {
       setLoading(isAuthenticated && !busy);
@@ -905,14 +924,14 @@ function MatrixPageContent() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || authRecoveryRequired) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <AuthRecoveryPanel
-            busy={busy}
+            busy={busy || (authRecoveryRequired && loading)}
             error={displayError}
-            onLogin={handleLogin}
+            onLogin={handleAuthRecovery}
           />
         </div>
       </div>

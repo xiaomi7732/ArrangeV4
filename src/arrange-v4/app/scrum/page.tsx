@@ -25,6 +25,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -108,6 +109,7 @@ function ScrumPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [showTags, setShowTags] = useState(true);
@@ -254,12 +256,21 @@ function ScrumPageContent() {
       }
       setTodoItems(items);
       setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
       if (
         fetchSequenceRef.current === fetchSequence &&
         bookIdRef.current === requestedBookId
       ) {
+        if (
+          interaction === 'silent-only' &&
+          isInteractiveAuthenticationRequiredError(err)
+        ) {
+          setAuthRecoveryRequired(true);
+          setError(null);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
         setError(message);
       }
@@ -344,6 +355,14 @@ function ScrumPageContent() {
       console.error('Login failed:', err);
       setError('Login failed. Please try again.');
     }
+  };
+
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      await fetchEvents();
+      return;
+    }
+    await handleLogin();
   };
 
   useSetTopBarActions(
@@ -657,14 +676,14 @@ function ScrumPageContent() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || authRecoveryRequired) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <AuthRecoveryPanel
-            busy={busy}
+            busy={busy || (authRecoveryRequired && loading)}
             error={displayError}
-            onLogin={handleLogin}
+            onLogin={handleAuthRecovery}
           />
         </div>
       </div>

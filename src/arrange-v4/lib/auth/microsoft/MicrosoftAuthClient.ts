@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { loginRequest } from '@/lib/msalConfig';
+import { InteractiveAuthenticationRequiredError } from '../errors';
 import type { AcquireTokenOptions, AuthClient, AuthUser } from '../types';
 
 /**
@@ -31,10 +32,10 @@ export function useMicrosoftAuthClient(): AuthClient {
       const response = await instance.acquireTokenSilent({ ...loginRequest, account });
       return response.accessToken;
     } catch (silentError: unknown) {
-      if (options?.silentOnly) {
-        throw silentError;
-      }
       if (silentError instanceof InteractionRequiredAuthError) {
+        if (options?.silentOnly) {
+          throw new InteractiveAuthenticationRequiredError(silentError);
+        }
         const response = await instance.acquireTokenPopup(loginRequest);
         return response.accessToken;
       }

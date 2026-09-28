@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import {
+  InteractiveAuthenticationRequiredError,
+  isInteractiveAuthenticationRequiredError,
+} from './errors';
 import { getAuthRecoveryContent } from './recoveryState';
 
 describe('getAuthRecoveryContent', () => {
@@ -9,6 +13,7 @@ describe('getAuthRecoveryContent', () => {
       title: 'Updating your session...',
       message: 'Please wait while the sign-in process finishes.',
     });
+
   });
 
   it('shows a clear recovery action when signed out', () => {
@@ -16,6 +21,17 @@ describe('getAuthRecoveryContent', () => {
       state: 'signed-out',
       title: 'Sign in to continue',
       message: 'Your session may have expired. Your TODO data is safe; sign in again to reload this page.',
+    });
+  });
+
+  describe('interactive authentication errors', () => {
+    it('identifies only explicit interaction-required failures', () => {
+      const source = new Error('interaction required');
+      const error = new InteractiveAuthenticationRequiredError(source);
+
+      assert.equal(isInteractiveAuthenticationRequiredError(error), true);
+      assert.equal(isInteractiveAuthenticationRequiredError(source), false);
+      assert.equal(error.cause, source);
     });
   });
 });

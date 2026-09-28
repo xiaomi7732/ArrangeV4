@@ -6,6 +6,7 @@ import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/stor
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -29,6 +30,7 @@ function CancelledPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -68,6 +70,7 @@ function CancelledPageContent() {
       const nextItems = items.filter(t => t.status === 'cancelled');
       setCancelledItems(nextItems);
       setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
       setSelectedIds(previous => preserveSelection
         ? retainExistingIds(previous, nextItems.map(item => item.id))
         : new Set<string>());
@@ -76,6 +79,14 @@ function CancelledPageContent() {
         fetchSequenceRef.current !== fetchSequence ||
         bookIdRef.current !== requestedBookId
       ) return;
+      if (
+        interaction === 'silent-only' &&
+        isInteractiveAuthenticationRequiredError(err)
+      ) {
+        setAuthRecoveryRequired(true);
+        setError(null);
+        return;
+      }
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
       setError(message);
@@ -127,6 +138,14 @@ function CancelledPageContent() {
       console.error('Login failed:', err);
       setError('Login failed. Please try again.');
     }
+  };
+
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      await fetchEvents();
+      return;
+    }
+    await handleLogin();
   };
 
   useSetTopBarActions(
@@ -258,14 +277,14 @@ function CancelledPageContent() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || authRecoveryRequired) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <AuthRecoveryPanel
-            busy={busy}
+            busy={busy || (authRecoveryRequired && loading)}
             error={displayError}
-            onLogin={handleLogin}
+            onLogin={handleAuthRecovery}
           />
         </div>
       </div>
