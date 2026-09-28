@@ -25,6 +25,7 @@ import {
 } from '@/lib/orderUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
@@ -276,6 +277,11 @@ function ScrumPageContent() {
       fetchEvents();
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
+
+  useRefreshOnPageActivation(
+    () => void fetchEvents({ preserveError: true }),
+    isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
+  );
 
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) throw new Error('No book selected');

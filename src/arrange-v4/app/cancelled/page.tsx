@@ -6,6 +6,7 @@ import type { TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
@@ -32,11 +33,13 @@ function CancelledPageContent() {
 
   const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (
+    { preserveError = false }: { preserveError?: boolean } = {},
+  ) => {
     if (!isAuthenticated || !bookId) return;
 
     setLoading(true);
-    setError(null);
+    if (!preserveError) setError(null);
 
     try {
       const items = await store.listItems(bookId, { range: 'all' });
@@ -56,6 +59,11 @@ function CancelledPageContent() {
       fetchEvents();
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
+
+  useRefreshOnPageActivation(
+    () => void fetchEvents({ preserveError: true }),
+    isAuthenticated && !busy && !!bookId && !loading && !deleting,
+  );
 
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
@@ -105,7 +113,7 @@ function CancelledPageContent() {
           Delete ({selectedIds.size})
         </button>
         <button
-          onClick={fetchEvents}
+          onClick={() => void fetchEvents()}
           disabled={loading}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >

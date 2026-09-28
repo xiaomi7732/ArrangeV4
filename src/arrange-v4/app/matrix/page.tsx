@@ -26,6 +26,7 @@ import {
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
@@ -808,6 +809,11 @@ function MatrixPageContent() {
       fetchEvents();
     }
   }, [isAuthenticated, busy, bookId]);
+
+  useRefreshOnPageActivation(
+    () => void fetchEvents({ preserveError: true }),
+    isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
+  );
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
