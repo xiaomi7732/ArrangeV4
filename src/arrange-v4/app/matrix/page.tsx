@@ -870,12 +870,17 @@ function MatrixPageContent() {
       preserveError: true,
       interaction: 'silent-only',
     }),
-    isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
+    isAuthenticated &&
+      !authRecoveryRequired &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !isSavingOrder,
   );
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
-    isAuthenticated && books.length > 1 ? (
+    isAuthenticated && !authRecoveryRequired && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -897,7 +902,7 @@ function MatrixPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : authRecoveryRequired ? null : (
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
@@ -909,7 +914,17 @@ function MatrixPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
+    [
+      isAuthenticated,
+      authRecoveryRequired,
+      busy,
+      loading,
+      isSavingOrder,
+      bookId,
+      books,
+      allCategories,
+      todoItems,
+    ],
   );
 
   if (!bookId) {

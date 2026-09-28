@@ -316,7 +316,12 @@ function ScrumPageContent() {
       preserveError: true,
       interaction: 'silent-only',
     }),
-    isAuthenticated && !busy && !!bookId && !loading && !isSavingOrder,
+    isAuthenticated &&
+      !authRecoveryRequired &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !isSavingOrder,
   );
 
   const handleAddTodo = async (todoItem: TodoItem) => {
@@ -366,7 +371,7 @@ function ScrumPageContent() {
   };
 
   useSetTopBarActions(
-    isAuthenticated && books.length > 1 ? (
+    isAuthenticated && !authRecoveryRequired && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -388,7 +393,7 @@ function ScrumPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : authRecoveryRequired ? null : (
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
@@ -400,7 +405,17 @@ function ScrumPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
+    [
+      isAuthenticated,
+      authRecoveryRequired,
+      busy,
+      loading,
+      isSavingOrder,
+      bookId,
+      books,
+      allCategories,
+      todoItems,
+    ],
   );
 
   const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {

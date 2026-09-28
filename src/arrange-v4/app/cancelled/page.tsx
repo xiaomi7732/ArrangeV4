@@ -84,6 +84,7 @@ function CancelledPageContent() {
         isInteractiveAuthenticationRequiredError(err)
       ) {
         setAuthRecoveryRequired(true);
+        setShowConfirm(false);
         setError(null);
         return;
       }
@@ -122,7 +123,13 @@ function CancelledPageContent() {
       preserveSelection: true,
       interaction: 'silent-only',
     }),
-    isAuthenticated && !busy && !!bookId && !loading && !deleting && !showConfirm,
+    isAuthenticated &&
+      !authRecoveryRequired &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !deleting &&
+      !showConfirm,
   );
 
   const handleDeleteSelected = () => {
@@ -149,7 +156,7 @@ function CancelledPageContent() {
   };
 
   useSetTopBarActions(
-    isAuthenticated && books.length > 1 ? (
+    isAuthenticated && !authRecoveryRequired && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -171,7 +178,7 @@ function CancelledPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : authRecoveryRequired ? null : (
       <>
         <button
           onClick={handleDeleteSelected}
@@ -189,7 +196,16 @@ function CancelledPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, deleting, bookId, books, selectedIds.size],
+    [
+      isAuthenticated,
+      authRecoveryRequired,
+      busy,
+      loading,
+      deleting,
+      bookId,
+      books,
+      selectedIds.size,
+    ],
   );
 
   const toggleSelect = (id: string) => {
