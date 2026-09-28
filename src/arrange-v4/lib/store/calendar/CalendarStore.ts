@@ -1,10 +1,10 @@
 import { Client } from '@microsoft/microsoft-graph-client';
 import { createGraphClient } from '@/lib/graphService';
 import type {
-  AcquireToken,
   Book,
   CreateBookOptions,
   ListItemsOptions,
+  StoreOperationOptions,
   StoreOptions,
   TodoItem,
   TodoItemWithId,
@@ -14,6 +14,7 @@ import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
 import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
 import { computeBumpedDates } from './bump';
+import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
 
 const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
 const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
@@ -61,45 +62,21 @@ interface StoredTodoBody {
  * `====ArrangeDataStart====` / `====ArrangeDataEnd====` markers.
  */
 export class CalendarStore implements TodoStore {
-  private readonly acquireToken: AcquireToken;
-  /**
-   * In-flight token acquisition. Concurrent calls share the same promise to
-   * avoid (a) redundant silent acquisitions and (b) — in the worst case where
-   * silent acquisition has failed and a popup is required — multiple
-   * simultaneous popup attempts that would all error with `interaction_in_progress`.
-   * Cleared as soon as the in-flight promise settles, so subsequent calls
-   * re-validate the token freshness.
-   */
-  private tokenInFlight: Promise<string> | null = null;
+  private readonly tokenAcquisition: TokenAcquisitionCoordinator;
 
   constructor(opts: StoreOptions) {
-    this.acquireToken = opts.acquireToken;
+    this.tokenAcquisition = new TokenAcquisitionCoordinator(opts.acquireToken);
   }
 
-  private getToken(): Promise<string> {
-    if (this.tokenInFlight) return this.tokenInFlight;
-    const p = this.acquireToken();
-    this.tokenInFlight = p;
-    // Attach both fulfillment and rejection handlers so we don't create an
-    // unhandled rejection from a chained promise. The returned chained
-    // promise from .then(clear, clear) cannot reject because we handle both
-    // settlement cases with a no-throw clear function.
-    const clear = () => {
-      if (this.tokenInFlight === p) this.tokenInFlight = null;
-    };
-    p.then(clear, clear);
-    return p;
-  }
-
-  private async client(): Promise<Client> {
-    const token = await this.getToken();
+  private async client(options?: StoreOperationOptions): Promise<Client> {
+    const token = await this.tokenAcquisition.getToken(options);
     return createGraphClient(token);
   }
 
   /* ---- Books ---- */
 
-  async listBooks(): Promise<Book[]> {
-    const client = await this.client();
+  async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
+    const client = await this.client(options);
     const all: Calendar[] = [];
 
     let response = await client.api('/me/calendars').top(100).get();

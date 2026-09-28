@@ -8,6 +8,8 @@
  * within the context of a Book.
  */
 
+import type { AcquireTokenOptions } from '@/lib/auth/types';
+
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
 
 export const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
@@ -86,8 +88,18 @@ export interface CreateBookOptions {
   backend: BackendKind;
 }
 
+export type AuthInteraction = 'allow-interactive' | 'silent-only';
+
+export interface StoreOperationOptions {
+  /**
+   * Whether token acquisition may fall back to an interactive flow.
+   * Defaults to `allow-interactive` for user-initiated operations.
+   */
+  interaction?: AuthInteraction;
+}
+
 export interface TodoStore {
-  listBooks(): Promise<Book[]>;
+  listBooks(options?: StoreOperationOptions): Promise<Book[]>;
   createBook(name: string, opts: CreateBookOptions): Promise<Book>;
   deleteBook(bookId: string): Promise<void>;
 
@@ -102,7 +114,7 @@ export interface TodoStore {
  * that future backends with different auth providers can plug in without
  * touching the interface.
  */
-export type AcquireToken = () => Promise<string>;
+export type AcquireToken = (options?: AcquireTokenOptions) => Promise<string>;
 
 export interface StoreOptions {
   acquireToken: AcquireToken;
