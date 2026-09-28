@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsc --project tsconfig.test.json && node --test .test-dist/lib/store/tokenAcquisition.test.js"
+    "test": "tsc --project tsconfig.test.json && node --test .test-dist/lib/auth/recoveryState.test.js .test-dist/lib/store/tokenAcquisition.test.js"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.27.0",

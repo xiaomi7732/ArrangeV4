@@ -16,6 +16,8 @@
     "types": ["node"]
   },
   "include": [
+    "lib/auth/recoveryState.ts",
+    "lib/auth/recoveryState.test.ts",
     "lib/store/tokenAcquisition.ts",
     "lib/store/tokenAcquisition.test.ts"
   ]
