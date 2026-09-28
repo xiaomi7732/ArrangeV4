@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { MultiBackendStore } from '@/lib/store/multiStore';
 import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
@@ -28,9 +29,12 @@ export default function Home() {
       if (!isAuthenticated) return;
       try {
         // silentOnly: true — never open a popup from this background check.
-        await auth.acquireToken({ silentOnly: true });
+        const accessToken = await auth.acquireToken({ silentOnly: true });
         if (cancelled) return;
-        const books = await store.listBooks();
+        const silentStore = new MultiBackendStore({
+          acquireToken: async () => accessToken,
+        });
+        const books = await silentStore.listBooks();
         if (cancelled) return;
 
         if (books.length === 1) {
