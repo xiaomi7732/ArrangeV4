@@ -1,8 +1,27 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
+import {
+  moveBetweenContainers,
+  nextOrder,
+  normalizeOrder,
+  reorderVisibleItems,
+  replaceItems,
+  sortByPersistedOrder,
+} from '@/lib/orderUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -10,6 +29,13 @@ import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
 import ScrumCard from '@/components/ScrumCard';
+import {
+  SortableTodo,
+  SortableTodoList,
+  SortableTodoOverlay,
+  sortableTodoCollisionDetection,
+  sortableTodoKeyboardCoordinates,
+} from '@/components/SortableTodo';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -57,16 +83,14 @@ const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
   cancelled: { lane: styles.laneCancelled, title: styles.laneTitleCancelled },
 };
 
-function sortByPriority(items: TodoItemWithId[]) {
-  return [...items].sort((a, b) => {
-    const ai = a.important ? 1 : 0;
-    const bi = b.important ? 1 : 0;
-    if (bi !== ai) return bi - ai;
-    const au = a.urgent ? 1 : 0;
-    const bu = b.urgent ? 1 : 0;
-    if (bu !== au) return bu - au;
-    return (a.subject || '').localeCompare(b.subject || '');
-  });
+function comparePriority(a: TodoItemWithId, b: TodoItemWithId) {
+  const ai = a.important ? 1 : 0;
+  const bi = b.important ? 1 : 0;
+  if (bi !== ai) return bi - ai;
+  const au = a.urgent ? 1 : 0;
+  const bu = b.urgent ? 1 : 0;
+  if (bu !== au) return bu - au;
+  return (a.subject || '').localeCompare(b.subject || '') || a.id.localeCompare(b.id);
 }
 
 function ScrumPageContent() {
@@ -74,8 +98,17 @@ function ScrumPageContent() {
   const { isAuthenticated, busy } = auth;
   const store = useStore();
   const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/scrum');
+  const bookIdRef = useRef(bookId);
+  const mutationVersionRef = useRef(0);
+  const isSavingOrderRef = useRef(false);
+  const pendingMutationCountRef = useRef(0);
+  const pendingFetchRef = useRef(false);
+  const pendingFetchPreserveErrorRef = useRef(false);
+  const fetchSequenceRef = useRef(0);
+  bookIdRef.current = bookId;
 
   const [todoItems, setTodoItems] = useState<TodoItemWithId[]>([]);
+  const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
@@ -86,6 +119,12 @@ function ScrumPageContent() {
   const [showManageTags, setShowManageTags] = useState(false);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
   const [showStatusFilters, setShowStatusFilters] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
+  );
 
   const displayError = error || bookError;
 
@@ -126,19 +165,46 @@ function ScrumPageContent() {
     return LANE_STATUSES.filter(s => statusFilters[s] !== 'hide');
   }, [statusFilters]);
 
+  const canonicalLanes = useMemo(() => {
+    const result = {} as Record<LaneStatus, TodoItemWithId[]>;
+    for (const status of LANE_STATUSES) {
+      result[status] = sortByPersistedOrder(
+        todoItems.filter(t => (t.status || 'new') === status),
+        'scrumOrder',
+        comparePriority,
+      );
+    }
+    return result;
+  }, [todoItems]);
+
+  const visibleItemIds = useMemo(
+    () => new Set(filteredItems.map(item => item.id)),
+    [filteredItems],
+  );
+
   const lanes = useMemo(() => {
     const result = {} as Record<LaneStatus, TodoItemWithId[]>;
     for (const status of LANE_STATUSES) {
-      result[status] = sortByPriority(filteredItems.filter(t => (t.status || 'new') === status));
+      result[status] = canonicalLanes[status].filter(item => visibleItemIds.has(item.id));
     }
     return result;
-  }, [filteredItems]);
+  }, [canonicalLanes, visibleItemIds]);
 
-  const fetchEvents = useCallback(async () => {
-    if (!isAuthenticated || !bookId) return;
+  const fetchEvents = useCallback(async (
+    { preserveError = false }: { preserveError?: boolean } = {},
+  ) => {
+    const requestedBookId = bookIdRef.current;
+    if (!isAuthenticated || !requestedBookId) return;
+    if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current ||= preserveError;
+      return;
+    }
+    const requestedMutationVersion = mutationVersionRef.current;
+    const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    setError(null);
+    if (!preserveError) setError(null);
 
     try {
       const today = new Date();
@@ -146,20 +212,71 @@ function ScrumPageContent() {
       const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      const items = await store.listItems(bookId, {
+      const items = await store.listItems(requestedBookId, {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
       });
+      if (fetchSequenceRef.current !== fetchSequence) return;
+      if (
+        bookIdRef.current !== requestedBookId ||
+        mutationVersionRef.current !== requestedMutationVersion
+      ) {
+        if (bookIdRef.current === requestedBookId) {
+          pendingFetchRef.current = true;
+          pendingFetchPreserveErrorRef.current ||= preserveError;
+          if (pendingMutationCountRef.current === 0) {
+            queueMicrotask(() => {
+              if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
+                const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                pendingFetchRef.current = false;
+                pendingFetchPreserveErrorRef.current = false;
+                void fetchEvents({ preserveError: replayPreserveError });
+              }
+            });
+          }
+        }
+        return;
+      }
       setTodoItems(items);
+      setItemsBookId(requestedBookId);
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
-      const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      setError(message);
+      if (
+        fetchSequenceRef.current === fetchSequence &&
+        bookIdRef.current === requestedBookId
+      ) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch events';
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, bookId, store]);
+  }, [isAuthenticated, store]);
+
+  const beginMutation = () => {
+    pendingMutationCountRef.current += 1;
+  };
+
+  const finishMutation = () => {
+    pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+    if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
+      const preserveError = pendingFetchPreserveErrorRef.current;
+      pendingFetchRef.current = false;
+      pendingFetchPreserveErrorRef.current = false;
+      void fetchEvents({ preserveError });
+    }
+  };
+
+  useEffect(() => {
+    if (bookId && bookId !== itemsBookId) {
+      setLoading(isAuthenticated && !busy);
+      setTodoItems([]);
+      setSelectedTodo(null);
+    }
+  }, [bookId, itemsBookId, isAuthenticated, busy]);
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
@@ -169,13 +286,29 @@ function ScrumPageContent() {
 
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) throw new Error('No book selected');
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
     try {
-      const newTodo = await store.createItem(bookId, todoItem);
+      const status = todoItem.status || 'new';
+      const matrixPeers = todoItems.filter(item =>
+        Boolean(item.urgent) === Boolean(todoItem.urgent) &&
+        Boolean(item.important) === Boolean(todoItem.important)
+      );
+      const scrumPeers = todoItems.filter(item => (item.status || 'new') === status);
+      const newTodo = await store.createItem(operationBookId, {
+        ...todoItem,
+        matrixOrder: todoItem.matrixOrder ?? nextOrder(matrixPeers, 'matrixOrder'),
+        scrumOrder: todoItem.scrumOrder ?? nextOrder(scrumPeers, 'scrumOrder'),
+      });
+      if (bookIdRef.current !== operationBookId) return;
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
       const message = err instanceof Error ? err.message : 'Failed to create TODO item';
       throw new Error(message);
+    } finally {
+      finishMutation();
     }
   };
 
@@ -194,6 +327,7 @@ function ScrumPageContent() {
         className={styles.bookSwitcher}
         value={bookId || ''}
         onChange={(e) => handleBookSwitch(e.target.value)}
+        disabled={isSavingOrder}
       >
         {books.map(b => (
           <option key={b.id} value={b.id}>
@@ -214,89 +348,187 @@ function ScrumPageContent() {
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
-          onClick={fetchEvents}
-          disabled={loading}
+          onClick={() => void fetchEvents()}
+          disabled={loading || isSavingOrder}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading ? 'Loading...' : isSavingOrder ? 'Saving...' : 'Refresh'}
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, bookId, books, allCategories],
+    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
   );
 
-  const handleDragStart = (todo: TodoItemWithId) => {
-    setDraggedItem(todo);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = async (newStatus: TodoStatus) => {
-    if (!draggedItem || !bookId) return;
-
-    const currentStatus = draggedItem.status || 'new';
-    if (currentStatus === newStatus) {
-      setDraggedItem(null);
-      return;
-    }
-
+  const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {
+    const currentStatus = todo.status || 'new';
     const now = new Date().toISOString();
     const updatedTimestamps: Partial<TodoItem> = {};
 
-    if (newStatus === 'inProgress' && !draggedItem.startDateTime) {
+    if (newStatus === 'inProgress' && !todo.startDateTime) {
       updatedTimestamps.startDateTime = now;
     }
     if (newStatus === 'new') {
       updatedTimestamps.startDateTime = undefined;
     }
     if (newStatus === 'finished') {
-      if (!draggedItem.startDateTime) updatedTimestamps.startDateTime = now;
-      if (!draggedItem.finishDateTime) updatedTimestamps.finishDateTime = now;
+      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
+      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
     }
     if (newStatus !== 'finished' && currentStatus === 'finished') {
       updatedTimestamps.finishDateTime = undefined;
     }
+    return updatedTimestamps;
+  };
 
-    const previousItems = [...todoItems];
-    setTodoItems(items =>
-      items.map(item =>
-        item.id === draggedItem.id
-          ? { ...item, status: newStatus, ...updatedTimestamps }
-          : item
-      )
+  const laneId = (status: TodoStatus) => `scrum:${status}`;
+  const parseLaneId = (id: string) => id.slice('scrum:'.length) as LaneStatus;
+  const itemsInLane = (status: LaneStatus) => canonicalLanes[status];
+
+  const persistUpdates = async (updates: Map<string, Partial<TodoItem>>) => {
+    if (!bookId) throw new Error('No book selected');
+    const entries = Array.from(updates.entries());
+    const results = await Promise.allSettled(
+      entries.map(([itemId, fields]) => store.updateItem(bookId, itemId, fields)),
     );
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const todo = todoItems.find(item => item.id === String(event.active.id));
+    setDraggedItem(todo ?? null);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
     setDraggedItem(null);
+    if (!over || !bookId || isSavingOrder) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const sourceId = active.data.current?.containerId as string | undefined;
+    const destinationId = over.data.current?.containerId as string | undefined;
+    if (!sourceId || !destinationId) return;
+
+    const sourceStatus = parseLaneId(sourceId);
+    const destinationStatus = parseLaneId(destinationId);
+    const sourceItems = itemsInLane(sourceStatus);
+    const destinationItems = sourceId === destinationId
+      ? sourceItems
+      : itemsInLane(destinationStatus);
+
+    let replacements: TodoItemWithId[];
+    const updates = new Map<string, Partial<TodoItem>>();
+
+    if (sourceId === destinationId) {
+      const visibleItems = lanes[sourceStatus];
+      const visibleIds = new Set(visibleItems.map(item => item.id));
+      const targetId = visibleIds.has(overId) ? overId : visibleItems.at(-1)?.id;
+      if (!targetId) return;
+      const reordered = reorderVisibleItems(sourceItems, visibleIds, activeId, targetId);
+      const normalized = normalizeOrder(reordered, 'scrumOrder');
+      replacements = normalized.items;
+      for (const item of normalized.changed) {
+        updates.set(item.id, { scrumOrder: item.scrumOrder });
+      }
+    } else {
+      const activeItem = todoItems.find(item => item.id === activeId);
+      if (!activeItem) return;
+      const activeRect = active.rect.current.translated;
+      const insertAfter = overId !== destinationId &&
+        activeRect !== null &&
+        activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2;
+      const moved = moveBetweenContainers(
+        sourceItems,
+        destinationItems,
+        activeId,
+        overId === destinationId ? undefined : overId,
+        insertAfter,
+      );
+      const timestamps = statusTimestamps(activeItem, destinationStatus);
+      const movedDestination = moved.destination.map(item => item.id === activeId
+        ? { ...item, status: destinationStatus, ...timestamps }
+        : item
+      );
+      const normalizedSource = normalizeOrder(moved.source, 'scrumOrder');
+      const normalizedDestination = normalizeOrder(movedDestination, 'scrumOrder');
+      replacements = [...normalizedSource.items, ...normalizedDestination.items];
+      for (const item of [...normalizedSource.changed, ...normalizedDestination.changed]) {
+        updates.set(item.id, { scrumOrder: item.scrumOrder });
+      }
+      updates.set(activeId, {
+        ...updates.get(activeId),
+        status: destinationStatus,
+      });
+    }
+
+    setTodoItems(items => replaceItems(items, replacements));
+    setError(null);
+    mutationVersionRef.current += 1;
+    isSavingOrderRef.current = true;
+    setIsSavingOrder(true);
+    beginMutation();
 
     try {
-      await store.updateItem(bookId, draggedItem.id, { status: newStatus });
+      await persistUpdates(updates);
     } catch (err: unknown) {
-      console.error('Error updating TODO status:', err);
-      setTodoItems(previousItems);
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      console.error('Error updating Scrum order:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save Scrum order');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
+    } finally {
+      isSavingOrderRef.current = false;
+      setIsSavingOrder(false);
+      finishMutation();
     }
   };
 
   const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
     if (!selectedTodo?.id || !bookId) return;
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
 
-    const previousItems = [...todoItems];
+    const persistedFields: Partial<TodoItem> = { ...updatedFields };
+    const nextUrgent = updatedFields.urgent !== undefined ? updatedFields.urgent : Boolean(selectedTodo.urgent);
+    const nextImportant = updatedFields.important !== undefined ? updatedFields.important : Boolean(selectedTodo.important);
+    if (nextUrgent !== Boolean(selectedTodo.urgent) || nextImportant !== Boolean(selectedTodo.important)) {
+      persistedFields.matrixOrder = nextOrder(
+        todoItems.filter(item =>
+          item.id !== selectedTodo.id &&
+          Boolean(item.urgent) === nextUrgent &&
+          Boolean(item.important) === nextImportant
+        ),
+        'matrixOrder',
+      );
+    }
+    const nextStatus = updatedFields.status ?? selectedTodo.status ?? 'new';
+    if (nextStatus !== (selectedTodo.status || 'new')) {
+      persistedFields.scrumOrder = nextOrder(
+        todoItems.filter(item => item.id !== selectedTodo.id && (item.status || 'new') === nextStatus),
+        'scrumOrder',
+      );
+    }
+
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...updatedFields } : item
+        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
 
     try {
-      await store.updateItem(bookId, selectedTodo.id, updatedFields);
+      await store.updateItem(operationBookId, selectedTodo.id, persistedFields);
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
-      setTodoItems(previousItems);
-      const reverted = previousItems.find(i => i.id === selectedTodo.id);
-      if (reverted) setSelectedTodo(reverted);
+      if (bookIdRef.current !== operationBookId) return;
+      setSelectedTodo(null);
+      setError(err instanceof Error ? err.message : 'Failed to update TODO');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
       throw err;
+    } finally {
+      finishMutation();
     }
   };
 
@@ -306,10 +538,10 @@ function ScrumPageContent() {
     updateFilterState: () => void,
   ) => {
     if (!bookId || affectedItems.length === 0) return;
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
 
-    const previousItems = [...todoItems];
-    const previousSelectedCategories = new Set(selectedCategories);
-    const previousShowUncategorized = showUncategorized;
     const affectedIds = new Set(affectedItems.map(a => a.id));
 
     setTodoItems(items =>
@@ -327,18 +559,27 @@ function ScrumPageContent() {
       const worker = async () => {
         while (idx < affectedItems.length) {
           const item = affectedItems[idx++];
-          await store.updateItem(bookId, item.id, {
+          await store.updateItem(operationBookId, item.id, {
             categories: computeNewCategories(item),
           });
         }
       };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+      const results = await Promise.allSettled(
+        Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()),
+      );
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
-      setTodoItems(previousItems);
-      setSelectedCategories(previousSelectedCategories);
-      setShowUncategorized(previousShowUncategorized);
+      if (bookIdRef.current !== operationBookId) return;
+      setSelectedCategories(new Set());
+      setShowUncategorized(false);
+      setError(err instanceof Error ? err.message : 'Failed to update tags');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
       throw err;
+    } finally {
+      finishMutation();
     }
   };
 
@@ -512,6 +753,13 @@ function ScrumPageContent() {
               </div>
             )}
 
+            <DndContext
+              sensors={sensors}
+              collisionDetection={sortableTodoCollisionDetection}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDraggedItem(null)}
+            >
             <div
               className={styles.board}
               style={{ '--lane-columns': `repeat(${visibleLanes.length || 1}, 1fr)` } as React.CSSProperties}
@@ -522,9 +770,7 @@ function ScrumPageContent() {
                 return (
                   <div
                     key={status}
-                    className={`${styles.lane} ${laneStyle.lane} ${draggedItem ? styles.laneDropZone : ''}`}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(status)}
+                    className={`${styles.lane} ${laneStyle.lane}`}
                   >
                     <div className={styles.laneHeader}>
                       <h3 className={`${styles.laneTitle} ${laneStyle.title}`}>
@@ -532,24 +778,35 @@ function ScrumPageContent() {
                       </h3>
                       <span className={styles.laneCount}>{items.length}</span>
                     </div>
-                    <div className={styles.laneContent}>
+                    <SortableTodoList
+                      id={laneId(status)}
+                      itemIds={items.map(todo => todo.id)}
+                      className={styles.laneContent}
+                    >
                       {items.map(todo => (
-                        <ScrumCard
-                          key={todo.id}
-                          todo={todo}
-                          onDragStart={handleDragStart}
-                          onDragEnd={() => setDraggedItem(null)}
-                          onClick={setSelectedTodo}
-                        />
+                        <SortableTodo key={todo.id} id={todo.id} containerId={laneId(status)} disabled={isSavingOrder}>
+                          <ScrumCard
+                            todo={todo}
+                            onClick={isSavingOrder ? undefined : setSelectedTodo}
+                          />
+                        </SortableTodo>
                       ))}
                       {items.length === 0 && (
                         <p className={styles.laneEmpty}>No items</p>
                       )}
-                    </div>
+                    </SortableTodoList>
                   </div>
                 );
               })}
             </div>
+            <DragOverlay>
+              {draggedItem ? (
+                <SortableTodoOverlay>
+                  <ScrumCard todo={draggedItem} />
+                </SortableTodoOverlay>
+              ) : null}
+            </DragOverlay>
+            </DndContext>
           </div>
         )}
 

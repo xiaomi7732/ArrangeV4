@@ -6,19 +6,14 @@ import styles from './ScrumCard.module.css';
 
 interface ScrumCardProps {
   todo: TodoItemWithId;
-  onDragStart?: (todo: TodoItemWithId) => void;
-  onDragEnd?: () => void;
   onClick?: (todo: TodoItemWithId) => void;
 }
 
-export default function ScrumCard({ todo, onDragStart, onDragEnd, onClick }: ScrumCardProps) {
+export default function ScrumCard({ todo, onClick }: ScrumCardProps) {
 
   return (
     <div
       className={styles.card}
-      draggable={!!todo.id}
-      onDragStart={() => onDragStart?.(todo)}
-      onDragEnd={() => onDragEnd?.()}
       onClick={() => onClick?.(todo)}
       role="button"
       tabIndex={0}

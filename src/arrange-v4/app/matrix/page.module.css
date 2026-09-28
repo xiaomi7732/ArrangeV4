@@ -485,6 +485,12 @@
   min-height: 0;
 }
 
+.quadrantContent[data-drag-over] {
+  outline: 2px dashed currentColor;
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
 .quadrantEmpty {
   color: rgba(0, 0, 0, 0.4);
   font-style: italic;
@@ -581,39 +587,6 @@
 
 .todoCard:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.todoCard[draggable="true"] {
-  cursor: grab;
-}
-
-.todoCard[draggable="true"]:active {
-  cursor: grabbing;
-  opacity: 0.5;
-}
-
-.quadrantDropZone {
-  position: relative;
-}
-
-.quadrantDropZone::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 3px dashed currentColor;
-  border-radius: 8px;
-  opacity: 0.3;
-  pointer-events: none;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 0.6;
-  }
 }
 
 .todoHeader {

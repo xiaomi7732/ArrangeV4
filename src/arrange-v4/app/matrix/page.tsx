@@ -1,9 +1,28 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
+import {
+  moveBetweenContainers,
+  nextOrder,
+  normalizeOrder,
+  reorderVisibleItems,
+  replaceItems,
+  sortByPersistedOrder,
+} from '@/lib/orderUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -11,6 +30,13 @@ import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
+import {
+  SortableTodo,
+  SortableTodoList,
+  SortableTodoOverlay,
+  sortableTodoCollisionDetection,
+  sortableTodoKeyboardCoordinates,
+} from '@/components/SortableTodo';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -47,10 +73,15 @@ function passesTodayFilter(todo: TodoItem): boolean {
   return isToday(todo.etsDateTime);
 }
 
+function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
+  return (a.etsDateTime || '').localeCompare(b.etsDateTime || '') ||
+    a.subject.localeCompare(b.subject) ||
+    a.id.localeCompare(b.id);
+}
+
 // TodoCard component for rendering individual todo items
-function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
+function TodoCard({ todo, onClick, onStatusChange }: {
   todo: TodoItemWithId,
-  onDragStart?: (todo: TodoItemWithId) => void,
   onClick?: (todo: TodoItemWithId) => void,
   onStatusChange?: (todo: TodoItemWithId, newStatus: TodoStatus) => void
 }) {
@@ -66,10 +97,7 @@ function TodoCard({ todo, onDragStart, onClick, onStatusChange }: {
   return (
     <div
       className={styles.todoCard}
-      draggable={!!todo.id}
-      onDragStart={() => onDragStart?.(todo)}
       onClick={() => onClick?.(todo)}
-      style={{ cursor: 'pointer' }}
     >
       <div className={styles.todoHeader}>
         <h4 className={styles.todoTitle}>{todo.subject}</h4>
@@ -193,9 +221,16 @@ function MatrixPageContent() {
   const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
+  const mutationVersionRef = useRef(0);
+  const isSavingOrderRef = useRef(false);
+  const pendingMutationCountRef = useRef(0);
+  const pendingFetchRef = useRef(false);
+  const pendingFetchPreserveErrorRef = useRef(false);
+  const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
 
   const [todoItems, setTodoItems] = useState<TodoItemWithId[]>([]);
+  const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
@@ -206,6 +241,12 @@ function MatrixPageContent() {
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
+  );
 
   // Merge book-level errors into the page error state
   const displayError = error || bookError;
@@ -238,18 +279,54 @@ function MatrixPageContent() {
     return true;
   });
 
-  const quadrants = useMemo(() => ({
-    doFirst: filteredTodoItems.filter(todo => todo.urgent === true && todo.important === true),
-    schedule: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important === true),
-    delegate: filteredTodoItems.filter(todo => todo.urgent === true && todo.important !== true),
-    eliminate: filteredTodoItems.filter(todo => todo.urgent !== true && todo.important !== true),
-  }), [filteredTodoItems]);
+  const canonicalQuadrants = useMemo(() => ({
+    doFirst: sortByPersistedOrder(
+      todoItems.filter(todo => todo.urgent === true && todo.important === true),
+      'matrixOrder',
+      compareMatrixLegacy,
+    ),
+    schedule: sortByPersistedOrder(
+      todoItems.filter(todo => todo.urgent !== true && todo.important === true),
+      'matrixOrder',
+      compareMatrixLegacy,
+    ),
+    delegate: sortByPersistedOrder(
+      todoItems.filter(todo => todo.urgent === true && todo.important !== true),
+      'matrixOrder',
+      compareMatrixLegacy,
+    ),
+    eliminate: sortByPersistedOrder(
+      todoItems.filter(todo => todo.urgent !== true && todo.important !== true),
+      'matrixOrder',
+      compareMatrixLegacy,
+    ),
+  }), [todoItems]);
 
-  const fetchEvents = async () => {
-    if (!isAuthenticated || !bookId) return;
+  const visibleTodoIds = useMemo(
+    () => new Set(filteredTodoItems.map(todo => todo.id)),
+    [filteredTodoItems],
+  );
+
+  const quadrants = useMemo(() => ({
+    doFirst: canonicalQuadrants.doFirst.filter(todo => visibleTodoIds.has(todo.id)),
+    schedule: canonicalQuadrants.schedule.filter(todo => visibleTodoIds.has(todo.id)),
+    delegate: canonicalQuadrants.delegate.filter(todo => visibleTodoIds.has(todo.id)),
+    eliminate: canonicalQuadrants.eliminate.filter(todo => visibleTodoIds.has(todo.id)),
+  }), [canonicalQuadrants, visibleTodoIds]);
+
+  const fetchEvents = async ({ preserveError = false }: { preserveError?: boolean } = {}) => {
+    const requestedBookId = bookIdRef.current;
+    if (!isAuthenticated || !requestedBookId) return;
+    if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current ||= preserveError;
+      return;
+    }
+    const requestedMutationVersion = mutationVersionRef.current;
+    const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    setError(null);
+    if (!preserveError) setError(null);
 
     try {
       // Fetch events from last 30 days to next 30 days
@@ -258,18 +335,41 @@ function MatrixPageContent() {
       const startDate = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
       const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-      const todos = await store.listItems(bookId, {
+      const todos = await store.listItems(requestedBookId, {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
       });
+      if (fetchSequenceRef.current !== fetchSequence) return;
+      if (
+        bookIdRef.current !== requestedBookId ||
+        mutationVersionRef.current !== requestedMutationVersion
+      ) {
+        if (bookIdRef.current === requestedBookId) {
+          pendingFetchRef.current = true;
+          pendingFetchPreserveErrorRef.current ||= preserveError;
+          if (pendingMutationCountRef.current === 0) {
+            queueMicrotask(() => {
+              if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
+                const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                pendingFetchRef.current = false;
+                pendingFetchPreserveErrorRef.current = false;
+                void fetchEvents({ preserveError: replayPreserveError });
+              }
+            });
+          }
+        }
+        return;
+      }
       setTodoItems(todos);
+      setItemsBookId(requestedBookId);
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
-        const sweepBookId = bookId;
+        const sweepBookId = requestedBookId;
+        const sweepMutationVersion = mutationVersionRef.current;
         const snapshotBooks = books.length > 0 ? [...books] : null;
         void (async () => {
           try {
@@ -293,6 +393,7 @@ function MatrixPageContent() {
                 }
               }
             };
+
             await Promise.all(Array.from({ length: CONCURRENCY }, () => processNext()));
 
             if (!hasFailure) {
@@ -308,7 +409,10 @@ function MatrixPageContent() {
                   fromDate: startDate.toISOString(),
                   toDate: endDate.toISOString(),
                 });
-                if (bookIdRef.current === sweepBookId) {
+                if (
+                  bookIdRef.current === sweepBookId &&
+                  mutationVersionRef.current === sweepMutationVersion
+                ) {
                   setTodoItems(refreshed);
                 }
               }
@@ -323,10 +427,31 @@ function MatrixPageContent() {
       }
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
-      const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      setError(message);
+      if (
+        fetchSequenceRef.current === fetchSequence &&
+        bookIdRef.current === requestedBookId
+      ) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch events';
+        setError(message);
+      }
     } finally {
-      setLoading(false);
+      if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const beginMutation = () => {
+    pendingMutationCountRef.current += 1;
+  };
+
+  const finishMutation = () => {
+    pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+    if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
+      const preserveError = pendingFetchPreserveErrorRef.current;
+      pendingFetchRef.current = false;
+      pendingFetchPreserveErrorRef.current = false;
+      void fetchEvents({ preserveError });
     }
   };
 
@@ -334,57 +459,156 @@ function MatrixPageContent() {
     if (!bookId) {
       throw new Error('No book selected');
     }
+    const operationBookId = bookId;
 
+    mutationVersionRef.current += 1;
+    beginMutation();
     try {
-      const newTodo = await store.createItem(bookId, todoItem);
+      const status = todoItem.status || 'new';
+      const matrixPeers = todoItems.filter(item =>
+        Boolean(item.urgent) === Boolean(todoItem.urgent) &&
+        Boolean(item.important) === Boolean(todoItem.important)
+      );
+      const scrumPeers = todoItems.filter(item => (item.status || 'new') === status);
+      const newTodo = await store.createItem(operationBookId, {
+        ...todoItem,
+        matrixOrder: todoItem.matrixOrder ?? nextOrder(matrixPeers, 'matrixOrder'),
+        scrumOrder: todoItem.scrumOrder ?? nextOrder(scrumPeers, 'scrumOrder'),
+      });
+      if (bookIdRef.current !== operationBookId) return;
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
       const message = err instanceof Error ? err.message : 'Failed to create TODO item';
       throw new Error(message);
+    } finally {
+      finishMutation();
     }
   };
 
-  const handleDragStart = (todo: TodoItemWithId) => {
-    setDraggedItem(todo);
+  const quadrantId = (urgent: boolean, important: boolean) =>
+    `matrix:${urgent ? 'urgent' : 'not-urgent'}:${important ? 'important' : 'not-important'}`;
+
+  const parseQuadrantId = (id: string) => {
+    const [, urgency, importance] = id.split(':');
+    return {
+      urgent: urgency === 'urgent',
+      important: importance === 'important',
+    };
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+  const itemsInQuadrant = (urgent: boolean, important: boolean) => {
+    if (urgent && important) return canonicalQuadrants.doFirst;
+    if (!urgent && important) return canonicalQuadrants.schedule;
+    if (urgent && !important) return canonicalQuadrants.delegate;
+    return canonicalQuadrants.eliminate;
   };
 
-  const handleDrop = async (urgent: boolean, important: boolean) => {
-    if (!draggedItem || !bookId) return;
-
-    // Don't update if already in correct quadrant
-    if (draggedItem.urgent === urgent && draggedItem.important === important) {
-      setDraggedItem(null);
-      return;
-    }
-
-    // Optimistic update - update UI immediately
-    const previousItems = [...todoItems];
-    setTodoItems(items =>
-      items.map(item =>
-        item.id === draggedItem.id
-          ? { ...item, urgent, important }
-          : item
-      )
+  const persistUpdates = async (updates: Map<string, Partial<TodoItem>>) => {
+    if (!bookId) throw new Error('No book selected');
+    const entries = Array.from(updates.entries());
+    const results = await Promise.allSettled(
+      entries.map(([itemId, fields]) => store.updateItem(bookId, itemId, fields)),
     );
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const todo = todoItems.find(item => item.id === String(event.active.id));
+    setDraggedItem(todo ?? null);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
     setDraggedItem(null);
+    if (!over || !bookId || isSavingOrder) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const sourceId = active.data.current?.containerId as string | undefined;
+    const destinationId = over.data.current?.containerId as string | undefined;
+    if (!sourceId || !destinationId) return;
+
+    const sourceFlags = parseQuadrantId(sourceId);
+    const destinationFlags = parseQuadrantId(destinationId);
+    const sourceItems = itemsInQuadrant(sourceFlags.urgent, sourceFlags.important);
+    const destinationItems = sourceId === destinationId
+      ? sourceItems
+      : itemsInQuadrant(destinationFlags.urgent, destinationFlags.important);
+
+    let replacements: TodoItemWithId[];
+    const updates = new Map<string, Partial<TodoItem>>();
+
+    if (sourceId === destinationId) {
+      const visibleItems = Object.values(quadrants).flat().filter(item =>
+        Boolean(item.urgent) === sourceFlags.urgent &&
+        Boolean(item.important) === sourceFlags.important
+      );
+      const visibleIds = new Set(visibleItems.map(item => item.id));
+      const targetId = visibleIds.has(overId) ? overId : visibleItems.at(-1)?.id;
+      if (!targetId) return;
+      const reordered = reorderVisibleItems(sourceItems, visibleIds, activeId, targetId);
+      const normalized = normalizeOrder(reordered, 'matrixOrder');
+      replacements = normalized.items;
+      for (const item of normalized.changed) {
+        updates.set(item.id, { matrixOrder: item.matrixOrder });
+      }
+    } else {
+      const activeRect = active.rect.current.translated;
+      const insertAfter = overId !== destinationId &&
+        activeRect !== null &&
+        activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2;
+      const moved = moveBetweenContainers(
+        sourceItems,
+        destinationItems,
+        activeId,
+        overId === destinationId ? undefined : overId,
+        insertAfter,
+      );
+      const movedDestination = moved.destination.map(item => item.id === activeId
+        ? { ...item, ...destinationFlags }
+        : item
+      );
+      const normalizedSource = normalizeOrder(moved.source, 'matrixOrder');
+      const normalizedDestination = normalizeOrder(movedDestination, 'matrixOrder');
+      replacements = [...normalizedSource.items, ...normalizedDestination.items];
+      for (const item of [...normalizedSource.changed, ...normalizedDestination.changed]) {
+        updates.set(item.id, { matrixOrder: item.matrixOrder });
+      }
+      updates.set(activeId, {
+        ...updates.get(activeId),
+        urgent: destinationFlags.urgent,
+        important: destinationFlags.important,
+      });
+    }
+
+    setTodoItems(items => replaceItems(items, replacements));
+    setError(null);
+    mutationVersionRef.current += 1;
+    isSavingOrderRef.current = true;
+    setIsSavingOrder(true);
+    beginMutation();
 
     try {
-      await store.updateItem(bookId, draggedItem.id, { urgent, important });
+      await persistUpdates(updates);
     } catch (err: unknown) {
-      console.error('Error updating TODO item:', err);
-      setTodoItems(previousItems);
-      const message = err instanceof Error ? err.message : 'Failed to update TODO item';
-      setError(message);
+      console.error('Error updating Matrix order:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save Matrix order');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
+    } finally {
+      isSavingOrderRef.current = false;
+      setIsSavingOrder(false);
+      finishMutation();
     }
   };
 
   const handleStatusChange = async (todo: TodoItemWithId, newStatus: TodoStatus) => {
     if (!bookId) return;
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
 
     const currentStatus = todo.status || 'new';
     const now = new Date().toISOString();
@@ -405,45 +629,79 @@ function MatrixPageContent() {
     if (newStatus !== 'finished' && currentStatus === 'finished') {
       updatedTimestamps.finishDateTime = undefined;
     }
+    const scrumOrder = nextOrder(
+      todoItems.filter(item => item.id !== todo.id && (item.status || 'new') === newStatus),
+      'scrumOrder',
+    );
 
-    const previousItems = [...todoItems];
     setTodoItems(items =>
       items.map(item =>
         item.id === todo.id
-          ? { ...item, status: newStatus, ...updatedTimestamps }
+          ? { ...item, status: newStatus, scrumOrder, ...updatedTimestamps }
           : item
       )
     );
 
     try {
-      await store.updateItem(bookId, todo.id, { status: newStatus });
+      await store.updateItem(operationBookId, todo.id, { status: newStatus, scrumOrder });
     } catch (err: unknown) {
       console.error('Error updating TODO status:', err);
-      setTodoItems(previousItems);
+      if (bookIdRef.current !== operationBookId) return;
       const message = err instanceof Error ? err.message : 'Failed to update status';
       setError(message);
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
+    } finally {
+      finishMutation();
     }
   };
 
   const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
     if (!selectedTodo?.id || !bookId) return;
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
 
-    const previousItems = [...todoItems];
+    const persistedFields: Partial<TodoItem> = { ...updatedFields };
+    const nextUrgent = updatedFields.urgent !== undefined ? updatedFields.urgent : Boolean(selectedTodo.urgent);
+    const nextImportant = updatedFields.important !== undefined ? updatedFields.important : Boolean(selectedTodo.important);
+    if (nextUrgent !== Boolean(selectedTodo.urgent) || nextImportant !== Boolean(selectedTodo.important)) {
+      persistedFields.matrixOrder = nextOrder(
+        todoItems.filter(item =>
+          item.id !== selectedTodo.id &&
+          Boolean(item.urgent) === nextUrgent &&
+          Boolean(item.important) === nextImportant
+        ),
+        'matrixOrder',
+      );
+    }
+    const nextStatus = updatedFields.status ?? selectedTodo.status ?? 'new';
+    if (nextStatus !== (selectedTodo.status || 'new')) {
+      persistedFields.scrumOrder = nextOrder(
+        todoItems.filter(item => item.id !== selectedTodo.id && (item.status || 'new') === nextStatus),
+        'scrumOrder',
+      );
+    }
+
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...updatedFields } : item
+        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...updatedFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
 
     try {
-      await store.updateItem(bookId, selectedTodo.id, updatedFields);
+      await store.updateItem(operationBookId, selectedTodo.id, persistedFields);
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
-      setTodoItems(previousItems);
-      const reverted = previousItems.find(i => i.id === selectedTodo.id);
-      if (reverted) setSelectedTodo(reverted);
+      if (bookIdRef.current !== operationBookId) return;
+      setSelectedTodo(null);
+      setError(err instanceof Error ? err.message : 'Failed to update TODO');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
       throw err;
+    } finally {
+      finishMutation();
     }
   };
 
@@ -453,10 +711,10 @@ function MatrixPageContent() {
     updateFilterState: () => void,
   ) => {
     if (!bookId || affectedItems.length === 0) return;
+    const operationBookId = bookId;
+    mutationVersionRef.current += 1;
+    beginMutation();
 
-    const previousItems = [...todoItems];
-    const previousSelectedCategories = new Set(selectedCategories);
-    const previousShowUncategorized = showUncategorized;
     const affectedIds = new Set(affectedItems.map(a => a.id));
 
     setTodoItems(items =>
@@ -474,18 +732,27 @@ function MatrixPageContent() {
       const worker = async () => {
         while (idx < affectedItems.length) {
           const item = affectedItems[idx++];
-          await store.updateItem(bookId, item.id, {
+          await store.updateItem(operationBookId, item.id, {
             categories: computeNewCategories(item),
           });
         }
       };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()));
+      const results = await Promise.allSettled(
+        Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()),
+      );
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
-      setTodoItems(previousItems);
-      setSelectedCategories(previousSelectedCategories);
-      setShowUncategorized(previousShowUncategorized);
+      if (bookIdRef.current !== operationBookId) return;
+      setSelectedCategories(new Set());
+      setShowUncategorized(false);
+      setError(err instanceof Error ? err.message : 'Failed to update tags');
+      pendingFetchRef.current = true;
+      pendingFetchPreserveErrorRef.current = true;
       throw err;
+    } finally {
+      finishMutation();
     }
   };
 
@@ -536,6 +803,14 @@ function MatrixPageContent() {
   };
 
   useEffect(() => {
+    if (bookId && bookId !== itemsBookId) {
+      setLoading(isAuthenticated && !busy);
+      setTodoItems([]);
+      setSelectedTodo(null);
+    }
+  }, [bookId, itemsBookId, isAuthenticated, busy]);
+
+  useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
       fetchEvents();
     }
@@ -548,6 +823,7 @@ function MatrixPageContent() {
         className={styles.bookSwitcher}
         value={bookId || ''}
         onChange={(e) => handleBookSwitch(e.target.value)}
+        disabled={isSavingOrder}
       >
         {books.map(b => (
           <option key={b.id} value={b.id}>
@@ -568,15 +844,15 @@ function MatrixPageContent() {
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
-          onClick={fetchEvents}
-          disabled={loading}
+          onClick={() => void fetchEvents()}
+          disabled={loading || isSavingOrder}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {loading ? 'Loading...' : 'Refresh'}
+          {loading ? 'Loading...' : isSavingOrder ? 'Saving...' : 'Refresh'}
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, bookId, books, allCategories],
+    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
   );
 
   if (!bookId) {
@@ -696,12 +972,17 @@ function MatrixPageContent() {
                     </div>
                 </div>
               )}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={sortableTodoCollisionDetection}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={() => setDraggedItem(null)}
+              >
               <div className={styles.matrix}>
                 {/* Top-left: Urgent & Important */}
                 <div 
-                  className={`${styles.quadrant} ${styles.quadrantUrgentImportant} ${draggedItem ? styles.quadrantDropZone : ''}`}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(true, true)}
+                  className={`${styles.quadrant} ${styles.quadrantUrgentImportant}`}
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
@@ -717,21 +998,29 @@ function MatrixPageContent() {
                       availableCategories={allCategories}
                     />
                   </div>
-                  <div className={styles.quadrantContent}>
+                  <SortableTodoList
+                    id={quadrantId(true, true)}
+                    itemIds={quadrants.doFirst.map(todo => todo.id)}
+                    className={styles.quadrantContent}
+                  >
                     {quadrants.doFirst.map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
-                      ))}
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder}>
+                        <TodoCard
+                          todo={todo}
+                          onClick={isSavingOrder ? undefined : setSelectedTodo}
+                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
+                        />
+                      </SortableTodo>
+                    ))}
                     {quadrants.doFirst.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
-                  </div>
+                  </SortableTodoList>
                 </div>
 
                 {/* Top-right: Important but not Urgent */}
                 <div 
-                  className={`${styles.quadrant} ${styles.quadrantImportant} ${draggedItem ? styles.quadrantDropZone : ''}`}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(false, true)}
+                  className={`${styles.quadrant} ${styles.quadrantImportant}`}
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
@@ -747,21 +1036,29 @@ function MatrixPageContent() {
                       availableCategories={allCategories}
                     />
                   </div>
-                  <div className={styles.quadrantContent}>
+                  <SortableTodoList
+                    id={quadrantId(false, true)}
+                    itemIds={quadrants.schedule.map(todo => todo.id)}
+                    className={styles.quadrantContent}
+                  >
                     {quadrants.schedule.map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
-                      ))}
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder}>
+                        <TodoCard
+                          todo={todo}
+                          onClick={isSavingOrder ? undefined : setSelectedTodo}
+                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
+                        />
+                      </SortableTodo>
+                    ))}
                     {quadrants.schedule.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
-                  </div>
+                  </SortableTodoList>
                 </div>
 
                 {/* Bottom-left: Urgent but not Important */}
                 <div 
-                  className={`${styles.quadrant} ${styles.quadrantUrgent} ${draggedItem ? styles.quadrantDropZone : ''}`}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(true, false)}
+                  className={`${styles.quadrant} ${styles.quadrantUrgent}`}
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
@@ -777,21 +1074,29 @@ function MatrixPageContent() {
                       availableCategories={allCategories}
                     />
                   </div>
-                  <div className={styles.quadrantContent}>
+                  <SortableTodoList
+                    id={quadrantId(true, false)}
+                    itemIds={quadrants.delegate.map(todo => todo.id)}
+                    className={styles.quadrantContent}
+                  >
                     {quadrants.delegate.map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
-                      ))}
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder}>
+                        <TodoCard
+                          todo={todo}
+                          onClick={isSavingOrder ? undefined : setSelectedTodo}
+                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
+                        />
+                      </SortableTodo>
+                    ))}
                     {quadrants.delegate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
-                  </div>
+                  </SortableTodoList>
                 </div>
 
                 {/* Bottom-right: Neither Urgent nor Important */}
                 <div 
-                  className={`${styles.quadrant} ${styles.quadrantNeither} ${draggedItem ? styles.quadrantDropZone : ''}`}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(false, false)}
+                  className={`${styles.quadrant} ${styles.quadrantNeither}`}
                 >
                   <div className={styles.quadrantHeader}>
                     <div>
@@ -807,16 +1112,34 @@ function MatrixPageContent() {
                       availableCategories={allCategories}
                     />
                   </div>
-                  <div className={styles.quadrantContent}>
+                  <SortableTodoList
+                    id={quadrantId(false, false)}
+                    itemIds={quadrants.eliminate.map(todo => todo.id)}
+                    className={styles.quadrantContent}
+                  >
                     {quadrants.eliminate.map((todo) => (
-                        <TodoCard key={todo.id} todo={todo} onDragStart={handleDragStart} onClick={setSelectedTodo} onStatusChange={handleStatusChange} />
-                      ))}
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder}>
+                        <TodoCard
+                          todo={todo}
+                          onClick={isSavingOrder ? undefined : setSelectedTodo}
+                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
+                        />
+                      </SortableTodo>
+                    ))}
                     {quadrants.eliminate.length === 0 && (
                       <p className={styles.quadrantEmpty}>No items</p>
                     )}
-                  </div>
+                  </SortableTodoList>
                 </div>
               </div>
+              <DragOverlay>
+                {draggedItem ? (
+                  <SortableTodoOverlay>
+                    <TodoCard todo={draggedItem} />
+                  </SortableTodoOverlay>
+                ) : null}
+              </DragOverlay>
+              </DndContext>
             </div>
           )}
 
