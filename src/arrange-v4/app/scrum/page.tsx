@@ -25,6 +25,7 @@ import {
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -313,6 +314,7 @@ function ScrumPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (err) {
@@ -322,7 +324,7 @@ function ScrumPageContent() {
   };
 
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -632,6 +634,20 @@ function ScrumPageContent() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy}
+            error={displayError}
+            onLogin={handleLogin}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
@@ -648,7 +664,7 @@ function ScrumPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
           <div className={styles.boardSection}>
             <div className={styles.boardHeader}>
               <span className={styles.filterCount}>

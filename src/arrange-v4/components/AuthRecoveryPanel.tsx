@@ -23,6 +23,7 @@ export default function AuthRecoveryPanel({
       className={styles.panel}
       aria-labelledby={titleId}
       aria-live={busy ? 'polite' : undefined}
+      role={busy ? 'status' : undefined}
     >
       <div className={styles.icon} aria-hidden="true">
         {busy ? <span className={styles.spinner} /> : '!'}

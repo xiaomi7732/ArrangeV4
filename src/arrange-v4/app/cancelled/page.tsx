@@ -7,6 +7,7 @@ import { formatRelativeDate } from '@/lib/dateUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
 import styles from './page.module.css';
@@ -62,6 +63,7 @@ function CancelledPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (err) {
@@ -71,7 +73,7 @@ function CancelledPageContent() {
   };
 
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -199,6 +201,20 @@ function CancelledPageContent() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy}
+            error={displayError}
+            onLogin={handleLogin}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
@@ -215,7 +231,7 @@ function CancelledPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
           <div className={styles.card}>
             {cancelledItems.length === 0 ? (
               <div className={styles.empty}>

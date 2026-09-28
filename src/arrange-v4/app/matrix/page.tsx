@@ -27,6 +27,7 @@ import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgres
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -794,6 +795,7 @@ function MatrixPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (error) {
@@ -818,7 +820,7 @@ function MatrixPageContent() {
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -867,6 +869,20 @@ function MatrixPageContent() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy}
+            error={displayError}
+            onLogin={handleLogin}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.container}>
       <div className={styles.inner}>
@@ -883,7 +899,7 @@ function MatrixPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
                 <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
