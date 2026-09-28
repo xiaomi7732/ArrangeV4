@@ -26,6 +26,7 @@ function CancelledPageContent() {
   const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/cancelled');
 
   const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
+  const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -66,6 +67,7 @@ function CancelledPageContent() {
       ) return;
       const nextItems = items.filter(t => t.status === 'cancelled');
       setCancelledItems(nextItems);
+      setItemsBookId(requestedBookId);
       setSelectedIds(previous => preserveSelection
         ? retainExistingIds(previous, nextItems.map(item => item.id))
         : new Set<string>());
@@ -86,6 +88,16 @@ function CancelledPageContent() {
       }
     }
   }, [isAuthenticated, store]);
+
+  useEffect(() => {
+    if (bookId && bookId !== itemsBookId) {
+      setLoading(isAuthenticated && !busy);
+      setCancelledItems([]);
+      setSelectedIds(new Set());
+      setSelectedTodo(null);
+      setShowConfirm(false);
+    }
+  }, [bookId, itemsBookId, isAuthenticated, busy]);
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {

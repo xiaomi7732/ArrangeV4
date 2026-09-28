@@ -394,7 +394,9 @@ function MatrixPageContent() {
         const snapshotBooks = books.length > 0 ? [...books] : null;
         void (async () => {
           try {
-            const sweepBooks = snapshotBooks ?? (await store.listBooks());
+            const sweepBooks = snapshotBooks ?? (await store.listBooks({
+              interaction: 'silent-only',
+            }));
             const CONCURRENCY = 5;
             let i = 0;
             let hasFailure = false;
@@ -406,8 +408,11 @@ function MatrixPageContent() {
                     range: 'window',
                     fromDate: startDate.toISOString(),
                     toDate: endDate.toISOString(),
+                    interaction: 'silent-only',
                   });
-                  await store.calendar.sweepStaleItems(book.id, calItems);
+                  await store.calendar.sweepStaleItems(book.id, calItems, {
+                    interaction: 'silent-only',
+                  });
                 } catch (calError) {
                   hasFailure = true;
                   console.error(`Error sweeping book ${book.id}:`, calError);
@@ -429,6 +434,7 @@ function MatrixPageContent() {
                   range: 'window',
                   fromDate: startDate.toISOString(),
                   toDate: endDate.toISOString(),
+                  interaction: 'silent-only',
                 });
                 if (
                   bookIdRef.current === sweepBookId &&

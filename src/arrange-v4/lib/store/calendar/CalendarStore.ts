@@ -194,7 +194,12 @@ export class CalendarStore implements TodoStore {
     return parsed;
   }
 
-  async updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId> {
+  async updateItem(
+    bookId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId> {
     const calendarId = unwrap(bookId);
     const queueKey = `${calendarId}:${itemId}`;
     const previous = itemUpdateQueues.get(queueKey) ?? Promise.resolve();
@@ -208,7 +213,7 @@ export class CalendarStore implements TodoStore {
     await previous.catch(() => undefined);
     await acquireItemUpdateSlot();
     try {
-      return await this.updateItemCore(calendarId, itemId, updates);
+      return await this.updateItemCore(calendarId, itemId, updates, options);
     } finally {
       releaseItemUpdateSlot();
       release();
@@ -222,8 +227,9 @@ export class CalendarStore implements TodoStore {
     calendarId: string,
     itemId: string,
     updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
   ): Promise<TodoItemWithId> {
-    const client = await this.client();
+    const client = await this.client(options);
 
     const existingEvent: CalendarEvent = await client
       .api(`/me/calendars/${calendarId}/events/${itemId}`)
@@ -351,7 +357,11 @@ export class CalendarStore implements TodoStore {
    * that were bumped. Calendar-specific: compensates for the ±30-day
    * calendarView window.
    */
-  async sweepStaleItems(bookId: string, items: TodoItemWithId[]): Promise<string[]> {
+  async sweepStaleItems(
+    bookId: string,
+    items: TodoItemWithId[],
+    options?: StoreOperationOptions,
+  ): Promise<string[]> {
     const stale = items.filter(
       (item) =>
         item.id &&
@@ -363,6 +373,7 @@ export class CalendarStore implements TodoStore {
     const bumped: string[] = [];
     const concurrency = 5;
     let index = 0;
+    let firstError: unknown;
 
     const worker = async (): Promise<void> => {
       while (true) {
@@ -370,9 +381,10 @@ export class CalendarStore implements TodoStore {
         if (i >= stale.length) break;
         const item = stale[i];
         try {
-          await this.updateItem(bookId, item.id, {});
+          await this.updateItem(bookId, item.id, {}, options);
           bumped.push(item.id);
         } catch (error) {
+          firstError ??= error;
           console.error(`Error bumping stale TODO ${item.id}:`, error);
         }
       }
@@ -380,6 +392,7 @@ export class CalendarStore implements TodoStore {
 
     const workers = Math.min(concurrency, stale.length);
     await Promise.all(Array.from({ length: workers }, () => worker()));
+    if (firstError) throw firstError;
     return bumped;
   }
 

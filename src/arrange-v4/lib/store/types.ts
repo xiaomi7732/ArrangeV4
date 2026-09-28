@@ -105,7 +105,12 @@ export interface TodoStore {
 
   listItems(bookId: string, opts: ListItemsOptions): Promise<TodoItemWithId[]>;
   createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId>;
-  updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId>;
+  updateItem(
+    bookId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId>;
   deleteItem(bookId: string, itemId: string): Promise<void>;
 }
 
