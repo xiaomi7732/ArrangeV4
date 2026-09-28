@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { MultiBackendStore } from './multiStore';
 
 /**
@@ -11,6 +11,6 @@ import { MultiBackendStore } from './multiStore';
  * from re-firing on every parent render.
  */
 export function useStore(): MultiBackendStore {
-  const { acquireToken } = useGraphToken();
+  const { acquireToken } = useAuthClient();
   return useMemo(() => new MultiBackendStore({ acquireToken }), [acquireToken]);
 }

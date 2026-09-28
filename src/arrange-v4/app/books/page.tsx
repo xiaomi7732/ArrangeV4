@@ -1,17 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUserInfo } from '@/lib/graphService';
 import { useStore } from '@/lib/store/useStore';
 import type { Book } from '@/lib/store/types';
-import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
 import styles from './page.module.css';
 
 export default function BooksPage() {
-  const { acquireToken, isAuthenticated, inProgress, handleLogin: graphLogin, instance } = useGraphToken();
+  const auth = useAuthClient();
+  const { isAuthenticated, busy } = auth;
   const store = useStore();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
@@ -20,17 +20,19 @@ export default function BooksPage() {
 
   const handleLogin = async () => {
     try {
-      await graphLogin();
+      await auth.login();
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
     }
   };
 
-  const handleLogout = () => {
-    instance.logoutPopup({
-      postLogoutRedirectUri: '/',
-    });
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const fetchBooks = async () => {
@@ -40,9 +42,8 @@ export default function BooksPage() {
     setError(null);
 
     try {
-      const accessToken = await acquireToken();
-      const userInfo = await getUserInfo(accessToken);
-      setUserName(userInfo.displayName || userInfo.userPrincipalName || '');
+      const user = auth.getUser();
+      setUserName(user?.displayName || user?.email || '');
 
       const allBooks = await store.listBooks();
       setBooks(allBooks);
@@ -78,20 +79,20 @@ export default function BooksPage() {
   };
 
   useEffect(() => {
-    if (isAuthenticated && inProgress === 'none') {
+    if (isAuthenticated && !busy) {
       fetchBooks();
     }
-  }, [isAuthenticated, inProgress]);
+  }, [isAuthenticated, busy]);
 
   useSetTopBarActions(
     null,
     !isAuthenticated ? (
       <button
         onClick={handleLogin}
-        disabled={inProgress !== 'none'}
+        disabled={busy}
         className={`${styles.button} ${styles.buttonPrimary}`}
       >
-        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+        {busy ? 'Signing in...' : 'Sign In'}
       </button>
     ) : (
       <>
@@ -114,7 +115,7 @@ export default function BooksPage() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading],
+    [isAuthenticated, busy, loading],
   );
 
   return (
@@ -147,10 +148,10 @@ export default function BooksPage() {
             </p>
             <button
               onClick={handleLogin}
-              disabled={inProgress !== 'none'}
+              disabled={busy}
               className={`${styles.button} ${styles.buttonPrimary}`}
             >
-              {inProgress !== 'none' ? 'Signing in...' : 'Sign In with Microsoft'}
+              {busy ? 'Signing in...' : 'Sign In with Microsoft'}
             </button>
           </div>
         )}

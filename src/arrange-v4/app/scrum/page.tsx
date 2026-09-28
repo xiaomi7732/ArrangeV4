@@ -22,7 +22,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { useGraphToken } from '@/lib/hooks/useGraphToken';
+import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AddTodoItem from '@/components/AddTodoItem';
@@ -94,7 +94,8 @@ function comparePriority(a: TodoItemWithId, b: TodoItemWithId) {
 }
 
 function ScrumPageContent() {
-  const { isAuthenticated, inProgress, handleLogin: graphLogin } = useGraphToken();
+  const auth = useAuthClient();
+  const { isAuthenticated, busy } = auth;
   const store = useStore();
   const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/scrum');
   const bookIdRef = useRef(bookId);
@@ -271,17 +272,17 @@ function ScrumPageContent() {
 
   useEffect(() => {
     if (bookId && bookId !== itemsBookId) {
-      setLoading(isAuthenticated && inProgress === 'none');
+      setLoading(isAuthenticated && !busy);
       setTodoItems([]);
       setSelectedTodo(null);
     }
-  }, [bookId, itemsBookId, isAuthenticated, inProgress]);
+  }, [bookId, itemsBookId, isAuthenticated, busy]);
 
   useEffect(() => {
-    if (isAuthenticated && inProgress === 'none' && bookId) {
+    if (isAuthenticated && !busy && bookId) {
       fetchEvents();
     }
-  }, [isAuthenticated, inProgress, bookId, fetchEvents]);
+  }, [isAuthenticated, busy, bookId, fetchEvents]);
 
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) throw new Error('No book selected');
@@ -313,7 +314,7 @@ function ScrumPageContent() {
 
   const handleLogin = async () => {
     try {
-      await graphLogin();
+      await auth.login();
     } catch (err) {
       console.error('Login failed:', err);
       setError('Login failed. Please try again.');
@@ -338,10 +339,10 @@ function ScrumPageContent() {
     !isAuthenticated ? (
       <button
         onClick={handleLogin}
-        disabled={inProgress !== 'none'}
+        disabled={busy}
         className={`${styles.button} ${styles.buttonPrimary}`}
       >
-        {inProgress !== 'none' ? 'Signing in...' : 'Sign In'}
+        {busy ? 'Signing in...' : 'Sign In'}
       </button>
     ) : (
       <>
@@ -355,7 +356,7 @@ function ScrumPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, inProgress, loading, isSavingOrder, bookId, books, allCategories, todoItems],
+    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
   );
 
   const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {
