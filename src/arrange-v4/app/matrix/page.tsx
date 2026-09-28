@@ -14,7 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
-import { formatRelativeDate } from '@/lib/dateUtils';
+import { formatRelativeDate, isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -59,19 +59,10 @@ const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
 
 const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
 
-function isToday(dateStr: string | undefined | null): boolean {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  const now = new Date();
-  return d.getUTCFullYear() === now.getUTCFullYear() &&
-    d.getUTCMonth() === now.getUTCMonth() &&
-    d.getUTCDate() === now.getUTCDate();
-}
-
 function passesTodayFilter(todo: TodoItem): boolean {
   const status = todo.status || 'new';
-  if (status === 'finished') return isToday(todo.finishDateTime);
-  return isToday(todo.etsDateTime);
+  if (status === 'finished') return isDateToday(todo.finishDateTime);
+  return isDateToday(todo.etsDateTime);
 }
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {

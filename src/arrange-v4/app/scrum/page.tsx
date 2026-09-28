@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
+import { isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -58,19 +59,10 @@ const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
   cancelled: 'hide',
 };
 
-function isToday(dateStr: string | undefined | null): boolean {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  const now = new Date();
-  return d.getUTCFullYear() === now.getUTCFullYear() &&
-    d.getUTCMonth() === now.getUTCMonth() &&
-    d.getUTCDate() === now.getUTCDate();
-}
-
 function passesTodayFilter(todo: TodoItem): boolean {
   const status = todo.status || 'new';
-  if (status === 'finished') return isToday(todo.finishDateTime);
-  return isToday(todo.etsDateTime);
+  if (status === 'finished') return isDateToday(todo.finishDateTime);
+  return isDateToday(todo.etsDateTime);
 }
 
 const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
