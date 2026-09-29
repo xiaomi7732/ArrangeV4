@@ -83,7 +83,7 @@ export function useBookId(routePrefix: string) {
       }
       const message = err instanceof Error ? err.message : 'Failed to fetch books';
       console.error('Error fetching books:', err);
-      setAuthRecoveryRequired(false);
+      setAuthRecoveryRequired(options.interaction === 'allow-interactive');
       setError(message);
     }
   }, [isAuthenticated, busy, store, bookId, router]);

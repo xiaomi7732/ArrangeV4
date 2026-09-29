@@ -393,7 +393,6 @@ function MatrixPageContent() {
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (
-        interaction === 'allow-interactive' &&
         !hasSessionSweepRun() &&
         !isSessionSweepInProgress() &&
         !sweepAttemptedRef.current
