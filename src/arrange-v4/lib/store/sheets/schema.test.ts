@@ -330,6 +330,25 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.important, true);
   });
 
+  it('quarantines falsy non-empty metadata cells', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: true },
+      '',
+      '',
+      { operationId: 'base' },
+    );
+    const falseMetadata = [...base];
+    const zeroMetadata = [...base];
+    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    falseMetadata[metadataIndex] = false;
+    zeroMetadata[metadataIndex] = 0;
+
+    assert.deepEqual(parseSheetRows([headers, falseMetadata]), []);
+    assert.deepEqual(parseSheetRows([headers, zeroMetadata]), []);
+  });
+
   it('ignores parentless patches rather than treating them as snapshots', () => {
     const headers = Array.from(TODO_HEADERS);
     const base = serializeSheetRow(
