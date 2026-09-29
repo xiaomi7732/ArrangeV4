@@ -181,6 +181,12 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     const parentOperations = parentOperationsCell(
       cellByHeader(headers, row, 'parentOperations'),
     );
+    for (const field of TODO_FIELD_NAMES) {
+      const parent = parentOperations.operations[field];
+      if (parent?.startsWith(`legacy:${id}:`)) {
+        parentOperations.operations[field] = `legacy:${id}`;
+      }
+    }
     if (changedFields.fields !== null && !parentOperations.valid && !deleted) return;
     if (
       changedFields.fields !== null

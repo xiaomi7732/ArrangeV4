@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
 import { authProviderForBackend, normalizeBookId, parseBookId } from '@/lib/store/types';
@@ -40,6 +40,7 @@ export function useBookId(routePrefix: string) {
   const [books, setBooks] = useState<Book[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
+  const fetchSequenceRef = useRef(0);
 
   // Normalize unprefixed URL bookIds to their prefixed form for canonical URLs.
   useEffect(() => {
@@ -85,10 +86,12 @@ export function useBookId(routePrefix: string) {
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },
   ) => {
+    const fetchSequence = ++fetchSequenceRef.current;
     if (!isAuthenticated || busy) return false;
     setError(null);
     try {
       const all = await store.listBooks(options);
+      if (fetchSequenceRef.current !== fetchSequence) return false;
       setBooks(all);
       setAuthRecoveryRequired(false);
 
@@ -100,6 +103,7 @@ export function useBookId(routePrefix: string) {
       }
       return true;
     } catch (err: unknown) {
+      if (fetchSequenceRef.current !== fetchSequence) return false;
       if (
         options.interaction === 'silent-only' &&
         isInteractiveAuthenticationRequiredError(err)

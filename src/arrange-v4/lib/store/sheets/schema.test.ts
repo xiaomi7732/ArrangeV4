@@ -318,4 +318,27 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(beforeMove.item.subject, 'Updated');
     assert.equal(afterMove.item.subject, 'Updated');
   });
+
+  it('canonicalizes indexed legacy parent references', () => {
+    const headers = normalizeHeaders(Array.from(TODO_HEADERS.slice(0, 16)));
+    const base = [
+      'todo-1', 'Base', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '',
+    ];
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Edited' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'patch',
+        parentOperations: { subject: 'legacy:todo-1:0' },
+      },
+    );
+
+    const [record] = parseSheetRows([headers, base, patch]);
+
+    assert.equal(record.item.subject, 'Edited');
+  });
 });
