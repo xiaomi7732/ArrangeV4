@@ -335,6 +335,9 @@ export class GoogleSheetsStore implements TodoStore {
       if (!existing) throw new Error(`TODO item "${itemId}" no longer exists.`);
       const updatedAt = new Date().toISOString();
       const updated: TodoItemWithId = { ...existing.item, ...updates, id: itemId };
+      const changedFields = new Set<keyof TodoItem>(
+        Object.keys(updates) as (keyof TodoItem)[],
+      );
       if (updates.status !== undefined) {
         if (
           updates.status === 'inProgress'
@@ -342,16 +345,20 @@ export class GoogleSheetsStore implements TodoStore {
           && updates.startDateTime === undefined
         ) {
           updated.startDateTime = updatedAt;
+          changedFields.add('startDateTime');
         }
         if (updates.status === 'new' && updates.startDateTime === undefined) {
           updated.startDateTime = null;
+          changedFields.add('startDateTime');
         }
         if (updates.status === 'finished') {
           if (!existing.item.startDateTime && updates.startDateTime === undefined) {
             updated.startDateTime = updatedAt;
+            changedFields.add('startDateTime');
           }
           if (!existing.item.finishDateTime && updates.finishDateTime === undefined) {
             updated.finishDateTime = updatedAt;
+            changedFields.add('finishDateTime');
           }
         }
         if (
@@ -360,6 +367,7 @@ export class GoogleSheetsStore implements TodoStore {
           && updates.finishDateTime === undefined
         ) {
           updated.finishDateTime = null;
+          changedFields.add('finishDateTime');
         }
       }
       await this.appendValues(
@@ -369,7 +377,7 @@ export class GoogleSheetsStore implements TodoStore {
           updated,
           existing.createdAt || updatedAt,
           updatedAt,
-          existing.rawValues,
+          { changedFields: [...changedFields] },
         )],
         options,
         token,
@@ -393,8 +401,7 @@ export class GoogleSheetsStore implements TodoStore {
           existing.item,
           existing.createdAt || updatedAt,
           updatedAt,
-          existing.rawValues,
-          true,
+          { deleted: true },
         )],
         undefined,
         token,

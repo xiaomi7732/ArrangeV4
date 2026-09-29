@@ -65,9 +65,11 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, legacyRow]);
 
-    assert.equal(headers.at(-3), 'matrixOrder');
-    assert.equal(headers.at(-2), 'scrumOrder');
-    assert.equal(headers.at(-1), 'deleted');
+    assert.equal(headers.at(-5), 'matrixOrder');
+    assert.equal(headers.at(-4), 'scrumOrder');
+    assert.equal(headers.at(-3), 'deleted');
+    assert.equal(headers.at(-2), 'changedFields');
+    assert.equal(headers.at(-1), 'operationId');
     assert.equal(record.item.id, 'legacy-id');
     assert.equal(record.item.important, true);
     assert.equal(record.item.matrixOrder, undefined);
@@ -93,8 +95,7 @@ describe('Google Sheets TODO schema', () => {
       { id: 'todo-2', subject: 'Deleted' },
       '2026-01-01T00:00:00.000Z',
       '2026-01-02T00:00:00.000Z',
-      undefined,
-      true,
+      { deleted: true },
     );
     const deletedOriginal = serializeSheetRow(
       headers,
@@ -131,5 +132,61 @@ describe('Google Sheets TODO schema', () => {
         scrumOrder: undefined,
       },
     ]);
+  });
+
+  it('merges concurrent field patches independently of row order', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: false },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+      { operationId: 'base' },
+    );
+    const subjectPatch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Renamed', urgent: false },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      { changedFields: ['subject'], operationId: 'subject' },
+    );
+    const urgencyPatch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: true },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-03T00:00:00.000Z',
+      { changedFields: ['urgent'], operationId: 'urgent' },
+    );
+
+    const [record] = parseSheetRows([headers, urgencyPatch, base, subjectPatch]);
+
+    assert.equal(record.item.subject, 'Renamed');
+    assert.equal(record.item.urgent, true);
+  });
+
+  it('keeps tombstones terminal even when a stale patch is appended later', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+    );
+    const tombstone = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      { deleted: true },
+    );
+    const stalePatch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Resurrected' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-03T00:00:00.000Z',
+      { changedFields: ['subject'] },
+    );
+
+    assert.deepEqual(parseSheetRows([headers, base, tombstone, stalePatch]), []);
   });
 });

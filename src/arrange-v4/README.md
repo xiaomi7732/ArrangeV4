@@ -40,9 +40,9 @@ Google uses the browser-only OAuth token model. Tokens are kept in
 server, and require an explicit user action to renew after expiration.
 
 Arrange-created spreadsheets use an append-only history keyed by stable item
-IDs. Updates append a newer version and deletes append a tombstone, so edits
-from another tab or collaborator cannot shift a row and cause Arrange to
-overwrite or delete a different task.
+IDs. Updates append field-level patches and deletes append terminal tombstones,
+so edits from another tab or collaborator merge without positional row writes.
+Arrange-managed patches leave user-defined columns untouched.
 
 ## Validation
 

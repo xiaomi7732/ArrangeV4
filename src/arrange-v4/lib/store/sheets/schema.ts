@@ -23,6 +23,8 @@ export const TODO_HEADERS = [
   'matrixOrder',
   'scrumOrder',
   'deleted',
+  'changedFields',
+  'operationId',
 ] as const;
 
 export interface SheetTodoRecord {
@@ -32,6 +34,29 @@ export interface SheetTodoRecord {
   updatedAt: string;
   rawValues: unknown[];
   deleted: boolean;
+}
+
+const TODO_FIELD_NAMES = [
+  'subject',
+  'etsDateTime',
+  'etaDateTime',
+  'status',
+  'urgent',
+  'important',
+  'categories',
+  'checklist',
+  'remarks',
+  'startDateTime',
+  'finishDateTime',
+  'originalEtsDateTime',
+  'originalEtaDateTime',
+  'matrixOrder',
+  'scrumOrder',
+] as const satisfies readonly (keyof TodoItem)[];
+
+interface SheetTodoVersion extends SheetTodoRecord {
+  changedFields: (keyof TodoItem)[] | null;
+  operationId: string;
 }
 
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
@@ -69,6 +94,13 @@ function jsonArrayCell(value: unknown): string[] | undefined {
   }
 }
 
+function changedFieldsCell(value: unknown): (keyof TodoItem)[] | null {
+  const fields = jsonArrayCell(value);
+  if (!fields) return null;
+  const validFields = new Set<string>(TODO_FIELD_NAMES);
+  return fields.filter((field): field is keyof TodoItem => validFields.has(field));
+}
+
 function remarksCell(value: unknown): TodoItem['remarks'] {
   if (!value) return null;
   try {
@@ -102,7 +134,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   if (values.length < 2) return [];
   const headers = normalizeHeaders(values[0]);
 
-  const latestById = new Map<string, SheetTodoRecord>();
+  const versionsById = new Map<string, SheetTodoVersion[]>();
   values.slice(1).forEach((row, index) => {
     const id = optionalString(cellByHeader(headers, row, 'id'));
     const subject = optionalString(cellByHeader(headers, row, 'subject'));
@@ -111,6 +143,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
     const deleted = booleanCell(cellByHeader(headers, row, 'deleted'));
+    const operationId = optionalString(cellByHeader(headers, row, 'operationId')) || '';
     const item: TodoItemWithId = {
       id,
       subject: subject || '',
@@ -129,17 +162,46 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       matrixOrder: numberCell(cellByHeader(headers, row, 'matrixOrder')),
       scrumOrder: numberCell(cellByHeader(headers, row, 'scrumOrder')),
     };
-    latestById.set(id, {
+    const version: SheetTodoVersion = {
       item,
       rowNumber: index + 2,
       createdAt,
       updatedAt,
       rawValues: row,
       deleted,
-    });
+      changedFields: changedFieldsCell(cellByHeader(headers, row, 'changedFields')),
+      operationId,
+    };
+    const versions = versionsById.get(id) || [];
+    versions.push(version);
+    versionsById.set(id, versions);
   });
 
-  return [...latestById.values()].filter(record => !record.deleted && !!record.item.subject);
+  return [...versionsById.values()].flatMap(versions => {
+    if (versions.some(version => version.deleted)) return [];
+    versions.sort((left, right) => {
+      const timeComparison = left.updatedAt.localeCompare(right.updatedAt);
+      if (timeComparison !== 0) return timeComparison;
+      const operationComparison = left.operationId.localeCompare(right.operationId);
+      if (operationComparison !== 0) return operationComparison;
+      return left.rowNumber - right.rowNumber;
+    });
+
+    let current: SheetTodoRecord | null = null;
+    for (const version of versions) {
+      if (version.changedFields === null) {
+        current = version;
+        continue;
+      }
+      if (!current) continue;
+      const item: TodoItemWithId = { ...current.item };
+      for (const field of version.changedFields) {
+        Object.assign(item, { [field]: version.item[field] });
+      }
+      current = { ...version, item };
+    }
+    return current?.item.subject ? [current] : [];
+  });
 }
 
 function jsonCell(value: unknown[] | TodoItem['remarks']): string {
@@ -153,8 +215,11 @@ export function serializeSheetRow(
   item: TodoItemWithId,
   createdAt: string,
   updatedAt: string,
-  existingValues?: unknown[],
-  deleted = false,
+  options: {
+    changedFields?: (keyof TodoItem)[];
+    deleted?: boolean;
+    operationId?: string;
+  } = {},
 ): unknown[] {
   const cells: Record<string, unknown> = {
     id: item.id,
@@ -175,11 +240,17 @@ export function serializeSheetRow(
     updatedAt,
     matrixOrder: item.matrixOrder ?? '',
     scrumOrder: item.scrumOrder ?? '',
-    deleted,
+    deleted: options.deleted || false,
+    changedFields: options.changedFields ? JSON.stringify(options.changedFields) : '',
+    operationId: options.operationId || crypto.randomUUID(),
   };
-  return headers.map((header, index) => (
-    Object.prototype.hasOwnProperty.call(cells, header)
-      ? cells[header]
-      : existingValues?.[index] ?? ''
-  ));
+  const changedFields = options.changedFields
+    ? new Set<string>(options.changedFields)
+    : null;
+  return headers.map(header => {
+    if (changedFields && (TODO_FIELD_NAMES as readonly string[]).includes(header)) {
+      return changedFields.has(header) ? cells[header] : '';
+    }
+    return Object.prototype.hasOwnProperty.call(cells, header) ? cells[header] : '';
+  });
 }

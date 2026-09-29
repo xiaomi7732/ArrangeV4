@@ -144,7 +144,7 @@ describe('GoogleSheetsStore', () => {
       request => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
-        assert.equal(body.values[0][TODO_HEADERS.indexOf('subject')], 'Existing subject');
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('subject')], '');
         assert.equal(body.values[0][TODO_HEADERS.indexOf('urgent')], true);
         return jsonResponse({ updatedRows: 1 });
       },
@@ -161,17 +161,17 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
-  it('preserves values in user-defined columns when updating a row', async () => {
+  it('does not copy rendered custom-column values into update patches', async () => {
     const headers = [...TODO_HEADERS, 'customNotes'];
     const row = [
       'todo-1', 'Existing subject', '', '', 'new', false, false,
-      '', '', '', '', '', '', '', '', '', '', '', false, 'keep this',
+      '', '', '', '', '', '', '', '', '', '', '', false, '', '', 'displayed formula result',
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
       request => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
-        assert.equal(body.values[0][headers.indexOf('customNotes')], 'keep this');
+        assert.equal(body.values[0][headers.indexOf('customNotes')], '');
         return jsonResponse({ updatedRows: 1 });
       },
     ]);
