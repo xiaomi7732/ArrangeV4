@@ -76,6 +76,11 @@ export class MultiBackendStore implements TodoStore {
   }
 
   private routeByBackend(backend: string): TodoStore {
+    if (backend !== this.activeBackend) {
+      throw new Error(
+        `Cannot use the "${backend}" backend while "${this.activeBackend}" is active.`,
+      );
+    }
     switch (backend) {
       case 'calendar':
         return this.calendarStore;

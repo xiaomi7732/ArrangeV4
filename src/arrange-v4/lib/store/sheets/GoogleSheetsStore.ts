@@ -114,6 +114,13 @@ function itemOverlapsWindow(item: TodoItem, fromDate: string, toDate: string): b
     && end > from;
 }
 
+function dateFallsInWindow(dateTime: string | null | undefined, fromDate: string, toDate: string) {
+  const value = Date.parse(dateTime || '');
+  const from = Date.parse(fromDate);
+  const to = Date.parse(toDate);
+  return Number.isFinite(value) && value >= from && value < to;
+}
+
 export class GoogleSheetsStore implements TodoStore {
   private readonly tokenAcquisition: TokenAcquisitionCoordinator;
   private readonly invalidateToken: () => void;
@@ -282,6 +289,7 @@ export class GoogleSheetsStore implements TodoStore {
     return items.filter(item => (
       isNonTerminalStatus(item.status)
       || itemOverlapsWindow(item, opts.fromDate!, opts.toDate!)
+      || dateFallsInWindow(item.finishDateTime, opts.fromDate!, opts.toDate!)
     ));
   }
 

@@ -229,9 +229,20 @@ describe('GoogleSheetsStore', () => {
       'todo-3', 'Undated active', '', '', 'blocked', false, false,
       '', '', '', '', '', '', '', '', '', '', '',
     ];
+    const recentlyFinished = [
+      'todo-4', 'Finished in range', '2025-01-15T10:00:00.000Z',
+      '2025-01-15T11:00:00.000Z', 'finished', false, false,
+      '', '', '', '', '2026-01-20T10:00:00.000Z', '', '', '', '', '', '',
+    ];
     const mock = installFetchMock([
       () => jsonResponse({
-        values: [Array.from(TODO_HEADERS), inWindow, outOfWindow, undatedActive],
+        values: [
+          Array.from(TODO_HEADERS),
+          inWindow,
+          outOfWindow,
+          undatedActive,
+          recentlyFinished,
+        ],
       }),
     ]);
     try {
@@ -240,7 +251,7 @@ describe('GoogleSheetsStore', () => {
         fromDate: '2026-01-01T00:00:00.000Z',
         toDate: '2026-02-01T00:00:00.000Z',
       });
-      assert.deepEqual(items.map(item => item.id), ['todo-1', 'todo-3']);
+      assert.deepEqual(items.map(item => item.id), ['todo-1', 'todo-3', 'todo-4']);
       assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
       assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
     } finally {

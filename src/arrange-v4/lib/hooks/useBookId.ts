@@ -25,9 +25,14 @@ export function useBookId(routePrefix: string) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const rawBookId = searchParams.get('bookId');
-  const bookId = normalizeBookId(rawBookId);
-
   const { isAuthenticated, busy, provider } = useAuthClient();
+  const normalizedBookId = normalizeBookId(rawBookId);
+  const normalizedBackend = normalizedBookId
+    ? parseBookId(normalizedBookId)?.backend
+    : undefined;
+  const bookId = normalizedBackend && authProviderForBackend(normalizedBackend) === provider
+    ? normalizedBookId
+    : null;
   const store = useStore();
 
   const [books, setBooks] = useState<Book[]>([]);
@@ -36,10 +41,10 @@ export function useBookId(routePrefix: string) {
 
   // Normalize unprefixed URL bookIds to their prefixed form for canonical URLs.
   useEffect(() => {
-    if (rawBookId && bookId && rawBookId !== bookId) {
-      router.replace(`${routePrefix}?bookId=${encodeURIComponent(bookId)}`);
+    if (rawBookId && normalizedBookId && rawBookId !== normalizedBookId) {
+      router.replace(`${routePrefix}?bookId=${encodeURIComponent(normalizedBookId)}`);
     }
-  }, [rawBookId, bookId, router, routePrefix]);
+  }, [rawBookId, normalizedBookId, router, routePrefix]);
 
   // Redirect logic: distinguish missing URL param from invalid URL param.
   // Only fall back to saved-book localStorage when there's no `?bookId` at
@@ -52,16 +57,16 @@ export function useBookId(routePrefix: string) {
       if (saved && savedBackend && authProviderForBackend(savedBackend) === provider) {
         router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
       }
-    } else if (!bookId) {
+    } else if (!normalizedBookId) {
       router.replace('/books');
     } else {
-      const backend = parseBookId(bookId)?.backend;
+      const backend = parseBookId(normalizedBookId)?.backend;
       if (backend && authProviderForBackend(backend) !== provider) {
         clearLastBookId();
         router.replace('/books');
       }
     }
-  }, [rawBookId, bookId, provider, router, routePrefix]);
+  }, [rawBookId, normalizedBookId, provider, router, routePrefix]);
 
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },
