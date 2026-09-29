@@ -131,6 +131,69 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.subject, 'Legacy item');
   });
 
+  it('preserves custom columns that collide with managed ordering fields', () => {
+    const rawHeaders = [
+      ...TODO_HEADERS.slice(0, 16),
+      'matrixOrder',
+      'custom',
+      'scrumOrder',
+    ];
+    const row = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 123, 'keep me', 456,
+    ];
+    const headers = normalizeHeaders(rawHeaders, [row]);
+    const serialized = serializeSheetRow(
+      headers,
+      { id: 'new-id', subject: 'New item', matrixOrder: 2, scrumOrder: 3 },
+      '',
+      '',
+    );
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.equal(headers.filter(header => header === 'matrixOrder').length, 2);
+    assert.equal(headers.filter(header => header === 'scrumOrder').length, 2);
+    assert.equal(record.item.matrixOrder, undefined);
+    assert.equal(record.item.scrumOrder, undefined);
+    assert.equal(serialized[headers.indexOf('matrixOrder')], '');
+    assert.equal(serialized[headers.indexOf('scrumOrder')], '');
+    assert.equal(serialized[headers.lastIndexOf('matrixOrder')], 2);
+    assert.equal(serialized[headers.lastIndexOf('scrumOrder')], 3);
+  });
+
+  it('separates mixed custom values from managed metadata', () => {
+    const rawHeaders = Array.from(TODO_HEADERS);
+    const managed = serializeSheetRow(
+      rawHeaders,
+      { id: 'managed-id', subject: 'Managed item' },
+      '',
+      '',
+      { operationId: 'managed-base' },
+    );
+    const legacy = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '', 'user formula result',
+    ];
+    const headers = normalizeHeaders(rawHeaders, [managed, legacy]);
+
+    const records = parseSheetRows([headers, managed, legacy]);
+
+    assert.equal(
+      headers.filter(header => header === TODO_METADATA_HEADER).length,
+      2,
+    );
+    assert.deepEqual(
+      records.map(record => record.item.subject).sort(),
+      ['Legacy item', 'Managed item'],
+    );
+    assert.equal(
+      records.find(record => record.item.id === 'managed-id')
+        ?.fieldOperations.subject,
+      'managed-base',
+    );
+  });
+
   it('uses the latest appended version and hides tombstoned items', () => {
     const headers = Array.from(TODO_HEADERS);
     const original = serializeSheetRow(

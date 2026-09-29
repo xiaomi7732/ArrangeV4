@@ -3,6 +3,11 @@ import { ALL_STATUSES } from '../types';
 
 export const TODO_SHEET_NAME = 'TODOs';
 export const TODO_METADATA_HEADER = '__arrange_metadata';
+const TODO_ORDER_HEADERS = ['matrixOrder', 'scrumOrder'] as const;
+const TODO_MANAGED_EXTENSION_HEADERS = [
+  ...TODO_ORDER_HEADERS,
+  TODO_METADATA_HEADER,
+] as const;
 
 export const TODO_HEADERS = [
   'id',
@@ -76,6 +81,36 @@ function cellByHeader(headers: string[], row: unknown[], header: string): unknow
 function cellByLastHeader(headers: string[], row: unknown[], header: string): unknown {
   const index = headers.lastIndexOf(header);
   return index >= 0 ? row[index] : undefined;
+}
+
+function managedMetadataCell(
+  headers: string[],
+  row: unknown[],
+  treatEarlierValuesAsManaged: boolean,
+): unknown {
+  const indices = headers.flatMap((header, index) => (
+    header === TODO_METADATA_HEADER ? [index] : []
+  ));
+  const managedValue = row[indices.at(-1) ?? -1];
+  if (managedValue !== undefined && managedValue !== null && managedValue !== '') {
+    return managedValue;
+  }
+  if (indices.length < 2) return managedValue;
+  return indices
+    .slice(0, -1)
+    .reverse()
+    .map(index => row[index])
+    .find(value => (
+      treatEarlierValuesAsManaged
+      || metadataCell(value) !== null
+      || looksLikeArrangeMetadata(value)
+    ));
+}
+
+function isManagedExtensionHeader(
+  header: string,
+): header is typeof TODO_MANAGED_EXTENSION_HEADERS[number] {
+  return (TODO_MANAGED_EXTENSION_HEADERS as readonly string[]).includes(header);
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -267,32 +302,51 @@ function statusCell(value: unknown): TodoStatus {
 export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): string[] {
   const normalized = headers.map(value => String(value || '').trim());
   for (const required of TODO_HEADERS) {
-    if (required === TODO_METADATA_HEADER) continue;
+    if (isManagedExtensionHeader(required)) continue;
     if (!normalized.includes(required)) normalized.push(required);
   }
+  const canonicalNewSheet = normalized.length === TODO_HEADERS.length
+    && TODO_HEADERS.every((header, index) => normalized[index] === header);
+  const canonicalOrderSchema = normalized.length >= 18
+    && TODO_HEADERS.slice(0, 18).every(
+      (header, index) => normalized[index] === header,
+    );
   const metadataIndices = normalized.flatMap((header, index) => (
     header === TODO_METADATA_HEADER ? [index] : []
   ));
-  const canonicalNewSheet = normalized.length === TODO_HEADERS.length
-    && TODO_HEADERS.every((header, index) => normalized[index] === header);
-  const hasVersionedValues = metadataIndices.some(index =>
-    rows.some(row => metadataCell(row[index]) !== null)
-  );
-  const hasArrangeMarker = metadataIndices.some(index =>
-    rows.some(row => looksLikeArrangeMetadata(row[index]))
-  );
+  const verifiedMetadataIndices = metadataIndices.filter(index => {
+    const populatedValues = rows
+      .map(row => row[index])
+      .filter(value => value !== undefined && value !== null && value !== '');
+    return populatedValues.length > 0
+      && populatedValues.every(value => (
+        metadataCell(value) !== null || looksLikeArrangeMetadata(value)
+      ));
+  });
+  for (const orderHeader of TODO_ORDER_HEADERS) {
+    const indices = normalized.flatMap((header, index) => (
+      header === orderHeader ? [index] : []
+    ));
+    const canonicalIndex = TODO_HEADERS.indexOf(orderHeader);
+    const canonicalOrderIsManaged = indices.length === 1
+      && indices[0] === canonicalIndex
+      && canonicalOrderSchema;
+    if (indices.length === 0 || (indices.length === 1 && !canonicalOrderIsManaged)) {
+      normalized.push(orderHeader);
+    }
+  }
+
   const canonicalMetadataIsManaged = canonicalNewSheet && (
     rows.length === 0
     || rows.every(row => row[metadataIndices[0]] === undefined || row[metadataIndices[0]] === '')
-    || hasVersionedValues
-    || hasArrangeMarker
+    || verifiedMetadataIndices.includes(metadataIndices[0])
   );
   if (
     metadataIndices.length === 0
     || (
       metadataIndices.length === 1
       && !canonicalMetadataIsManaged
-      && !hasVersionedValues
+      && verifiedMetadataIndices.length === 0
     )
   ) {
     normalized.push(TODO_METADATA_HEADER);
@@ -303,6 +357,17 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
 export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   if (values.length < 2) return [];
   const headers = normalizeHeaders(values[0], values.slice(1));
+  const metadataIndices = headers.flatMap((header, index) => (
+    header === TODO_METADATA_HEADER ? [index] : []
+  ));
+  const versionedIds = new Set(values.slice(1).flatMap(row => {
+    const id = optionalString(cellByHeader(headers, row, 'id'));
+    return id && metadataIndices.some(index => (
+      metadataCell(row[index]) !== null || looksLikeArrangeMetadata(row[index])
+    ))
+      ? [id]
+      : [];
+  }));
 
   const versionsById = new Map<string, SheetTodoVersion[]>();
   values.slice(1).forEach((row, index) => {
@@ -312,7 +377,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
 
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
-    const rawMetadata = cellByLastHeader(headers, row, TODO_METADATA_HEADER);
+    const rawMetadata = managedMetadataCell(headers, row, versionedIds.has(id));
     const hasRawMetadata = rawMetadata !== undefined
       && rawMetadata !== null
       && rawMetadata !== '';
@@ -352,8 +417,8 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       finishDateTime: nullableString(cellByHeader(headers, row, 'finishDateTime')),
       originalEtsDateTime: nullableString(cellByHeader(headers, row, 'originalEtsDateTime')),
       originalEtaDateTime: nullableString(cellByHeader(headers, row, 'originalEtaDateTime')),
-      matrixOrder: numberCell(cellByHeader(headers, row, 'matrixOrder')),
-      scrumOrder: numberCell(cellByHeader(headers, row, 'scrumOrder')),
+      matrixOrder: numberCell(cellByLastHeader(headers, row, 'matrixOrder')),
+      scrumOrder: numberCell(cellByLastHeader(headers, row, 'scrumOrder')),
     };
     const version: SheetTodoVersion = {
       item,
@@ -491,9 +556,14 @@ export function serializeSheetRow(
   const changedFields = options.changedFields
     ? new Set<string>(options.changedFields)
     : null;
-  const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
+  const managedHeaderIndices = new Map(
+    TODO_MANAGED_EXTENSION_HEADERS.map(header => [header, headers.lastIndexOf(header)]),
+  );
   return headers.map((header, index) => {
-    if (header === TODO_METADATA_HEADER && index !== metadataIndex) return '';
+    if (
+      isManagedExtensionHeader(header)
+      && index !== managedHeaderIndices.get(header)
+    ) return '';
     if (changedFields && (TODO_FIELD_NAMES as readonly string[]).includes(header)) {
       return changedFields.has(header) ? cells[header] : '';
     }
