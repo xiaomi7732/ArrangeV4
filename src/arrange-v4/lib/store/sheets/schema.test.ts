@@ -234,6 +234,18 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(headers.length, rawHeaders.length + 1);
   });
 
+  it('quarantines unmistakable unsupported Arrange metadata', () => {
+    const rawHeaders = Array.from(TODO_HEADERS);
+    const future = [
+      'future-id', 'Future item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
+      '{"schemaVersion":2,"operationId":"future-op"}',
+    ];
+    const headers = normalizeHeaders(rawHeaders, [future]);
+
+    assert.deepEqual(parseSheetRows([headers, future]), []);
+  });
+
   it('updates a legacy row without consuming its custom metadata value', () => {
     const legacy = [
       'legacy-id', 'Legacy item', '', '', 'new', false, false,

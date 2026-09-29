@@ -133,6 +133,7 @@ function managedMetadataCell(
     .find(value => (
       preserveEarlierCustomValue
         ? metadataCell(value) !== null
+          || looksLikeUnsupportedArrangeMetadata(value)
         : value !== undefined && value !== null && value !== ''
     ));
 }
@@ -235,6 +236,24 @@ function metadataCell(value: unknown): SheetMetadata | null {
     };
   } catch {
     return null;
+  }
+}
+
+function looksLikeUnsupportedArrangeMetadata(value: unknown): boolean {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const parsed = JSON.parse(value) as {
+      schemaVersion?: unknown;
+      operationId?: unknown;
+    };
+    return !!parsed
+      && typeof parsed === 'object'
+      && typeof parsed.schemaVersion === 'number'
+      && parsed.schemaVersion !== 1
+      && typeof parsed.operationId === 'string'
+      && parsed.operationId.length > 0;
+  } catch {
+    return false;
   }
 }
 
