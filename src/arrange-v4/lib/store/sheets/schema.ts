@@ -132,7 +132,7 @@ function managedMetadataCell(
     .map(index => row[index])
     .find(value => (
       preserveEarlierCustomValue
-        ? metadataCell(value) !== null || looksLikeArrangeMetadata(value)
+        ? metadataCell(value) !== null
         : value !== undefined && value !== null && value !== ''
     ));
 }
@@ -235,18 +235,6 @@ function metadataCell(value: unknown): SheetMetadata | null {
     };
   } catch {
     return null;
-  }
-}
-
-function looksLikeArrangeMetadata(value: unknown): boolean {
-  if (typeof value !== 'string' || !value) return false;
-  try {
-    const parsed = JSON.parse(value) as { schemaVersion?: unknown };
-    return !!parsed
-      && typeof parsed === 'object'
-      && typeof parsed.schemaVersion === 'number';
-  } catch {
-    return false;
   }
 }
 
@@ -357,26 +345,44 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
       .map(row => row[index])
       .filter(value => value !== undefined && value !== null && value !== '');
     return populatedValues.length > 0
-      && populatedValues.every(value => (
-        metadataCell(value) !== null || looksLikeArrangeMetadata(value)
-      ));
+      && populatedValues.every(value => metadataCell(value) !== null);
   });
+  const extensionBlockStart = headerBlockStart(
+    normalized,
+    TODO_MANAGED_EXTENSION_HEADERS,
+  );
+  const extensionMetadataIndex = extensionBlockStart < 0
+    ? -1
+    : extensionBlockStart + TODO_MANAGED_EXTENSION_HEADERS.length - 1;
+  const extensionBlockIsTrusted = extensionMetadataIndex >= 0 && (
+    rows.every(row => row[extensionMetadataIndex] === undefined
+      || row[extensionMetadataIndex] === '')
+    || verifiedMetadataIndices.includes(extensionMetadataIndex)
+  );
   for (const orderHeader of TODO_ORDER_HEADERS) {
     const indices = normalized.flatMap((header, index) => (
       header === orderHeader ? [index] : []
     ));
-    const canonicalIndex = orderSchemaStart + TODO_HEADERS.indexOf(orderHeader);
+    const orderOffset = TODO_ORDER_HEADERS.indexOf(orderHeader);
+    const canonicalIndex = extensionBlockIsTrusted
+      ? extensionBlockStart + orderOffset
+      : orderSchemaStart + TODO_HEADERS.indexOf(orderHeader);
     const canonicalOrderIsManaged = indices.length === 1
       && indices[0] === canonicalIndex
-      && orderSchemaStart >= 0;
-    if (indices.length === 0 || (indices.length === 1 && !canonicalOrderIsManaged)) {
+      && (extensionBlockIsTrusted || orderSchemaStart >= 0);
+    if (indices.length === 0) {
+      normalized.push(orderHeader);
+    } else if (indices.length === 1 && !canonicalOrderIsManaged) {
+      normalized[indices[0]] = `__arrange_custom_${indices[0]}_${orderHeader}`;
       normalized.push(orderHeader);
     }
   }
 
-  const canonicalMetadataIndex = schemaStart < 0
-    ? -1
-    : schemaStart + TODO_HEADERS.length - 1;
+  const canonicalMetadataIndex = extensionBlockIsTrusted
+    ? extensionMetadataIndex
+    : schemaStart < 0
+      ? -1
+      : schemaStart + TODO_HEADERS.length - 1;
   const canonicalMetadataIsManaged = (
     canonicalMetadataIndex >= 0 && (
       rows.length === 0
@@ -399,9 +405,11 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
   ) {
     normalized.push(TODO_METADATA_HEADER);
   }
-  if (canonicalMetadataIsManaged && schemaStart >= 0) {
+  if (canonicalMetadataIsManaged && canonicalMetadataIndex >= 0) {
     for (const header of TODO_MANAGED_EXTENSION_HEADERS) {
-      const canonicalIndex = schemaStart + TODO_HEADERS.indexOf(header);
+      const canonicalIndex = extensionBlockIsTrusted
+        ? extensionBlockStart + TODO_MANAGED_EXTENSION_HEADERS.indexOf(header)
+        : schemaStart + TODO_HEADERS.indexOf(header);
       normalized.forEach((candidate, index) => {
         if (candidate === header && index !== canonicalIndex) {
           normalized[index] = `__arrange_custom_${index}_${header}`;

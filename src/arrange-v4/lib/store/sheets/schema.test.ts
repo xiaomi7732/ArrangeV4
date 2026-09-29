@@ -148,14 +148,44 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, row]);
 
-    assert.equal(headers.filter(header => header === 'matrixOrder').length, 2);
-    assert.equal(headers.filter(header => header === 'scrumOrder').length, 2);
+    assert.equal(headers.filter(header => header === 'matrixOrder').length, 1);
+    assert.equal(headers.filter(header => header === 'scrumOrder').length, 1);
     assert.equal(record.item.matrixOrder, undefined);
     assert.equal(record.item.scrumOrder, undefined);
-    assert.equal(serialized[headers.indexOf('matrixOrder')], '');
-    assert.equal(serialized[headers.indexOf('scrumOrder')], '');
+    assert.equal(serialized[16], '');
+    assert.equal(serialized[18], '');
     assert.equal(serialized[headers.lastIndexOf('matrixOrder')], 2);
     assert.equal(serialized[headers.lastIndexOf('scrumOrder')], 3);
+  });
+
+  it('keeps appended managed ordering columns stable across reloads', () => {
+    const rawHeaders = [...TODO_HEADERS.slice(0, 16), 'matrixOrder', 'custom'];
+    const legacy = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 123, 'keep me',
+    ];
+    const firstHeaders = normalizeHeaders(rawHeaders, [legacy]);
+    const persistedHeaders = [
+      ...rawHeaders,
+      ...firstHeaders.slice(rawHeaders.length),
+    ];
+    const patch = serializeSheetRow(
+      firstHeaders,
+      { id: 'legacy-id', subject: 'Legacy item', scrumOrder: 7 },
+      '',
+      '',
+      {
+        changedFields: ['scrumOrder'],
+        operationId: 'scrum-patch',
+        parentOperations: { scrumOrder: 'legacy:legacy-id' },
+      },
+    );
+    const reloadedHeaders = normalizeHeaders(persistedHeaders, [legacy, patch]);
+
+    const [record] = parseSheetRows([reloadedHeaders, legacy, patch]);
+
+    assert.equal(reloadedHeaders.length, persistedHeaders.length);
+    assert.equal(record.item.scrumOrder, 7);
   });
 
   it('separates mixed custom values from managed metadata', () => {
@@ -186,6 +216,22 @@ describe('Google Sheets TODO schema', () => {
         ?.fieldOperations.subject,
       'managed-base',
     );
+  });
+
+  it('preserves unsupported version JSON in an ambiguous custom metadata column', () => {
+    const rawHeaders = Array.from(TODO_HEADERS);
+    const legacy = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
+      '{"schemaVersion":2,"custom":"value"}',
+    ];
+    const headers = normalizeHeaders(rawHeaders, [legacy]);
+
+    const [record] = parseSheetRows([headers, legacy]);
+
+    assert.equal(record.item.subject, 'Legacy item');
+    assert.equal(headers.at(-1), TODO_METADATA_HEADER);
+    assert.equal(headers.length, rawHeaders.length + 1);
   });
 
   it('updates a legacy row without consuming its custom metadata value', () => {
