@@ -260,8 +260,9 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
     const rawMetadata = cellByHeader(headers, row, TODO_METADATA_HEADER);
-    const metadata = metadataCell(rawMetadata) || previousMetadataCell(headers, row);
-    if (rawMetadata && !metadata && !subject) return;
+    const versionedMetadata = metadataCell(rawMetadata);
+    if (rawMetadata && !versionedMetadata) return;
+    const metadata = versionedMetadata || previousMetadataCell(headers, row);
     if (metadata && !metadata.deleted && !metadata.changedFields && !subject) return;
     const deleted = metadata?.deleted === true;
     const changedFields = metadata?.changedFields ?? null;

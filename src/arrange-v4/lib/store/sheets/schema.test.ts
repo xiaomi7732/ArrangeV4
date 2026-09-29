@@ -283,6 +283,53 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.urgent, false);
   });
 
+  it('quarantines unsupported snapshot and tombstone metadata', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: true, important: true },
+      '',
+      '',
+      { operationId: 'base' },
+    );
+    const unsupportedSnapshot = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Renamed' },
+      '',
+      '',
+      { operationId: 'snapshot' },
+    );
+    const malformedTombstone = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '',
+      '',
+      { deleted: true, operationId: 'delete' },
+    );
+    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    const unsupported = JSON.parse(
+      String(unsupportedSnapshot[metadataIndex]),
+    ) as Record<string, unknown>;
+    unsupported.schemaVersion = 2;
+    unsupportedSnapshot[metadataIndex] = JSON.stringify(unsupported);
+    malformedTombstone[metadataIndex] = JSON.stringify({
+      schemaVersion: 1,
+      operationId: '',
+      deleted: 'true',
+    });
+
+    const [record] = parseSheetRows([
+      headers,
+      base,
+      unsupportedSnapshot,
+      malformedTombstone,
+    ]);
+
+    assert.equal(record.item.subject, 'Original');
+    assert.equal(record.item.urgent, true);
+    assert.equal(record.item.important, true);
+  });
+
   it('ignores parentless patches rather than treating them as snapshots', () => {
     const headers = Array.from(TODO_HEADERS);
     const base = serializeSheetRow(
