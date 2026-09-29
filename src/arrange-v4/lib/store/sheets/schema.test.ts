@@ -114,6 +114,23 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.subject, 'Legacy item');
   });
 
+  it('preserves a reserved-name custom column after all legacy fields', () => {
+    const rawHeaders = Array.from(TODO_HEADERS);
+    const row = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '', 'user formula result',
+    ];
+    const headers = normalizeHeaders(rawHeaders, [row]);
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.equal(
+      headers.filter(header => header === TODO_METADATA_HEADER).length,
+      2,
+    );
+    assert.equal(record.item.subject, 'Legacy item');
+  });
+
   it('uses the latest appended version and hides tombstoned items', () => {
     const headers = Array.from(TODO_HEADERS);
     const original = serializeSheetRow(
@@ -263,7 +280,7 @@ describe('Google Sheets TODO schema', () => {
         parentOperations: { urgent: 'base' },
       },
     );
-    patch[headers.indexOf(TODO_METADATA_HEADER)] = 'not-json';
+    patch[headers.lastIndexOf(TODO_METADATA_HEADER)] = 'not-json';
 
     const [record] = parseSheetRows([headers, base, patch]);
 
@@ -291,7 +308,7 @@ describe('Google Sheets TODO schema', () => {
         parentOperations: { urgent: 'base' },
       },
     );
-    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
     const metadata = JSON.parse(String(patch[metadataIndex])) as Record<string, unknown>;
     metadata.changedFields = 'urgent';
     patch[metadataIndex] = JSON.stringify(metadata);
@@ -325,7 +342,7 @@ describe('Google Sheets TODO schema', () => {
       '',
       { deleted: true, operationId: 'delete' },
     );
-    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
     const unsupported = JSON.parse(
       String(unsupportedSnapshot[metadataIndex]),
     ) as Record<string, unknown>;
@@ -350,7 +367,7 @@ describe('Google Sheets TODO schema', () => {
   });
 
   it('quarantines falsy non-empty metadata cells', () => {
-    const headers = Array.from(TODO_HEADERS);
+    const headers = [...TODO_HEADERS, TODO_METADATA_HEADER];
     const base = serializeSheetRow(
       headers,
       { id: 'todo-1', subject: 'Original', urgent: true },
@@ -360,7 +377,7 @@ describe('Google Sheets TODO schema', () => {
     );
     const falseMetadata = [...base];
     const zeroMetadata = [...base];
-    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
     falseMetadata[metadataIndex] = false;
     zeroMetadata[metadataIndex] = 0;
 

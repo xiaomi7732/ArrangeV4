@@ -167,6 +167,18 @@ function metadataCell(value: unknown): SheetMetadata | null {
   }
 }
 
+function looksLikeArrangeMetadata(value: unknown): boolean {
+  if (typeof value !== 'string' || !value) return false;
+  try {
+    const parsed = JSON.parse(value) as { schemaVersion?: unknown };
+    return !!parsed
+      && typeof parsed === 'object'
+      && typeof parsed.schemaVersion === 'number';
+  } catch {
+    return false;
+  }
+}
+
 function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata | null {
   const requiredHeaders = ['deleted', 'changedFields', 'operationId', 'parentOperations'];
   const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
@@ -266,11 +278,20 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
   const hasVersionedValues = metadataIndices.some(index =>
     rows.some(row => metadataCell(row[index]) !== null)
   );
+  const hasArrangeMarker = metadataIndices.some(index =>
+    rows.some(row => looksLikeArrangeMetadata(row[index]))
+  );
+  const canonicalMetadataIsManaged = canonicalNewSheet && (
+    rows.length === 0
+    || rows.every(row => row[metadataIndices[0]] === undefined || row[metadataIndices[0]] === '')
+    || hasVersionedValues
+    || hasArrangeMarker
+  );
   if (
     metadataIndices.length === 0
     || (
       metadataIndices.length === 1
-      && !canonicalNewSheet
+      && !canonicalMetadataIsManaged
       && !hasVersionedValues
     )
   ) {
