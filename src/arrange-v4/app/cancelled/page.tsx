@@ -24,7 +24,14 @@ function CancelledPageContent() {
   const auth = useAuthClient();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
-  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/cancelled');
+  const {
+    bookId,
+    books,
+    handleBookSwitch,
+    fetchBooks,
+    authRecoveryRequired: bookAuthRecoveryRequired,
+    error: bookError,
+  } = useBookId('/cancelled');
 
   const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
@@ -43,6 +50,7 @@ function CancelledPageContent() {
   bookIdRef.current = bookId;
 
   const displayError = error || bookError;
+  const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
 
@@ -113,7 +121,7 @@ function CancelledPageContent() {
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
-      fetchEvents();
+      fetchEvents({ interaction: 'silent-only' });
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
@@ -124,7 +132,7 @@ function CancelledPageContent() {
       interaction: 'silent-only',
     }),
     isAuthenticated &&
-      !authRecoveryRequired &&
+      !requiresAuthRecovery &&
       !busy &&
       !!bookId &&
       !loading &&
@@ -149,14 +157,19 @@ function CancelledPageContent() {
 
   const handleAuthRecovery = async () => {
     if (isAuthenticated) {
-      await fetchEvents();
+      if (bookAuthRecoveryRequired) {
+        await fetchBooks({ interaction: 'allow-interactive' });
+      }
+      if (authRecoveryRequired) {
+        await fetchEvents();
+      }
       return;
     }
     await handleLogin();
   };
 
   useSetTopBarActions(
-    isAuthenticated && !authRecoveryRequired && books.length > 1 ? (
+    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -178,7 +191,7 @@ function CancelledPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : authRecoveryRequired ? null : (
+    ) : requiresAuthRecovery ? null : (
       <>
         <button
           onClick={handleDeleteSelected}
@@ -198,7 +211,7 @@ function CancelledPageContent() {
     ),
     [
       isAuthenticated,
-      authRecoveryRequired,
+      requiresAuthRecovery,
       busy,
       loading,
       deleting,
@@ -281,7 +294,7 @@ function CancelledPageContent() {
     }
   };
 
-  if (!bookId) {
+  if (!bookId && isAuthenticated && !requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -293,12 +306,12 @@ function CancelledPageContent() {
     );
   }
 
-  if (!isAuthenticated || authRecoveryRequired) {
+  if (!isAuthenticated || requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <AuthRecoveryPanel
-            busy={busy || (authRecoveryRequired && loading)}
+            busy={busy || (requiresAuthRecovery && loading)}
             error={displayError}
             onLogin={handleAuthRecovery}
           />

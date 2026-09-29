@@ -94,7 +94,14 @@ function ScrumPageContent() {
   const auth = useAuthClient();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
-  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/scrum');
+  const {
+    bookId,
+    books,
+    handleBookSwitch,
+    fetchBooks,
+    authRecoveryRequired: bookAuthRecoveryRequired,
+    error: bookError,
+  } = useBookId('/scrum');
   const bookIdRef = useRef(bookId);
   const mutationVersionRef = useRef(0);
   const isSavingOrderRef = useRef(false);
@@ -126,6 +133,7 @@ function ScrumPageContent() {
   );
 
   const displayError = error || bookError;
+  const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -307,7 +315,7 @@ function ScrumPageContent() {
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
-      fetchEvents();
+      fetchEvents({ interaction: 'silent-only' });
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
@@ -317,7 +325,7 @@ function ScrumPageContent() {
       interaction: 'silent-only',
     }),
     isAuthenticated &&
-      !authRecoveryRequired &&
+      !requiresAuthRecovery &&
       !busy &&
       !!bookId &&
       !loading &&
@@ -364,14 +372,19 @@ function ScrumPageContent() {
 
   const handleAuthRecovery = async () => {
     if (isAuthenticated) {
-      await fetchEvents();
+      if (bookAuthRecoveryRequired) {
+        await fetchBooks({ interaction: 'allow-interactive' });
+      }
+      if (authRecoveryRequired) {
+        await fetchEvents();
+      }
       return;
     }
     await handleLogin();
   };
 
   useSetTopBarActions(
-    isAuthenticated && !authRecoveryRequired && books.length > 1 ? (
+    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -393,7 +406,7 @@ function ScrumPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : authRecoveryRequired ? null : (
+    ) : requiresAuthRecovery ? null : (
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
@@ -407,7 +420,7 @@ function ScrumPageContent() {
     ),
     [
       isAuthenticated,
-      authRecoveryRequired,
+      requiresAuthRecovery,
       busy,
       loading,
       isSavingOrder,
@@ -679,7 +692,7 @@ function ScrumPageContent() {
     );
   };
 
-  if (!bookId) {
+  if (!bookId && isAuthenticated && !requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -691,12 +704,12 @@ function ScrumPageContent() {
     );
   }
 
-  if (!isAuthenticated || authRecoveryRequired) {
+  if (!isAuthenticated || requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <AuthRecoveryPanel
-            busy={busy || (authRecoveryRequired && loading)}
+            busy={busy || (requiresAuthRecovery && loading)}
             error={displayError}
             onLogin={handleAuthRecovery}
           />
