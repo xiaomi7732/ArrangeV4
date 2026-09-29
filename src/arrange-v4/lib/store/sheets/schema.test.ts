@@ -106,10 +106,8 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, row]);
 
-    assert.equal(
-      headers.filter(header => header === TODO_METADATA_HEADER).length,
-      2,
-    );
+    assert.equal(headers.length, TODO_HEADERS.length + 1);
+    assert.equal(headers.at(-1), TODO_METADATA_HEADER);
     assert.equal(record.item.id, 'legacy-id');
     assert.equal(record.item.subject, 'Legacy item');
   });
@@ -124,10 +122,8 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, row]);
 
-    assert.equal(
-      headers.filter(header => header === TODO_METADATA_HEADER).length,
-      2,
-    );
+    assert.equal(headers.length, rawHeaders.length + 1);
+    assert.equal(headers.at(-1), TODO_METADATA_HEADER);
     assert.equal(record.item.subject, 'Legacy item');
   });
 
@@ -179,10 +175,8 @@ describe('Google Sheets TODO schema', () => {
 
     const records = parseSheetRows([headers, managed, legacy]);
 
-    assert.equal(
-      headers.filter(header => header === TODO_METADATA_HEADER).length,
-      2,
-    );
+    assert.equal(headers.length, rawHeaders.length + 1);
+    assert.equal(headers.at(-1), TODO_METADATA_HEADER);
     assert.deepEqual(
       records.map(record => record.item.subject).sort(),
       ['Legacy item', 'Managed item'],
@@ -275,6 +269,25 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(serialized[17], 5);
     assert.equal(serialized[18] !== '', true);
     assert.deepEqual(serialized.slice(19), ['', '', '']);
+  });
+
+  it('recognizes a canonical schema shifted by a preceding custom column', () => {
+    const headers = ['custom-before', ...TODO_HEADERS, TODO_METADATA_HEADER];
+    const canonicalRow = serializeSheetRow(
+      Array.from(TODO_HEADERS),
+      { id: 'todo-1', subject: 'Shifted item', matrixOrder: 2 },
+      '',
+      '',
+      { operationId: 'shifted-base' },
+    );
+    const row = ['keep-before', ...canonicalRow, 'keep-after'];
+    const normalized = normalizeHeaders(headers, [row]);
+
+    const [record] = parseSheetRows([normalized, row]);
+
+    assert.equal(record.item.id, 'todo-1');
+    assert.equal(record.item.subject, 'Shifted item');
+    assert.equal(record.item.matrixOrder, 2);
   });
 
   it('uses the latest appended version and hides tombstoned items', () => {
@@ -378,6 +391,48 @@ describe('Google Sheets TODO schema', () => {
 
     assert.equal(record.item.subject, 'Renamed');
     assert.equal(record.item.urgent, true);
+  });
+
+  it('quarantines conflicting revisions with duplicate operation IDs', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '',
+      '',
+      { operationId: 'base' },
+    );
+    const first = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'First' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'duplicate',
+        parentOperations: { subject: 'base' },
+      },
+    );
+    const second = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Second' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'duplicate',
+        parentOperations: { subject: 'base' },
+      },
+    );
+
+    assert.equal(
+      parseSheetRows([headers, base, first, second])[0]?.item.subject,
+      'Original',
+    );
+    assert.equal(
+      parseSheetRows([headers, base, second, first])[0]?.item.subject,
+      'Original',
+    );
   });
 
   it('keeps tombstones terminal even when a stale patch is appended later', () => {

@@ -55,6 +55,31 @@ function createStore(acquireToken?: (options?: AcquireTokenOptions) => Promise<s
 }
 
 describe('GoogleSheetsStore', () => {
+  it('retries transient Drive 403 quota responses', async () => {
+    const quotaResponse = new Response(JSON.stringify({
+      error: {
+        message: 'Rate limit exceeded',
+        errors: [{ reason: 'userRateLimitExceeded' }],
+      },
+    }), {
+      status: 403,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': '0.001',
+      },
+    });
+    const mock = installFetchMock([
+      () => quotaResponse,
+      () => jsonResponse({ files: [] }),
+    ]);
+    try {
+      assert.deepEqual(await createStore().listBooks(), []);
+      assert.equal(mock.requests.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('lists only app-owned spreadsheets and forwards silent token policy', async () => {
     const tokenCalls: Array<AcquireTokenOptions | undefined> = [];
     const mock = installFetchMock([
@@ -179,10 +204,6 @@ describe('GoogleSheetsStore', () => {
     row[headers.indexOf('customNotes')] = 'displayed formula result';
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
-      request => {
-        assert.equal(request.init.method, 'PUT');
-        return jsonResponse({ updatedRows: 1 });
-      },
       request => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };

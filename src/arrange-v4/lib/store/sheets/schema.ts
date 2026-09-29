@@ -74,17 +74,29 @@ interface SheetMetadata {
   parentOperations?: Partial<Record<keyof TodoItem, string>>;
 }
 
+function headerBlockStart(
+  headers: readonly string[],
+  expected: readonly string[],
+): number {
+  return headers.findIndex((_, start) => (
+    expected.every((header, offset) => headers[start + offset] === header)
+  ));
+}
+
 function managedHeaderIndex(headers: string[], header: string): number {
+  const schemaStart = headerBlockStart(headers, TODO_HEADERS);
+  const schemaOffset = TODO_HEADERS.indexOf(
+    header as typeof TODO_HEADERS[number],
+  );
+  if (schemaStart >= 0 && schemaOffset >= 0) {
+    return schemaStart + schemaOffset;
+  }
   if (isManagedExtensionHeader(header)) return headers.lastIndexOf(header);
   const coreOffset = TODO_CORE_HEADERS.indexOf(
     header as typeof TODO_CORE_HEADERS[number],
   );
   if (coreOffset >= 0) {
-    const blockStart = headers.findIndex((_, start) => (
-      TODO_CORE_HEADERS.every(
-        (coreHeader, offset) => headers[start + offset] === coreHeader,
-      )
-    ));
+    const blockStart = headerBlockStart(headers, TODO_CORE_HEADERS);
     if (blockStart >= 0) return blockStart + coreOffset;
   }
   return headers.indexOf(header);
@@ -105,10 +117,11 @@ function managedMetadataCell(
   row: unknown[],
   preserveEarlierCustomValue: boolean,
 ): unknown {
+  const managedIndex = managedHeaderIndex(headers, TODO_METADATA_HEADER);
   const indices = headers.flatMap((header, index) => (
-    header === TODO_METADATA_HEADER ? [index] : []
+    isMetadataColumnHeader(header) && index <= managedIndex ? [index] : []
   ));
-  const managedValue = row[indices.at(-1) ?? -1];
+  const managedValue = row[managedIndex];
   if (managedValue !== undefined && managedValue !== null && managedValue !== '') {
     return managedValue;
   }
@@ -128,6 +141,12 @@ function isManagedExtensionHeader(
   header: string,
 ): header is typeof TODO_MANAGED_EXTENSION_HEADERS[number] {
   return (TODO_MANAGED_EXTENSION_HEADERS as readonly string[]).includes(header);
+}
+
+function isMetadataColumnHeader(header: string): boolean {
+  return header === TODO_METADATA_HEADER
+    || header.endsWith(`_${TODO_METADATA_HEADER}`)
+      && header.startsWith('__arrange_custom_');
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -325,18 +344,14 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
     if (isManagedExtensionHeader(required)) continue;
     if (!normalized.includes(required)) normalized.push(required);
   }
-  const canonicalNewSheet = normalized.length === TODO_HEADERS.length
-    && TODO_HEADERS.every((header, index) => normalized[index] === header);
-  const hasCanonicalSchema = TODO_HEADERS.every(
-    (header, index) => normalized[index] === header,
-  );
-  const canonicalOrderSchema = normalized.length >= 18
-    && TODO_HEADERS.slice(0, 18).every(
-      (header, index) => normalized[index] === header,
-    );
+  const schemaStart = headerBlockStart(normalized, TODO_HEADERS);
+  const orderSchemaStart = headerBlockStart(normalized, TODO_HEADERS.slice(0, 18));
   const metadataIndices = normalized.flatMap((header, index) => (
     header === TODO_METADATA_HEADER ? [index] : []
   ));
+  const hasDisambiguatedMetadata = normalized.some(
+    header => header !== TODO_METADATA_HEADER && isMetadataColumnHeader(header),
+  );
   const verifiedMetadataIndices = metadataIndices.filter(index => {
     const populatedValues = rows
       .map(row => row[index])
@@ -350,19 +365,29 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
     const indices = normalized.flatMap((header, index) => (
       header === orderHeader ? [index] : []
     ));
-    const canonicalIndex = TODO_HEADERS.indexOf(orderHeader);
+    const canonicalIndex = orderSchemaStart + TODO_HEADERS.indexOf(orderHeader);
     const canonicalOrderIsManaged = indices.length === 1
       && indices[0] === canonicalIndex
-      && canonicalOrderSchema;
+      && orderSchemaStart >= 0;
     if (indices.length === 0 || (indices.length === 1 && !canonicalOrderIsManaged)) {
       normalized.push(orderHeader);
     }
   }
 
-  const canonicalMetadataIsManaged = canonicalNewSheet && (
-    rows.length === 0
-    || rows.every(row => row[metadataIndices[0]] === undefined || row[metadataIndices[0]] === '')
-    || verifiedMetadataIndices.includes(metadataIndices[0])
+  const canonicalMetadataIndex = schemaStart < 0
+    ? -1
+    : schemaStart + TODO_HEADERS.length - 1;
+  const canonicalMetadataIsManaged = (
+    canonicalMetadataIndex >= 0 && (
+      rows.length === 0
+      || rows.every(row => row[canonicalMetadataIndex] === undefined
+        || row[canonicalMetadataIndex] === '')
+      || verifiedMetadataIndices.includes(canonicalMetadataIndex)
+    )
+  ) || (
+    hasDisambiguatedMetadata
+    && metadataIndices.length === 1
+    && metadataIndices[0] === normalized.lastIndexOf(TODO_METADATA_HEADER)
   );
   if (
     metadataIndices.length === 0
@@ -374,20 +399,18 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
   ) {
     normalized.push(TODO_METADATA_HEADER);
   }
-  const canonicalMetadataIsTrusted = hasCanonicalSchema && (
-    rows.every(row => row[TODO_HEADERS.length - 1] === undefined
-      || row[TODO_HEADERS.length - 1] === '')
-    || verifiedMetadataIndices.includes(TODO_HEADERS.length - 1)
-  );
-  if (canonicalMetadataIsTrusted) {
+  if (canonicalMetadataIsManaged && schemaStart >= 0) {
     for (const header of TODO_MANAGED_EXTENSION_HEADERS) {
-      const canonicalIndex = TODO_HEADERS.indexOf(header);
+      const canonicalIndex = schemaStart + TODO_HEADERS.indexOf(header);
       normalized.forEach((candidate, index) => {
         if (candidate === header && index !== canonicalIndex) {
           normalized[index] = `__arrange_custom_${index}_${header}`;
         }
       });
     }
+  } else if (canonicalMetadataIndex >= 0) {
+    normalized[canonicalMetadataIndex] =
+      `__arrange_custom_${canonicalMetadataIndex}_${TODO_METADATA_HEADER}`;
   }
   return normalized;
 }
@@ -395,8 +418,9 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
 export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   if (values.length < 2) return [];
   const headers = normalizeHeaders(values[0], values.slice(1));
+  const managedMetadataIndex = managedHeaderIndex(headers, TODO_METADATA_HEADER);
   const metadataIndices = headers.flatMap((header, index) => (
-    header === TODO_METADATA_HEADER ? [index] : []
+    isMetadataColumnHeader(header) && index <= managedMetadataIndex ? [index] : []
   ));
   const versionedIds = new Set<string>();
   const legacyParentIds = new Set<string>();
@@ -500,17 +524,34 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       value: TodoItem[keyof TodoItem];
     }
     const nodesByField = new Map<keyof TodoItem, Map<string, FieldNode>>();
+    const conflictedOperationsByField = new Map<keyof TodoItem, Set<string>>();
     for (const version of versions) {
       const fields = version.changedFields ?? [...TODO_FIELD_NAMES];
       for (const field of fields) {
         const nodes = nodesByField.get(field) || new Map<string, FieldNode>();
-        nodes.set(version.operationId, {
+        const conflictedOperations = conflictedOperationsByField.get(field)
+          || new Set<string>();
+        if (conflictedOperations.has(version.operationId)) continue;
+        const node: FieldNode = {
           operationId: version.operationId,
           parentOperationId: version.changedFields === null
             ? null
             : version.parentOperations[field] || null,
           value: version.item[field],
-        });
+        };
+        const existing = nodes.get(version.operationId);
+        if (existing) {
+          if (
+            existing.parentOperationId !== node.parentOperationId
+            || JSON.stringify(existing.value) !== JSON.stringify(node.value)
+          ) {
+            nodes.delete(version.operationId);
+            conflictedOperations.add(version.operationId);
+            conflictedOperationsByField.set(field, conflictedOperations);
+          }
+          continue;
+        }
+        nodes.set(version.operationId, node);
         nodesByField.set(field, nodes);
       }
     }

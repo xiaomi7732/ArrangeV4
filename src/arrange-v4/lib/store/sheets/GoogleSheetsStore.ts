@@ -122,6 +122,26 @@ function dateFallsInWindow(dateTime: string | null | undefined, fromDate: string
   return Number.isFinite(value) && value >= from && value < to;
 }
 
+async function isRetryableGoogleQuotaResponse(response: Response): Promise<boolean> {
+  if (response.status === 429) return true;
+  if (response.status !== 403) return false;
+  try {
+    const body = await response.clone().json() as {
+      error?: { errors?: Array<{ reason?: string }> };
+    };
+    const retryableReasons = new Set([
+      'rateLimitExceeded',
+      'userRateLimitExceeded',
+      'sharingRateLimitExceeded',
+    ]);
+    return body.error?.errors?.some(
+      error => !!error.reason && retryableReasons.has(error.reason),
+    ) === true;
+  } catch {
+    return false;
+  }
+}
+
 export class GoogleSheetsStore implements TodoStore {
   private readonly tokenAcquisition: TokenAcquisitionCoordinator;
   private readonly invalidateToken: () => void;
@@ -146,7 +166,8 @@ export class GoogleSheetsStore implements TodoStore {
     let response: Response | null = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       response = await fetch(url, { ...init, headers });
-      if (response.status !== 429 || attempt === 2) break;
+      const retryableQuotaError = await isRetryableGoogleQuotaResponse(response);
+      if (!retryableQuotaError || attempt === 2) break;
       const retryAfterSeconds = Number(response.headers.get('Retry-After'));
       const delayMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
         ? retryAfterSeconds * 1000
