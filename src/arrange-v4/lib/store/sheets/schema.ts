@@ -164,9 +164,17 @@ function metadataCell(value: unknown): SheetMetadata | null {
 
 function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata | null {
   const requiredHeaders = ['deleted', 'changedFields', 'operationId', 'parentOperations'];
-  if (!requiredHeaders.every(header => headers.includes(header))) return null;
+  const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+  if (
+    metadataIndex < requiredHeaders.length
+    || requiredHeaders.some(
+      (header, index) => headers[metadataIndex - requiredHeaders.length + index] !== header,
+    )
+  ) return null;
   const operationId = optionalString(cellByHeader(headers, row, 'operationId'));
-  if (!operationId) return null;
+  if (!operationId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {
+    return null;
+  }
 
   const deletedValue = cellByHeader(headers, row, 'deleted');
   const deletedText = String(deletedValue ?? '').toLowerCase();

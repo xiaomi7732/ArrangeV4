@@ -86,7 +86,8 @@ describe('Google Sheets TODO schema', () => {
     const row = [
       'legacy-id', 'Legacy item', '', '', 'new', false, false,
       '', '', '', '', '', '', '', '', '',
-      true, 'not-json', 'custom-operation', '{"subject":"custom"}',
+      true, '["subject"]', '10000000-0000-4000-8000-000000000001',
+      '{"subject":"10000000-0000-4000-8000-000000000000"}',
     ];
 
     const [record] = parseSheetRows([headers, row]);
@@ -458,6 +459,9 @@ describe('Google Sheets TODO schema', () => {
   });
 
   it('migrates the previous four-column revision format', () => {
+    const baseOperation = '10000000-0000-4000-8000-000000000001';
+    const patchOperation = '10000000-0000-4000-8000-000000000002';
+    const deleteOperation = '10000000-0000-4000-8000-000000000003';
     const headers = [
       ...TODO_HEADERS.slice(0, 18),
       'deleted',
@@ -470,20 +474,22 @@ describe('Google Sheets TODO schema', () => {
     base[headers.indexOf('id')] = 'todo-1';
     base[headers.indexOf('subject')] = 'Original';
     base[headers.indexOf('status')] = 'new';
-    base[headers.indexOf('operationId')] = 'base';
+    base[headers.indexOf('operationId')] = baseOperation;
 
     const patch = makeRow();
     patch[headers.indexOf('id')] = 'todo-1';
     patch[headers.indexOf('urgent')] = true;
     patch[headers.indexOf('changedFields')] = '["urgent"]';
-    patch[headers.indexOf('operationId')] = 'patch';
-    patch[headers.indexOf('parentOperations')] = '{"urgent":"base"}';
+    patch[headers.indexOf('operationId')] = patchOperation;
+    patch[headers.indexOf('parentOperations')] = JSON.stringify({
+      urgent: baseOperation,
+    });
 
     const tombstone = makeRow();
     tombstone[headers.indexOf('id')] = 'todo-1';
     tombstone[headers.indexOf('subject')] = 'Original';
     tombstone[headers.indexOf('deleted')] = true;
-    tombstone[headers.indexOf('operationId')] = 'delete';
+    tombstone[headers.indexOf('operationId')] = deleteOperation;
 
     const [updated] = parseSheetRows([headers, base, patch]);
     assert.equal(updated.item.urgent, true);
