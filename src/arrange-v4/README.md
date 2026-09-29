@@ -17,6 +17,9 @@ Open [http://localhost:3000](http://localhost:3000).
 Google support is enabled when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set and
 `NEXT_PUBLIC_ENABLE_GOOGLE_PROVIDER` is not `false`.
 
+See [Google Sign-In Setup](GOOGLE_SETUP.md) for complete Google Cloud, local
+testing, GitHub Pages deployment, and troubleshooting instructions.
+
 1. Create a Google Cloud project.
 2. Enable the Google Drive API and Google Sheets API.
 3. Configure an OAuth consent screen.
