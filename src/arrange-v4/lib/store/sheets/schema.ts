@@ -107,10 +107,37 @@ function metadataCell(value: unknown): SheetMetadata | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(String(value)) as Partial<SheetMetadata>;
-    if (parsed.schemaVersion !== 1 || typeof parsed.operationId !== 'string') {
+    if (
+      parsed.schemaVersion !== 1
+      || typeof parsed.operationId !== 'string'
+      || !parsed.operationId.trim()
+      || (parsed.deleted !== undefined && typeof parsed.deleted !== 'boolean')
+      || (parsed.changedFields !== undefined && !Array.isArray(parsed.changedFields))
+      || (
+        parsed.parentOperations !== undefined
+        && (
+          !parsed.parentOperations
+          || typeof parsed.parentOperations !== 'object'
+          || Array.isArray(parsed.parentOperations)
+        )
+      )
+    ) {
       return null;
     }
     const validFields = new Set<string>(TODO_FIELD_NAMES);
+    if (
+      Array.isArray(parsed.changedFields)
+      && parsed.changedFields.some(
+        field => typeof field !== 'string' || !validFields.has(field),
+      )
+    ) return null;
+    if (
+      parsed.parentOperations
+      && Object.entries(parsed.parentOperations).some(
+        ([field, operation]) =>
+          !validFields.has(field) || typeof operation !== 'string' || !operation,
+      )
+    ) return null;
     const changedFields = Array.isArray(parsed.changedFields)
       ? parsed.changedFields.filter(
         (field): field is keyof TodoItem =>
@@ -133,6 +160,62 @@ function metadataCell(value: unknown): SheetMetadata | null {
   } catch {
     return null;
   }
+}
+
+function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata | null {
+  const requiredHeaders = ['deleted', 'changedFields', 'operationId', 'parentOperations'];
+  if (!requiredHeaders.every(header => headers.includes(header))) return null;
+  const operationId = optionalString(cellByHeader(headers, row, 'operationId'));
+  if (!operationId) return null;
+
+  const deletedValue = cellByHeader(headers, row, 'deleted');
+  const deletedText = String(deletedValue ?? '').toLowerCase();
+  if (deletedValue !== '' && deletedValue !== undefined && deletedValue !== null
+    && deletedValue !== true && deletedValue !== false
+    && deletedText !== 'true' && deletedText !== 'false') {
+    return null;
+  }
+
+  const changedFieldsValue = cellByHeader(headers, row, 'changedFields');
+  const changedFields = changedFieldsValue
+    ? jsonArrayCell(changedFieldsValue)
+    : undefined;
+  const validFields = new Set<string>(TODO_FIELD_NAMES);
+  if (
+    changedFieldsValue
+    && (
+      !changedFields
+      || changedFields.some(field => !validFields.has(field))
+    )
+  ) return null;
+
+  let parentOperations: Partial<Record<keyof TodoItem, string>> | undefined;
+  const parentValue = cellByHeader(headers, row, 'parentOperations');
+  if (parentValue) {
+    try {
+      const parsed = JSON.parse(String(parentValue)) as Record<string, unknown>;
+      if (
+        !parsed
+        || typeof parsed !== 'object'
+        || Array.isArray(parsed)
+        || Object.entries(parsed).some(
+          ([field, operation]) =>
+            !validFields.has(field) || typeof operation !== 'string' || !operation,
+        )
+      ) return null;
+      parentOperations = parsed as Partial<Record<keyof TodoItem, string>>;
+    } catch {
+      return null;
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    operationId,
+    deleted: deletedValue === true || deletedText === 'true',
+    changedFields: changedFields as (keyof TodoItem)[] | undefined,
+    parentOperations,
+  };
 }
 
 function remarksCell(value: unknown): TodoItem['remarks'] {
@@ -177,8 +260,9 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
     const rawMetadata = cellByHeader(headers, row, TODO_METADATA_HEADER);
-    const metadata = metadataCell(rawMetadata);
+    const metadata = metadataCell(rawMetadata) || previousMetadataCell(headers, row);
     if (rawMetadata && !metadata && !subject) return;
+    if (metadata && !metadata.deleted && !metadata.changedFields && !subject) return;
     const deleted = metadata?.deleted === true;
     const changedFields = metadata?.changedFields ?? null;
     const operationId = metadata?.operationId || `legacy:${id}`;

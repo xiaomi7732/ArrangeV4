@@ -252,6 +252,37 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.urgent, false);
   });
 
+  it('ignores structurally invalid versioned patch metadata', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: false },
+      '',
+      '',
+      { operationId: 'base' },
+    );
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: true },
+      '',
+      '',
+      {
+        changedFields: ['urgent'],
+        operationId: 'patch',
+        parentOperations: { urgent: 'base' },
+      },
+    );
+    const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+    const metadata = JSON.parse(String(patch[metadataIndex])) as Record<string, unknown>;
+    metadata.changedFields = 'urgent';
+    patch[metadataIndex] = JSON.stringify(metadata);
+
+    const [record] = parseSheetRows([headers, base, patch]);
+
+    assert.equal(record.item.subject, 'Original');
+    assert.equal(record.item.urgent, false);
+  });
+
   it('ignores parentless patches rather than treating them as snapshots', () => {
     const headers = Array.from(TODO_HEADERS);
     const base = serializeSheetRow(
@@ -358,5 +389,38 @@ describe('Google Sheets TODO schema', () => {
     const [record] = parseSheetRows([headers, base, patch]);
 
     assert.equal(record.item.subject, 'Edited');
+  });
+
+  it('migrates the previous four-column revision format', () => {
+    const headers = [
+      ...TODO_HEADERS.slice(0, 18),
+      'deleted',
+      'changedFields',
+      'operationId',
+      'parentOperations',
+    ];
+    const makeRow = () => Array<unknown>(headers.length).fill('');
+    const base = makeRow();
+    base[headers.indexOf('id')] = 'todo-1';
+    base[headers.indexOf('subject')] = 'Original';
+    base[headers.indexOf('status')] = 'new';
+    base[headers.indexOf('operationId')] = 'base';
+
+    const patch = makeRow();
+    patch[headers.indexOf('id')] = 'todo-1';
+    patch[headers.indexOf('urgent')] = true;
+    patch[headers.indexOf('changedFields')] = '["urgent"]';
+    patch[headers.indexOf('operationId')] = 'patch';
+    patch[headers.indexOf('parentOperations')] = '{"urgent":"base"}';
+
+    const tombstone = makeRow();
+    tombstone[headers.indexOf('id')] = 'todo-1';
+    tombstone[headers.indexOf('subject')] = 'Original';
+    tombstone[headers.indexOf('deleted')] = true;
+    tombstone[headers.indexOf('operationId')] = 'delete';
+
+    const [updated] = parseSheetRows([headers, base, patch]);
+    assert.equal(updated.item.urgent, true);
+    assert.deepEqual(parseSheetRows([headers, base, patch, tombstone]), []);
   });
 });
