@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { backendForAuthProvider } from '@/lib/store/types';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
@@ -13,6 +15,7 @@ import styles from './page.module.css';
 
 export default function BooksPage() {
   const auth = useAuthClient();
+  const router = useRouter();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
   const [books, setBooks] = useState<Book[]>([]);
@@ -20,6 +23,7 @@ export default function BooksPage() {
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const fetchSequenceRef = useRef(0);
 
   const handleLogin = async () => {
     try {
@@ -33,6 +37,7 @@ export default function BooksPage() {
   const handleLogout = async () => {
     try {
       await auth.logout();
+      router.push('/');
     } catch (error) {
       console.error('Logout failed:', error);
     }
@@ -41,6 +46,7 @@ export default function BooksPage() {
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'allow-interactive' },
   ) => {
+    const fetchSequence = ++fetchSequenceRef.current;
     if (!isAuthenticated) return;
 
     setLoading(true);
@@ -48,12 +54,13 @@ export default function BooksPage() {
 
     try {
       const user = auth.getUser();
-      setUserName(user?.displayName || user?.email || '');
-
       const allBooks = await store.listBooks(options);
+      if (fetchSequenceRef.current !== fetchSequence) return;
+      setUserName(user?.displayName || user?.email || '');
       setBooks(allBooks);
       setAuthRecoveryRequired(false);
     } catch (err: unknown) {
+      if (fetchSequenceRef.current !== fetchSequence) return;
       if (
         options.interaction === 'silent-only' &&
         isInteractiveAuthenticationRequiredError(err)
@@ -67,7 +74,9 @@ export default function BooksPage() {
       setAuthRecoveryRequired(options.interaction === 'allow-interactive');
       setError(message);
     } finally {
-      setLoading(false);
+      if (fetchSequenceRef.current === fetchSequence) {
+        setLoading(false);
+      }
     }
   }, [isAuthenticated, auth, store]);
 
@@ -81,7 +90,9 @@ export default function BooksPage() {
 
   const handleCreateBook = async (name: string) => {
     try {
-      const newBook = await store.createBook(name, { backend: 'calendar' });
+      const newBook = await store.createBook(name, {
+        backend: backendForAuthProvider(auth.provider),
+      });
       setBooks(prev => [...prev, newBook]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create book';
@@ -122,6 +133,7 @@ export default function BooksPage() {
         <CreateCalendar
           onCreateCalendar={handleCreateBook}
           disabled={loading}
+          appendArrangeSuffix={auth.provider === 'microsoft'}
         />
         <button
           onClick={() => void fetchBooks()}
@@ -181,14 +193,14 @@ export default function BooksPage() {
               Sign in to view your books
             </h2>
             <p className={styles.unauthDescription}>
-              This application uses Microsoft authentication to securely access your books.
+              Sign in again to securely access your {auth.provider === 'google' ? 'Google Sheets' : 'Microsoft Calendar'} books.
             </p>
             <button
               onClick={handleLogin}
               disabled={busy}
               className={`${styles.button} ${styles.buttonPrimary}`}
             >
-              {busy ? 'Signing in...' : 'Sign In with Microsoft'}
+              {busy ? 'Signing in...' : `Sign In with ${auth.provider === 'google' ? 'Google' : 'Microsoft'}`}
             </button>
           </div>
         )}

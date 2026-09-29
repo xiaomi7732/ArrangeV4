@@ -251,44 +251,17 @@ function CancelledPageContent() {
     const idsToDelete = Array.from(selectedIds);
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
-    const previousItems = [...cancelledItems];
     setCancelledItems(items => items.filter(item => !selectedIds.has(item.id)));
 
-    const CONCURRENCY = 5;
-    let idx = 0;
-    let completed = 0;
-    let hasFailure = false;
-
     try {
-      const worker = async () => {
-        while (idx < idsToDelete.length) {
-          const eventId = idsToDelete[idx++];
-          try {
-            await store.deleteItem(bookId, eventId);
-          } catch (err) {
-            hasFailure = true;
-            console.error(`Error deleting event ${eventId}:`, err);
-          }
-          completed++;
-          setDeleteProgress({ done: completed, total: idsToDelete.length });
-        }
-      };
-
-      await Promise.all(
-        Array.from({ length: Math.min(CONCURRENCY, idsToDelete.length) }, () => worker()),
-      );
-
-      if (hasFailure) {
-        await fetchEvents();
-        setError('Some items could not be deleted. The list has been refreshed.');
-      } else {
-        setSelectedIds(new Set());
-      }
+      await store.deleteItems(bookId, idsToDelete);
+      setDeleteProgress({ done: idsToDelete.length, total: idsToDelete.length });
+      setSelectedIds(new Set());
     } catch (err: unknown) {
       console.error('Error during bulk delete:', err);
+      await fetchEvents();
       const message = err instanceof Error ? err.message : 'Failed to delete items';
       setError(message);
-      setCancelledItems(previousItems);
     } finally {
       setDeleting(false);
       setShowConfirm(false);

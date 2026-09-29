@@ -1,3 +1,5 @@
+import { parseBookId, type BackendKind } from '@/lib/store/types';
+
 const LAST_BOOK_ID_KEY = 'arrange_lastBookId';
 const SESSION_SWEEP_KEY = 'arrange_sweepDone';
 const SESSION_SWEEP_IN_PROGRESS_KEY = 'arrange_sweepInProgress';
@@ -19,10 +21,23 @@ function isSessionStorageAvailable(): boolean {
   }
 }
 
-export function getLastBookId(): string | null {
+function lastBookKey(backend: BackendKind): string {
+  return `${LAST_BOOK_ID_KEY}_${backend}`;
+}
+
+export function getLastBookId(backend: BackendKind): string | null {
   if (!isLocalStorageAvailable()) return null;
   try {
-    return localStorage.getItem(LAST_BOOK_ID_KEY);
+    const stored = localStorage.getItem(lastBookKey(backend));
+    if (stored) return stored;
+
+    const legacy = localStorage.getItem(LAST_BOOK_ID_KEY);
+    if (legacy && parseBookId(legacy)?.backend === backend) {
+      localStorage.setItem(lastBookKey(backend), legacy);
+      localStorage.removeItem(LAST_BOOK_ID_KEY);
+      return legacy;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -31,16 +46,22 @@ export function getLastBookId(): string | null {
 export function setLastBookId(bookId: string): void {
   if (!isLocalStorageAvailable()) return;
   try {
-    localStorage.setItem(LAST_BOOK_ID_KEY, bookId);
+    const backend = parseBookId(bookId)?.backend;
+    if (!backend) return;
+    localStorage.setItem(lastBookKey(backend), bookId);
+    const legacy = localStorage.getItem(LAST_BOOK_ID_KEY);
+    if (legacy && parseBookId(legacy)?.backend === backend) {
+      localStorage.removeItem(LAST_BOOK_ID_KEY);
+    }
   } catch {
     // Storage full or blocked — silently ignore
   }
 }
 
-export function clearLastBookId(): void {
+export function clearLastBookId(backend: BackendKind): void {
   if (!isLocalStorageAvailable()) return;
   try {
-    localStorage.removeItem(LAST_BOOK_ID_KEY);
+    localStorage.removeItem(lastBookKey(backend));
   } catch {
     // Silently ignore
   }

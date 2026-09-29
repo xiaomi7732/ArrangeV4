@@ -120,6 +120,13 @@ export default function CalendarList({ books, loading, error, onDeleteBook }: Ca
                 <h3 className={styles.calendarName}>
                   {book.name}
                 </h3>
+                <span
+                  className={`${styles.backendBadge} ${
+                    book.backend === 'google' ? styles.backendGoogle : styles.backendMicrosoft
+                  }`}
+                >
+                  {book.backend === 'google' ? '📊 Sheets' : '📅 Calendar'}
+                </span>
                 {book.owner && (
                   <p className={styles.calendarOwner}>
                     Owner: {book.owner.name || book.owner.address}

@@ -2,17 +2,28 @@
 
 import { useRouter } from 'next/navigation';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { useAuthProvider } from '@/lib/auth/AuthContext';
+import type { AuthProvider } from '@/lib/auth/types';
 import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 
 export default function Home() {
   const auth = useAuthClient();
+  const {
+    googleBusy,
+    googleEnabled,
+    googleReady,
+    loginWithProvider,
+    retryGoogleInitialization,
+  } = useAuthProvider();
   const store = useStore();
   const router = useRouter();
   const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
+  const [signingInProvider, setSigningInProvider] = useState<AuthProvider | null>(null);
+  const loginInProgressRef = useRef(false);
 
   const { isAuthenticated, busy } = auth;
 
@@ -35,7 +46,7 @@ export default function Home() {
           return;
         }
 
-        const savedBookId = normalizeBookId(getLastBookId());
+        const savedBookId = normalizeBookId(getLastBookId(store.activeBackend));
         if (savedBookId && books.some(b => b.id === savedBookId)) {
           setMatrixAvailable({ show: true, bookId: savedBookId });
           return;
@@ -58,37 +69,31 @@ export default function Home() {
     };
   }, [isAuthenticated, auth, store]);
 
-  const handleLogin = async () => {
+  const handleLogin = async (provider: AuthProvider) => {
+    if (loginInProgressRef.current) return;
+    loginInProgressRef.current = true;
+    setSigningInProvider(provider);
     try {
-      await auth.login();
-
-      // Wrap the post-login routing decision in its own try/catch. A transient
-      // backend error must not leave the user stuck on the landing page after a
-      // successful login — fall back to /books in that case.
-      // Safe to call store methods here: AuthClient.acquireToken reads its
-      // underlying SDK state fresh, so the post-login token works even before
-      // React has re-rendered with the new auth state.
-      try {
-        const books = await store.listBooks();
-
-        if (books.length === 1) {
-          router.push(`/matrix?bookId=${encodeURIComponent(books[0].id)}`);
-          return;
-        }
-
-        const savedBookId = normalizeBookId(getLastBookId());
-        if (savedBookId && books.some(b => b.id === savedBookId)) {
-          router.push(`/matrix?bookId=${encodeURIComponent(savedBookId)}`);
-          return;
-        }
-      } catch (routingError) {
-        console.error('Error during post-login routing — falling back to /books:', routingError);
-      }
-
+      await loginWithProvider(provider);
       router.push('/books');
     } catch (error) {
       console.error('Login failed:', error);
+    } finally {
+      loginInProgressRef.current = false;
+      setSigningInProvider(null);
     }
+  };
+
+  const handleGoogleAction = async () => {
+    if (!googleReady) {
+      try {
+        await retryGoogleInitialization();
+      } catch (error) {
+        console.error('Failed to load Google sign-in:', error);
+      }
+      return;
+    }
+    await handleLogin('google');
   };
 
   const handleNavigateToBooks = () => {
@@ -116,13 +121,33 @@ export default function Home() {
         </p>
         <div className={styles.actions}>
           {!isAuthenticated ? (
-            <button
-              onClick={handleLogin}
-              disabled={busy}
-              className={`${styles.button} ${styles.buttonPrimary}`}
-            >
-              {busy ? 'Signing in...' : 'Get Started'}
-            </button>
+            <>
+              <p className={styles.providerPrompt}>Choose where Arrange stores your books:</p>
+              <button
+                onClick={() => void handleLogin('microsoft')}
+                disabled={signingInProvider !== null || busy}
+                className={`${styles.button} ${styles.buttonPrimary}`}
+              >
+                {signingInProvider === 'microsoft'
+                  ? 'Signing in...'
+                  : 'Continue with Microsoft'}
+              </button>
+              {googleEnabled && (
+                <button
+                  onClick={() => void handleGoogleAction()}
+                  disabled={signingInProvider !== null || busy || googleBusy}
+                  className={`${styles.button} ${styles.buttonGoogle}`}
+                >
+                  {!googleReady && googleBusy
+                    ? 'Loading Google sign-in...'
+                    : !googleReady
+                      ? 'Retry Google sign-in'
+                    : signingInProvider === 'google'
+                      ? 'Signing in...'
+                      : 'Continue with Google'}
+                </button>
+              )}
+            </>
           ) : (
             <>
               <button

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
-import { normalizeBookId } from '@/lib/store/types';
+import { authProviderForBackend, normalizeBookId, parseBookId } from '@/lib/store/types';
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -25,21 +25,27 @@ export function useBookId(routePrefix: string) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const rawBookId = searchParams.get('bookId');
-  const bookId = normalizeBookId(rawBookId);
-
-  const { isAuthenticated, busy } = useAuthClient();
+  const { isAuthenticated, busy, provider } = useAuthClient();
+  const normalizedBookId = normalizeBookId(rawBookId);
+  const normalizedBackend = normalizedBookId
+    ? parseBookId(normalizedBookId)?.backend
+    : undefined;
+  const bookId = normalizedBackend && authProviderForBackend(normalizedBackend) === provider
+    ? normalizedBookId
+    : null;
   const store = useStore();
 
   const [books, setBooks] = useState<Book[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
+  const fetchSequenceRef = useRef(0);
 
   // Normalize unprefixed URL bookIds to their prefixed form for canonical URLs.
   useEffect(() => {
-    if (rawBookId && bookId && rawBookId !== bookId) {
-      router.replace(`${routePrefix}?bookId=${encodeURIComponent(bookId)}`);
+    if (rawBookId && normalizedBookId && rawBookId !== normalizedBookId) {
+      router.replace(`${routePrefix}?bookId=${encodeURIComponent(normalizedBookId)}`);
     }
-  }, [rawBookId, bookId, router, routePrefix]);
+  }, [rawBookId, normalizedBookId, router, routePrefix]);
 
   // Redirect logic: distinguish missing URL param from invalid URL param.
   // Only fall back to saved-book localStorage when there's no `?bookId` at
@@ -47,33 +53,49 @@ export function useBookId(routePrefix: string) {
   // a different book — that's misleading. Send to /books in that case.
   useEffect(() => {
     if (!rawBookId) {
-      const saved = normalizeBookId(getLastBookId());
-      if (saved) {
+      const saved = normalizeBookId(getLastBookId(store.activeBackend));
+      const savedBackend = saved ? parseBookId(saved)?.backend : undefined;
+      if (saved && savedBackend && authProviderForBackend(savedBackend) === provider) {
         router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
       }
-    } else if (!bookId) {
+    } else if (!normalizedBookId) {
       router.replace('/books');
+    } else {
+      const backend = parseBookId(normalizedBookId)?.backend;
+      if (backend && authProviderForBackend(backend) !== provider) {
+        router.replace('/books');
+      }
     }
-  }, [rawBookId, bookId, router, routePrefix]);
+  }, [
+    rawBookId,
+    normalizedBookId,
+    provider,
+    router,
+    routePrefix,
+    store.activeBackend,
+  ]);
 
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },
   ) => {
+    const fetchSequence = ++fetchSequenceRef.current;
     if (!isAuthenticated || busy) return false;
     setError(null);
     try {
       const all = await store.listBooks(options);
+      if (fetchSequenceRef.current !== fetchSequence) return false;
       setBooks(all);
       setAuthRecoveryRequired(false);
 
       if (bookId && !all.some(b => b.id === bookId)) {
-        clearLastBookId();
+        clearLastBookId(store.activeBackend);
         router.replace('/books');
       } else if (bookId) {
         setLastBookId(bookId);
       }
       return true;
     } catch (err: unknown) {
+      if (fetchSequenceRef.current !== fetchSequence) return false;
       if (
         options.interaction === 'silent-only' &&
         isInteractiveAuthenticationRequiredError(err)

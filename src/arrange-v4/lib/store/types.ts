@@ -8,7 +8,7 @@
  * within the context of a Book.
  */
 
-import type { AcquireTokenOptions } from '@/lib/auth/types';
+import type { AcquireTokenOptions, AuthProvider } from '@/lib/auth/types';
 
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
 
@@ -28,7 +28,7 @@ export function isNonTerminalStatus(status: TodoStatus | undefined): boolean {
   return NON_TERMINAL_STATUSES.includes(status || 'new');
 }
 
-export type BackendKind = 'calendar';
+export type BackendKind = 'calendar' | 'google';
 
 export interface TodoItem {
   subject: string;
@@ -88,6 +88,11 @@ export interface CreateBookOptions {
   backend: BackendKind;
 }
 
+export interface ItemUpdate {
+  itemId: string;
+  updates: Partial<TodoItem>;
+}
+
 export type AuthInteraction = 'allow-interactive' | 'silent-only';
 
 export interface StoreOperationOptions {
@@ -111,7 +116,13 @@ export interface TodoStore {
     updates: Partial<TodoItem>,
     options?: StoreOperationOptions,
   ): Promise<TodoItemWithId>;
+  updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]>;
   deleteItem(bookId: string, itemId: string): Promise<void>;
+  deleteItems(bookId: string, itemIds: string[]): Promise<void>;
 }
 
 /**
@@ -123,6 +134,8 @@ export type AcquireToken = (options?: AcquireTokenOptions) => Promise<string>;
 
 export interface StoreOptions {
   acquireToken: AcquireToken;
+  invalidateToken: () => void;
+  activeBackend: BackendKind;
 }
 
 /* ---- ID prefix helpers ---- */
@@ -130,7 +143,16 @@ export interface StoreOptions {
 const PREFIX_SEPARATOR = ':';
 const BACKEND_PREFIXES: Record<BackendKind, string> = {
   calendar: 'cal',
+  google: 'sheet',
 };
+
+export function backendForAuthProvider(provider: AuthProvider): BackendKind {
+  return provider === 'google' ? 'google' : 'calendar';
+}
+
+export function authProviderForBackend(backend: BackendKind): AuthProvider {
+  return backend === 'google' ? 'google' : 'microsoft';
+}
 
 export function makeBookId(backend: BackendKind, nativeId: string): string {
   return `${BACKEND_PREFIXES[backend]}${PREFIX_SEPARATOR}${nativeId}`;

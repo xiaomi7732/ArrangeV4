@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Arrange V4
 
-## Getting Started
+Arrange is a client-side task manager that stores books in either Microsoft
+Calendar or Google Sheets.
 
-First, run the development server:
+## Getting started
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Google provider setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Google support is enabled when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set and
+`NEXT_PUBLIC_ENABLE_GOOGLE_PROVIDER` is not `false`.
 
-## Learn More
+See [Google Sign-In Setup](GOOGLE_SETUP.md) for complete Google Cloud, local
+testing, GitHub Pages deployment, and troubleshooting instructions.
 
-To learn more about Next.js, take a look at the following resources:
+1. Create a Google Cloud project.
+2. Enable the Google Drive API and Google Sheets API.
+3. Configure an OAuth consent screen.
+4. Create a Web application OAuth client and add the local and deployed origins
+   to **Authorized JavaScript origins**.
+5. Grant the app the `drive.file`, `openid`, `email`, and `profile` scopes.
+   The file-scoped Drive grant also authorizes Sheets API access only to files
+   Arrange creates or the user explicitly opens with Arrange.
+6. Set:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```bash
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=<oauth-client-id>
+   NEXT_PUBLIC_ENABLE_GOOGLE_PROVIDER=true
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+For GitHub Pages, set the repository variable `GOOGLE_CLIENT_ID`. The deployment
+workflow passes it to the static build. `ENABLE_GOOGLE_PROVIDER` is optional and
+defaults to `true`.
 
-## Deploy on Vercel
+Google uses the browser-only OAuth token model. Tokens are kept in
+`sessionStorage` with an in-memory fallback, are never sent to an Arrange
+server, and require an explicit user action to renew after expiration.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Arrange-created spreadsheets use an append-only history keyed by stable item
+IDs. Updates append field-level patches and deletes append terminal tombstones,
+so edits from another tab or collaborator merge without positional row writes.
+Per-field parent revisions make results independent of row sorting and client
+clock differences. Arrange-managed patches leave user-defined columns
+untouched.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Validation
+
+```bash
+npm test
+npm run lint
+npm run build
+```

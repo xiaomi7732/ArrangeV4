@@ -373,13 +373,12 @@ function MatrixPageContent() {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
-                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
                 pendingFetchInteractionRef.current = 'allow-interactive';
                 void fetchEvents({
                   preserveError: replayPreserveError,
-                  interaction: replayInteraction,
+                  interaction: 'silent-only',
                 });
               }
             });
@@ -393,6 +392,7 @@ function MatrixPageContent() {
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (
+        store.activeBackend === 'calendar' &&
         !hasSessionSweepRun() &&
         !isSessionSweepInProgress() &&
         !sweepAttemptedRef.current
@@ -494,11 +494,10 @@ function MatrixPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
-      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
       pendingFetchInteractionRef.current = 'allow-interactive';
-      void fetchEvents({ preserveError, interaction });
+      void fetchEvents({ preserveError, interaction: 'silent-only' });
     }
   };
 
@@ -553,12 +552,10 @@ function MatrixPageContent() {
 
   const persistUpdates = async (updates: Map<string, Partial<TodoItem>>) => {
     if (!bookId) throw new Error('No book selected');
-    const entries = Array.from(updates.entries());
-    const results = await Promise.allSettled(
-      entries.map(([itemId, fields]) => store.updateItem(bookId, itemId, fields)),
+    await store.updateItems(
+      bookId,
+      Array.from(updates, ([itemId, fields]) => ({ itemId, updates: fields })),
     );
-    const failure = results.find(result => result.status === 'rejected');
-    if (failure?.status === 'rejected') throw failure.reason;
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -774,21 +771,15 @@ function MatrixPageContent() {
     updateFilterState();
 
     try {
-      const CONCURRENCY = 5;
-      let idx = 0;
-      const worker = async () => {
-        while (idx < affectedItems.length) {
-          const item = affectedItems[idx++];
-          await store.updateItem(operationBookId, item.id, {
+      await store.updateItems(
+        operationBookId,
+        affectedItems.map(item => ({
+          itemId: item.id,
+          updates: {
             categories: computeNewCategories(item),
-          });
-        }
-      };
-      const results = await Promise.allSettled(
-        Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()),
+          },
+        })),
       );
-      const failure = results.find(result => result.status === 'rejected');
-      if (failure?.status === 'rejected') throw failure.reason;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return;

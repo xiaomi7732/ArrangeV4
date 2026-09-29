@@ -99,6 +99,25 @@
   color: #1d4ed8;
 }
 
+.backendBadge {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.backendMicrosoft {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.backendGoogle {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
 .calendarOwner {
   font-size: 0.875rem;
   color: #4b5563;

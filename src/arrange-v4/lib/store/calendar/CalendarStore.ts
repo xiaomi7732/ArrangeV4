@@ -3,6 +3,7 @@ import { createGraphClient } from '@/lib/graphService';
 import type {
   Book,
   CreateBookOptions,
+  ItemUpdate,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -160,14 +161,17 @@ export class CalendarStore implements TodoStore {
     const client = await this.client();
 
     const status = item.status || 'new';
+    const lifecycleNow = new Date().toISOString();
     const stored: StoredTodoBody = {
       status,
       urgent: item.urgent || false,
       important: item.important || false,
       checklist: item.checklist || [],
       remarks: item.remarks || null,
-      startDateTime: status === 'inProgress' ? new Date().toISOString() : null,
-      finishDateTime: null,
+      startDateTime: item.startDateTime
+        ?? (status === 'inProgress' || status === 'finished' ? lifecycleNow : null),
+      finishDateTime: item.finishDateTime
+        ?? (status === 'finished' ? lifecycleNow : null),
       originalEtsDateTime: null,
       originalEtaDateTime: null,
       matrixOrder: item.matrixOrder,
@@ -221,6 +225,27 @@ export class CalendarStore implements TodoStore {
         itemUpdateQueues.delete(queueKey);
       }
     }
+  }
+
+  async updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]> {
+    const results = await Promise.allSettled(
+      updates.map(update => this.updateItem(
+        bookId,
+        update.itemId,
+        update.updates,
+        options,
+      )),
+    );
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+    return results.map(result => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
   }
 
   private async updateItemCore(
@@ -348,6 +373,25 @@ export class CalendarStore implements TodoStore {
     const calendarId = unwrap(bookId);
     const client = await this.client();
     await client.api(`/me/calendars/${calendarId}/events/${itemId}`).delete();
+  }
+
+  async deleteItems(bookId: string, itemIds: string[]): Promise<void> {
+    let index = 0;
+    let firstError: unknown;
+    const worker = async () => {
+      while (index < itemIds.length) {
+        const itemId = itemIds[index++];
+        try {
+          await this.deleteItem(bookId, itemId);
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(5, itemIds.length) }, () => worker()),
+    );
+    if (firstError) throw firstError;
   }
 
   /* ---- Calendar-specific: not on the TodoStore interface ---- */

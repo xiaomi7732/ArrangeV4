@@ -6,9 +6,9 @@
  * touching consumers.
  */
 
-export type AuthProvider = 'microsoft';
+export type AuthProvider = 'microsoft' | 'google';
 
-export const ALL_AUTH_PROVIDERS: AuthProvider[] = ['microsoft'];
+export const ALL_AUTH_PROVIDERS: AuthProvider[] = ['microsoft', 'google'];
 
 export interface AuthUser {
   /** Human-friendly name for display. Always present (falls back to email if no name is set). */
@@ -25,10 +25,14 @@ export interface AcquireTokenOptions {
 export interface AuthClient {
   /** Which provider this client implements. */
   readonly provider: AuthProvider;
+  /** True when the provider SDK is ready to service user actions. */
+  readonly ready: boolean;
   /** True when a user is signed in. */
   readonly isAuthenticated: boolean;
   /** True when login, logout, or token acquisition is in progress. */
   readonly busy: boolean;
+  /** Retries loading an optional provider SDK after a transient failure. */
+  prepare?(): Promise<void>;
 
   /**
    * Acquires an access token suitable for the corresponding backend's API.
@@ -40,6 +44,8 @@ export interface AuthClient {
    * would be a poor UX.
    */
   acquireToken(options?: AcquireTokenOptions): Promise<string>;
+  /** Discards a cached access token after an API reports it is unusable. */
+  invalidateToken(): void;
 
   /** Starts an interactive sign-in flow. */
   login(): Promise<void>;

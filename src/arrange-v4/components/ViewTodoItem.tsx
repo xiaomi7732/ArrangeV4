@@ -79,21 +79,44 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setError(null);
 
     try {
-      const updatedFields: Partial<TodoItem> = {
-        subject: subject.trim(),
-        urgent,
-        important,
-        status,
-        etsDateTime: etsDateTime ? new Date(etsDateTime).toISOString() : undefined,
-        etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
-        remarks: remarks.trim() ? { type: 'text' as const, content: remarks.trim() } : null,
-        checklist: checklist.length > 0 ? checklist : [],
-        categories: categories.length > 0 ? categories : [],
-      };
+      const updatedFields: Partial<TodoItem> = {};
+      const nextSubject = subject.trim();
+      const nextEts = etsDateTime ? new Date(etsDateTime).toISOString() : undefined;
+      const nextEta = etaDateTime ? new Date(etaDateTime).toISOString() : undefined;
+      const nextRemarks = remarks.trim()
+        ? { type: todo.remarks?.type || 'text', content: remarks.trim() }
+        : null;
+      const nextChecklist = checklist.length > 0 ? checklist : [];
+      const nextCategories = categories.length > 0 ? categories : [];
+      const sameValue = (left: unknown, right: unknown) =>
+        JSON.stringify(left) === JSON.stringify(right);
+
+      if (subject !== todo.subject) updatedFields.subject = nextSubject;
+      if (urgent !== (todo.urgent ?? false)) updatedFields.urgent = urgent;
+      if (important !== (todo.important ?? false)) updatedFields.important = important;
+      if (status !== (todo.status || 'new')) updatedFields.status = status;
+      if (etsDateTime !== formatLocalDateTime(todo.etsDateTime)) {
+        updatedFields.etsDateTime = nextEts;
+      }
+      if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
+        updatedFields.etaDateTime = nextEta;
+      }
+      if (remarks !== (todo.remarks?.content || '')) updatedFields.remarks = nextRemarks;
+      if (!sameValue(nextChecklist, todo.checklist || [])) {
+        updatedFields.checklist = nextChecklist;
+      }
+      if (!sameValue(nextCategories, todo.categories || [])) {
+        updatedFields.categories = nextCategories;
+      }
+
+      if (Object.keys(updatedFields).length === 0) {
+        onClose();
+        return;
+      }
       await onUpdate?.(updatedFields);
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update TODO item');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update TODO item');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { getLastBookId } from '@/lib/bookStorage';
+import { backendForAuthProvider } from '@/lib/store/types';
 import { useTopBarActions } from './TopBarProvider';
 import styles from './HamburgerMenu.module.css';
 
@@ -27,7 +28,9 @@ const BASE_NAV_ITEMS: NavItem[] = [
 
 function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isOnScrum: boolean }) {
   const searchParams = useSearchParams();
-  const bookId = searchParams.get('bookId') || getLastBookId();
+  const auth = useAuthClient();
+  const bookId = searchParams.get('bookId')
+    || getLastBookId(backendForAuthProvider(auth.provider));
   const query = bookId ? `?bookId=${encodeURIComponent(bookId)}` : '';
 
   return (
@@ -54,8 +57,8 @@ function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isO
 
 export default function HamburgerMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const [navItems, setNavItems] = useState<NavItem[]>(BASE_NAV_ITEMS);
   const pathname = usePathname();
+  const router = useRouter();
   const auth = useAuthClient();
   const sidebarRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -66,6 +69,16 @@ export default function HamburgerMenu() {
   const isOnMatrix = pathname.startsWith('/matrix');
   const isOnScrum = pathname.startsWith('/scrum');
   const showViewSwitcher = isOnMatrix || isOnScrum;
+  const navItems = useMemo(() => {
+    void isOpen;
+    const savedBookId = getLastBookId(backendForAuthProvider(auth.provider));
+    if (!savedBookId) return BASE_NAV_ITEMS;
+    return BASE_NAV_ITEMS.map(item =>
+      item.matchPrefix
+        ? { ...item, href: `${item.href}?bookId=${encodeURIComponent(savedBookId)}` }
+        : item,
+    );
+  }, [isOpen, auth.provider]);
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {
@@ -82,21 +95,11 @@ export default function HamburgerMenu() {
     setIsOpen(false);
     try {
       await auth.logout();
+      router.push('/');
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
-
-  useEffect(() => {
-    const savedBookId = getLastBookId();
-    if (savedBookId) {
-      setNavItems(BASE_NAV_ITEMS.map(item =>
-        item.matchPrefix ? { ...item, href: `${item.href}?bookId=${encodeURIComponent(savedBookId)}` } : item
-      ));
-    } else {
-      setNavItems(BASE_NAV_ITEMS);
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {

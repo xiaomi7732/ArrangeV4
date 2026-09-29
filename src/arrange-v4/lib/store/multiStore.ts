@@ -1,6 +1,7 @@
 import type {
   Book,
   CreateBookOptions,
+  ItemUpdate,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -10,6 +11,7 @@ import type {
 } from './types';
 import { parseBookId } from './types';
 import { CalendarStore } from './calendar/CalendarStore';
+import { GoogleSheetsStore } from './sheets/GoogleSheetsStore';
 
 /**
  * Routes every call to the right backend implementation based on the
@@ -19,9 +21,13 @@ import { CalendarStore } from './calendar/CalendarStore';
  */
 export class MultiBackendStore implements TodoStore {
   private readonly calendarStore: CalendarStore;
+  private readonly googleSheetsStore: GoogleSheetsStore;
+  readonly activeBackend: StoreOptions['activeBackend'];
 
   constructor(opts: StoreOptions) {
     this.calendarStore = new CalendarStore(opts);
+    this.googleSheetsStore = new GoogleSheetsStore(opts);
+    this.activeBackend = opts.activeBackend;
   }
 
   /** Direct access to the calendar-specific store for backend-specific methods (e.g. sweep). */
@@ -30,8 +36,7 @@ export class MultiBackendStore implements TodoStore {
   }
 
   async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
-    // Only one backend today; future versions would merge results from each.
-    return this.calendarStore.listBooks(options);
+    return this.routeByBackend(this.activeBackend).listBooks(options);
   }
 
   createBook(name: string, opts: CreateBookOptions): Promise<Book> {
@@ -63,6 +68,18 @@ export class MultiBackendStore implements TodoStore {
     return this.routeByBookId(bookId).deleteItem(bookId, itemId);
   }
 
+  deleteItems(bookId: string, itemIds: string[]): Promise<void> {
+    return this.routeByBookId(bookId).deleteItems(bookId, itemIds);
+  }
+
+  updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]> {
+    return this.routeByBookId(bookId).updateItems(bookId, updates, options);
+  }
+
   private routeByBookId(bookId: string): TodoStore {
     const parsed = parseBookId(bookId);
     if (!parsed) {
@@ -72,9 +89,16 @@ export class MultiBackendStore implements TodoStore {
   }
 
   private routeByBackend(backend: string): TodoStore {
+    if (backend !== this.activeBackend) {
+      throw new Error(
+        `Cannot use the "${backend}" backend while "${this.activeBackend}" is active.`,
+      );
+    }
     switch (backend) {
       case 'calendar':
         return this.calendarStore;
+      case 'google':
+        return this.googleSheetsStore;
       default:
         throw new Error(`Unsupported backend "${backend}".`);
     }
