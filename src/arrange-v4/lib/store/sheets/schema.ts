@@ -22,6 +22,7 @@ export const TODO_HEADERS = [
   'updatedAt',
   'matrixOrder',
   'scrumOrder',
+  'deleted',
 ] as const;
 
 export interface SheetTodoRecord {
@@ -30,6 +31,7 @@ export interface SheetTodoRecord {
   createdAt: string;
   updatedAt: string;
   rawValues: unknown[];
+  deleted: boolean;
 }
 
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
@@ -100,16 +102,18 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   if (values.length < 2) return [];
   const headers = normalizeHeaders(values[0]);
 
-  return values.slice(1).flatMap((row, index) => {
+  const latestById = new Map<string, SheetTodoRecord>();
+  values.slice(1).forEach((row, index) => {
     const id = optionalString(cellByHeader(headers, row, 'id'));
     const subject = optionalString(cellByHeader(headers, row, 'subject'));
-    if (!id || !subject) return [];
+    if (!id) return;
 
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
+    const deleted = booleanCell(cellByHeader(headers, row, 'deleted'));
     const item: TodoItemWithId = {
       id,
-      subject,
+      subject: subject || '',
       etsDateTime: optionalString(cellByHeader(headers, row, 'etsDateTime')),
       etaDateTime: optionalString(cellByHeader(headers, row, 'etaDateTime')),
       status: statusCell(cellByHeader(headers, row, 'status')),
@@ -125,8 +129,17 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       matrixOrder: numberCell(cellByHeader(headers, row, 'matrixOrder')),
       scrumOrder: numberCell(cellByHeader(headers, row, 'scrumOrder')),
     };
-    return [{ item, rowNumber: index + 2, createdAt, updatedAt, rawValues: row }];
+    latestById.set(id, {
+      item,
+      rowNumber: index + 2,
+      createdAt,
+      updatedAt,
+      rawValues: row,
+      deleted,
+    });
   });
+
+  return [...latestById.values()].filter(record => !record.deleted && !!record.item.subject);
 }
 
 function jsonCell(value: unknown[] | TodoItem['remarks']): string {
@@ -141,6 +154,7 @@ export function serializeSheetRow(
   createdAt: string,
   updatedAt: string,
   existingValues?: unknown[],
+  deleted = false,
 ): unknown[] {
   const cells: Record<string, unknown> = {
     id: item.id,
@@ -161,6 +175,7 @@ export function serializeSheetRow(
     updatedAt,
     matrixOrder: item.matrixOrder ?? '',
     scrumOrder: item.scrumOrder ?? '',
+    deleted,
   };
   return headers.map((header, index) => (
     Object.prototype.hasOwnProperty.call(cells, header)

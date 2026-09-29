@@ -31,6 +31,8 @@ export interface AuthClient {
   readonly isAuthenticated: boolean;
   /** True when login, logout, or token acquisition is in progress. */
   readonly busy: boolean;
+  /** Retries loading an optional provider SDK after a transient failure. */
+  prepare?(): Promise<void>;
 
   /**
    * Acquires an access token suitable for the corresponding backend's API.

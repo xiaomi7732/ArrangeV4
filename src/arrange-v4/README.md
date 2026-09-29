@@ -36,8 +36,13 @@ workflow passes it to the static build. `ENABLE_GOOGLE_PROVIDER` is optional and
 defaults to `true`.
 
 Google uses the browser-only OAuth token model. Tokens are kept in
-`sessionStorage`, are never sent to an Arrange server, and require an explicit
-user action to renew after expiration.
+`sessionStorage` with an in-memory fallback, are never sent to an Arrange
+server, and require an explicit user action to renew after expiration.
+
+Arrange-created spreadsheets use an append-only history keyed by stable item
+IDs. Updates append a newer version and deletes append a tombstone, so edits
+from another tab or collaborator cannot shift a row and cause Arrange to
+overwrite or delete a different task.
 
 ## Validation
 

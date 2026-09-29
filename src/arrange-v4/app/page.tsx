@@ -14,9 +14,11 @@ export default function Home() {
   const auth = useAuthClient();
   const {
     activeProvider,
+    googleBusy,
     googleEnabled,
     googleReady,
     loginWithProvider,
+    retryGoogleInitialization,
   } = useAuthProvider();
   const store = useStore();
   const router = useRouter();
@@ -75,6 +77,18 @@ export default function Home() {
     }
   };
 
+  const handleGoogleAction = async () => {
+    if (!googleReady) {
+      try {
+        await retryGoogleInitialization();
+      } catch (error) {
+        console.error('Failed to load Google sign-in:', error);
+      }
+      return;
+    }
+    await handleLogin('google');
+  };
+
   const handleNavigateToBooks = () => {
     router.push('/books');
   };
@@ -113,12 +127,14 @@ export default function Home() {
               </button>
               {googleEnabled && (
                 <button
-                  onClick={() => void handleLogin('google')}
-                  disabled={!googleReady || (activeProvider === 'google' && busy)}
+                  onClick={() => void handleGoogleAction()}
+                  disabled={googleBusy}
                   className={`${styles.button} ${styles.buttonGoogle}`}
                 >
-                  {!googleReady
+                  {!googleReady && googleBusy
                     ? 'Loading Google sign-in...'
+                    : !googleReady
+                      ? 'Retry Google sign-in'
                     : activeProvider === 'google' && busy
                       ? 'Signing in...'
                       : 'Continue with Google'}

@@ -65,11 +65,71 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, legacyRow]);
 
-    assert.equal(headers.at(-2), 'matrixOrder');
-    assert.equal(headers.at(-1), 'scrumOrder');
+    assert.equal(headers.at(-3), 'matrixOrder');
+    assert.equal(headers.at(-2), 'scrumOrder');
+    assert.equal(headers.at(-1), 'deleted');
     assert.equal(record.item.id, 'legacy-id');
     assert.equal(record.item.important, true);
     assert.equal(record.item.matrixOrder, undefined);
     assert.equal(record.item.scrumOrder, undefined);
+  });
+
+  it('uses the latest appended version and hides tombstoned items', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const original = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+    );
+    const updated = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Updated' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+    );
+    const tombstone = serializeSheetRow(
+      headers,
+      { id: 'todo-2', subject: 'Deleted' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      undefined,
+      true,
+    );
+    const deletedOriginal = serializeSheetRow(
+      headers,
+      { id: 'todo-2', subject: 'Deleted' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    const records = parseSheetRows([
+      headers,
+      original,
+      deletedOriginal,
+      updated,
+      tombstone,
+    ]);
+
+    assert.deepEqual(records.map(record => record.item), [
+      {
+        id: 'todo-1',
+        subject: 'Updated',
+        etsDateTime: undefined,
+        etaDateTime: undefined,
+        status: 'new',
+        urgent: false,
+        important: false,
+        categories: undefined,
+        checklist: undefined,
+        remarks: null,
+        startDateTime: null,
+        finishDateTime: null,
+        originalEtsDateTime: null,
+        originalEtaDateTime: null,
+        matrixOrder: undefined,
+        scrumOrder: undefined,
+      },
+    ]);
   });
 });

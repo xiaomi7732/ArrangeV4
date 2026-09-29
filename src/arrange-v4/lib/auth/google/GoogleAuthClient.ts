@@ -81,6 +81,7 @@ function loadGoogleIdentityServices(): Promise<void> {
     }
   }).catch(error => {
     gisScriptPromise = null;
+    document.getElementById(GIS_SCRIPT_ID)?.remove();
     throw error;
   });
 
@@ -173,6 +174,17 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   const [ready, setReady] = useState(false);
   const [initializationFailed, setInitializationFailed] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(readCachedUser);
+
+  const prepare = useCallback(async (): Promise<void> => {
+    setInitializationFailed(false);
+    try {
+      await loadGoogleIdentityServices();
+      setReady(true);
+    } catch (error) {
+      setInitializationFailed(true);
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     if (!enabled || !clientId) return;
@@ -285,6 +297,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     ready,
     isAuthenticated: !!user,
     busy: busy || (!ready && !initializationFailed),
+    prepare,
     acquireToken,
     invalidateToken,
     login,
@@ -295,6 +308,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     ready,
     busy,
     initializationFailed,
+    prepare,
     acquireToken,
     invalidateToken,
     login,

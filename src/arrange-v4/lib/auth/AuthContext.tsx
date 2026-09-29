@@ -21,7 +21,9 @@ interface AuthContextValue {
   activeProvider: AuthProvider;
   googleEnabled: boolean;
   googleReady: boolean;
+  googleBusy: boolean;
   loginWithProvider(provider: AuthProvider): Promise<void>;
+  retryGoogleInitialization(): Promise<void>;
   selectProvider(provider: AuthProvider): void;
 }
 
@@ -90,20 +92,28 @@ export function ActiveAuthProvider({ children }: { children: ReactNode }) {
     await (provider === 'google' ? google : microsoft).login();
   }, [google, microsoft, selectProvider]);
 
+  const retryGoogleInitialization = useCallback(async () => {
+    await google.prepare?.();
+  }, [google]);
+
   const client = activeProvider === 'google' ? google : microsoft;
   const value = useMemo<AuthContextValue>(() => ({
     client,
     activeProvider,
     googleEnabled,
     googleReady: google.ready,
+    googleBusy: google.busy,
     loginWithProvider,
+    retryGoogleInitialization,
     selectProvider,
   }), [
     client,
     activeProvider,
     googleEnabled,
     google.ready,
+    google.busy,
     loginWithProvider,
+    retryGoogleInitialization,
     selectProvider,
   ]);
 

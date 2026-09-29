@@ -142,7 +142,7 @@ describe('GoogleSheetsStore', () => {
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), existingRow] }),
       request => {
-        assert.equal(request.init.method, 'PUT');
+        assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values[0][TODO_HEADERS.indexOf('subject')], 'Existing subject');
         assert.equal(body.values[0][TODO_HEADERS.indexOf('urgent')], true);
@@ -165,7 +165,7 @@ describe('GoogleSheetsStore', () => {
     const headers = [...TODO_HEADERS, 'customNotes'];
     const row = [
       'todo-1', 'Existing subject', '', '', 'new', false, false,
-      '', '', '', '', '', '', '', '', '', '', '', 'keep this',
+      '', '', '', '', '', '', '', '', '', '', '', false, 'keep this',
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
@@ -228,6 +228,8 @@ describe('GoogleSheetsStore', () => {
         toDate: '2026-02-01T00:00:00.000Z',
       });
       assert.deepEqual(items.map(item => item.id), ['todo-1']);
+      assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
+      assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
     } finally {
       mock.restore();
     }
@@ -265,7 +267,7 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
-  it('deletes the matching sheet row with a structural batch update', async () => {
+  it('deletes an item by appending a stable-ID tombstone', async () => {
     const row = [
       'todo-1',
       'Delete me',
@@ -288,25 +290,12 @@ describe('GoogleSheetsStore', () => {
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), row] }),
-      () => jsonResponse({
-        sheets: [{ properties: { sheetId: 9, title: 'TODOs' } }],
-      }),
       request => {
         assert.equal(request.init.method, 'POST');
-        const body = JSON.parse(String(request.init.body)) as {
-          requests: Array<{
-            deleteDimension: {
-              range: { sheetId: number; startIndex: number; endIndex: number };
-            };
-          }>;
-        };
-        assert.deepEqual(body.requests[0].deleteDimension.range, {
-          sheetId: 9,
-          dimension: 'ROWS',
-          startIndex: 1,
-          endIndex: 2,
-        });
-        return jsonResponse({});
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('id')], 'todo-1');
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('deleted')], true);
+        return jsonResponse({ updates: { updatedRows: 1 } });
       },
     ]);
     try {
@@ -341,7 +330,7 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
-  it('serializes row-deleting mutations within one spreadsheet', async () => {
+  it('serializes tombstone mutations within one spreadsheet', async () => {
     const firstRow = [
       'todo-1', 'First', '', '', 'cancelled', false, false,
       '', '', '', '', '', '', '', '', '', '', '',
@@ -350,30 +339,26 @@ describe('GoogleSheetsStore', () => {
       'todo-2', 'Second', '', '', 'cancelled', false, false,
       '', '', '', '', '', '', '', '', '', '', '',
     ];
-    let releaseFirstDelete!: () => void;
-    const firstDeleteStarted = new Promise<void>(resolve => {
-      releaseFirstDelete = resolve;
+    let releaseFirstTombstone!: () => void;
+    const firstTombstoneStarted = new Promise<void>(resolve => {
+      releaseFirstTombstone = resolve;
     });
-    let finishFirstDelete!: (response: Response) => void;
-    const firstDeleteResponse = new Promise<Response>(resolve => {
-      finishFirstDelete = resolve;
+    let finishFirstTombstone!: (response: Response) => void;
+    const firstTombstoneResponse = new Promise<Response>(resolve => {
+      finishFirstTombstone = resolve;
     });
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), firstRow, secondRow] }),
-      () => jsonResponse({
-        sheets: [{ properties: { sheetId: 9, title: 'TODOs' } }],
-      }),
       () => {
-        releaseFirstDelete();
-        return firstDeleteResponse;
+        releaseFirstTombstone();
+        return firstTombstoneResponse;
       },
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), secondRow] }),
       request => {
-        const body = JSON.parse(String(request.init.body)) as {
-          requests: Array<{ deleteDimension: { range: { startIndex: number } } }>;
-        };
-        assert.equal(body.requests[0].deleteDimension.range.startIndex, 1);
-        return jsonResponse({});
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('id')], 'todo-2');
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('deleted')], true);
+        return jsonResponse({ updates: { updatedRows: 1 } });
       },
     ]);
     try {
@@ -381,11 +366,11 @@ describe('GoogleSheetsStore', () => {
       const firstDelete = store.deleteItem('sheet:sheet-queue', 'todo-1');
       const secondDelete = store.deleteItem('sheet:sheet-queue', 'todo-2');
 
-      await firstDeleteStarted;
-      assert.equal(mock.requests.length, 3);
-      finishFirstDelete(jsonResponse({}));
+      await firstTombstoneStarted;
+      assert.equal(mock.requests.length, 2);
+      finishFirstTombstone(jsonResponse({ updates: { updatedRows: 1 } }));
       await Promise.all([firstDelete, secondDelete]);
-      assert.equal(mock.requests.length, 5);
+      assert.equal(mock.requests.length, 4);
     } finally {
       mock.restore();
     }
