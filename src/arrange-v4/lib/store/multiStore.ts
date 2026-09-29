@@ -1,6 +1,7 @@
 import type {
   Book,
   CreateBookOptions,
+  ItemUpdate,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -65,6 +66,14 @@ export class MultiBackendStore implements TodoStore {
 
   deleteItem(bookId: string, itemId: string): Promise<void> {
     return this.routeByBookId(bookId).deleteItem(bookId, itemId);
+  }
+
+  updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]> {
+    return this.routeByBookId(bookId).updateItems(bookId, updates, options);
   }
 
   private routeByBookId(bookId: string): TodoStore {

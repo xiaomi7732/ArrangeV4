@@ -552,12 +552,10 @@ function MatrixPageContent() {
 
   const persistUpdates = async (updates: Map<string, Partial<TodoItem>>) => {
     if (!bookId) throw new Error('No book selected');
-    const entries = Array.from(updates.entries());
-    const results = await Promise.allSettled(
-      entries.map(([itemId, fields]) => store.updateItem(bookId, itemId, fields)),
+    await store.updateItems(
+      bookId,
+      Array.from(updates, ([itemId, fields]) => ({ itemId, updates: fields })),
     );
-    const failure = results.find(result => result.status === 'rejected');
-    if (failure?.status === 'rejected') throw failure.reason;
   };
 
   const handleDragStart = (event: DragStartEvent) => {

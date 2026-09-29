@@ -1,6 +1,7 @@
 import type {
   Book,
   CreateBookOptions,
+  ItemUpdate,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -340,69 +341,46 @@ export class GoogleSheetsStore implements TodoStore {
     updates: Partial<TodoItem>,
     options?: StoreOperationOptions,
   ): Promise<TodoItemWithId> {
+    const [updated] = await this.updateItems(
+      bookId,
+      [{ itemId, updates }],
+      options,
+    );
+    return updated;
+  }
+
+  async updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]> {
+    if (updates.length === 0) return [];
     const spreadsheetId = nativeSheetId(bookId);
     return this.enqueueMutation(spreadsheetId, async () => {
       const token = await this.tokenAcquisition.getToken(options);
       const loaded = await this.loadSheet(spreadsheetId, options, token, true);
-      const existing = loaded.records.find(record => record.item.id === itemId);
-      if (!existing) throw new Error(`TODO item "${itemId}" no longer exists.`);
       const updatedAt = new Date().toISOString();
-      const updated: TodoItemWithId = { ...existing.item, ...updates, id: itemId };
-      const changedFields = new Set<keyof TodoItem>(
-        Object.keys(updates) as (keyof TodoItem)[],
-      );
-      if (updates.status !== undefined) {
-        if (
-          updates.status === 'inProgress'
-          && !existing.item.startDateTime
-          && updates.startDateTime === undefined
-        ) {
-          updated.startDateTime = updatedAt;
-          changedFields.add('startDateTime');
+      const prepared = updates.map(update => {
+        const existing = loaded.records.find(
+          record => record.item.id === update.itemId,
+        );
+        if (!existing) {
+          throw new Error(`TODO item "${update.itemId}" no longer exists.`);
         }
-        if (updates.status === 'new' && updates.startDateTime === undefined) {
-          updated.startDateTime = null;
-        }
-        if (updates.status === 'finished') {
-          if (!existing.item.startDateTime && updates.startDateTime === undefined) {
-            updated.startDateTime = updatedAt;
-            changedFields.add('startDateTime');
-          }
-          if (!existing.item.finishDateTime && updates.finishDateTime === undefined) {
-            updated.finishDateTime = updatedAt;
-            changedFields.add('finishDateTime');
-          }
-        }
-        if (
-          updates.status !== 'finished'
-          && updates.finishDateTime === undefined
-        ) {
-          updated.finishDateTime = null;
-        }
-        changedFields.add('startDateTime');
-        changedFields.add('finishDateTime');
-      }
+        return this.prepareItemUpdate(
+          loaded.headers,
+          existing,
+          update.updates,
+          updatedAt,
+        );
+      });
       await this.appendValues(
         spreadsheetId,
-        [serializeSheetRow(
-          loaded.headers,
-          updated,
-          existing.createdAt || updatedAt,
-          updatedAt,
-          {
-            changedFields: [...changedFields],
-            parentOperations: Object.fromEntries(
-              [...changedFields].flatMap(field => {
-                const operationId = existing.fieldOperations[field];
-                return operationId ? [[field, operationId]] : [];
-              }),
-            ),
-          },
-        )],
+        prepared.map(item => item.row),
         options,
         token,
       );
-      return updated;
+      return prepared.map(item => item.updated);
     });
   }
 
@@ -495,6 +473,63 @@ export class GoogleSheetsStore implements TodoStore {
       options,
       accessToken,
     );
+  }
+
+  private prepareItemUpdate(
+    headers: string[],
+    existing: SheetTodoRecord,
+    updates: Partial<TodoItem>,
+    updatedAt: string,
+  ): { updated: TodoItemWithId; row: unknown[] } {
+    const updated: TodoItemWithId = {
+      ...existing.item,
+      ...updates,
+      id: existing.item.id,
+    };
+    const changedFields = new Set<keyof TodoItem>(
+      Object.keys(updates) as (keyof TodoItem)[],
+    );
+    if (updates.status !== undefined) {
+      if (
+        updates.status === 'inProgress'
+        && !existing.item.startDateTime
+        && updates.startDateTime === undefined
+      ) {
+        updated.startDateTime = updatedAt;
+      }
+      if (updates.status === 'new' && updates.startDateTime === undefined) {
+        updated.startDateTime = null;
+      }
+      if (updates.status === 'finished') {
+        if (!existing.item.startDateTime && updates.startDateTime === undefined) {
+          updated.startDateTime = updatedAt;
+        }
+        if (!existing.item.finishDateTime && updates.finishDateTime === undefined) {
+          updated.finishDateTime = updatedAt;
+        }
+      }
+      if (updates.status !== 'finished' && updates.finishDateTime === undefined) {
+        updated.finishDateTime = null;
+      }
+      changedFields.add('startDateTime');
+      changedFields.add('finishDateTime');
+    }
+    const row = serializeSheetRow(
+      headers,
+      updated,
+      existing.createdAt || updatedAt,
+      updatedAt,
+      {
+        changedFields: [...changedFields],
+        parentOperations: Object.fromEntries(
+          [...changedFields].flatMap(field => {
+            const operationId = existing.fieldOperations[field];
+            return operationId ? [[field, operationId]] : [];
+          }),
+        ),
+      },
+    );
+    return { updated, row };
   }
 
   private async cleanupPendingSpreadsheets(

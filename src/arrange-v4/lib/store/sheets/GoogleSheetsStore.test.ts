@@ -216,6 +216,38 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
+  it('persists bulk reorder patches with one read and one append', async () => {
+    const first = [
+      'todo-1', 'First', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 1, 1,
+    ];
+    const second = [
+      'todo-2', 'Second', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 2, 2,
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS), first, second] }),
+      request => {
+        assert.equal(request.init.method, 'POST');
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values.length, 2);
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('matrixOrder')], 2);
+        assert.equal(body.values[1][TODO_HEADERS.indexOf('matrixOrder')], 1);
+        return jsonResponse({ updates: { updatedRows: 2 } });
+      },
+    ]);
+    try {
+      const updated = await createStore().updateItems('sheet:sheet-1', [
+        { itemId: 'todo-1', updates: { matrixOrder: 2 } },
+        { itemId: 'todo-2', updates: { matrixOrder: 1 } },
+      ]);
+      assert.deepEqual(updated.map(item => item.matrixOrder), [2, 1]);
+      assert.equal(mock.requests.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('filters windowed item queries by event overlap', async () => {
     const inWindow = [
       'todo-1', 'In range', '2026-01-15T10:00:00.000Z', '2026-01-15T11:00:00.000Z',

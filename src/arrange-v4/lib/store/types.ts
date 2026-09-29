@@ -88,6 +88,11 @@ export interface CreateBookOptions {
   backend: BackendKind;
 }
 
+export interface ItemUpdate {
+  itemId: string;
+  updates: Partial<TodoItem>;
+}
+
 export type AuthInteraction = 'allow-interactive' | 'silent-only';
 
 export interface StoreOperationOptions {
@@ -111,6 +116,11 @@ export interface TodoStore {
     updates: Partial<TodoItem>,
     options?: StoreOperationOptions,
   ): Promise<TodoItemWithId>;
+  updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]>;
   deleteItem(bookId: string, itemId: string): Promise<void>;
 }
 

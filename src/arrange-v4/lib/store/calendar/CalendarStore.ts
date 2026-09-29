@@ -3,6 +3,7 @@ import { createGraphClient } from '@/lib/graphService';
 import type {
   Book,
   CreateBookOptions,
+  ItemUpdate,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -224,6 +225,21 @@ export class CalendarStore implements TodoStore {
         itemUpdateQueues.delete(queueKey);
       }
     }
+  }
+
+  async updateItems(
+    bookId: string,
+    updates: ItemUpdate[],
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId[]> {
+    return Promise.all(
+      updates.map(update => this.updateItem(
+        bookId,
+        update.itemId,
+        update.updates,
+        options,
+      )),
+    );
   }
 
   private async updateItemCore(
