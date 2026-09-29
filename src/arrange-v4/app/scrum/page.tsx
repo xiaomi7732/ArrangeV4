@@ -409,7 +409,13 @@ function ScrumPageContent() {
       </button>
     ) : requiresAuthRecovery ? null : (
       <>
-        <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
+        <AddTodoItem
+          onAddTodo={handleAddTodo}
+          disabled={loading}
+          defaultUrgent
+          defaultImportant
+          availableCategories={allCategories}
+        />
         <button
           onClick={() => void fetchEvents()}
           disabled={loading || isSavingOrder}
