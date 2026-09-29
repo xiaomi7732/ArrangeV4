@@ -30,6 +30,7 @@ export const TODO_HEADERS = [
   'scrumOrder',
   TODO_METADATA_HEADER,
 ] as const;
+const TODO_CORE_HEADERS = TODO_HEADERS.slice(0, 16);
 
 export interface SheetTodoRecord {
   item: TodoItemWithId;
@@ -73,8 +74,24 @@ interface SheetMetadata {
   parentOperations?: Partial<Record<keyof TodoItem, string>>;
 }
 
+function managedHeaderIndex(headers: string[], header: string): number {
+  if (isManagedExtensionHeader(header)) return headers.lastIndexOf(header);
+  const coreOffset = TODO_CORE_HEADERS.indexOf(
+    header as typeof TODO_CORE_HEADERS[number],
+  );
+  if (coreOffset >= 0) {
+    const blockStart = headers.findIndex((_, start) => (
+      TODO_CORE_HEADERS.every(
+        (coreHeader, offset) => headers[start + offset] === coreHeader,
+      )
+    ));
+    if (blockStart >= 0) return blockStart + coreOffset;
+  }
+  return headers.indexOf(header);
+}
+
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
-  const index = headers.indexOf(header);
+  const index = managedHeaderIndex(headers, header);
   return index >= 0 ? row[index] : undefined;
 }
 
@@ -86,7 +103,7 @@ function cellByLastHeader(headers: string[], row: unknown[], header: string): un
 function managedMetadataCell(
   headers: string[],
   row: unknown[],
-  treatEarlierValuesAsManaged: boolean,
+  preserveEarlierCustomValue: boolean,
 ): unknown {
   const indices = headers.flatMap((header, index) => (
     header === TODO_METADATA_HEADER ? [index] : []
@@ -101,9 +118,9 @@ function managedMetadataCell(
     .reverse()
     .map(index => row[index])
     .find(value => (
-      treatEarlierValuesAsManaged
-      || metadataCell(value) !== null
-      || looksLikeArrangeMetadata(value)
+      preserveEarlierCustomValue
+        ? metadataCell(value) !== null || looksLikeArrangeMetadata(value)
+        : value !== undefined && value !== null && value !== ''
     ));
 }
 
@@ -223,12 +240,15 @@ function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata 
       (header, index) => headers[metadataIndex - requiredHeaders.length + index] !== header,
     )
   ) return null;
-  const operationId = optionalString(cellByHeader(headers, row, 'operationId'));
+  const previousValues = requiredHeaders.map(
+    (_, index) => row[metadataIndex - requiredHeaders.length + index],
+  );
+  const operationId = optionalString(previousValues[2]);
   if (!operationId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {
     return null;
   }
 
-  const deletedValue = cellByHeader(headers, row, 'deleted');
+  const deletedValue = previousValues[0];
   const deletedText = String(deletedValue ?? '').toLowerCase();
   if (deletedValue !== '' && deletedValue !== undefined && deletedValue !== null
     && deletedValue !== true && deletedValue !== false
@@ -236,7 +256,7 @@ function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata 
     return null;
   }
 
-  const changedFieldsValue = cellByHeader(headers, row, 'changedFields');
+  const changedFieldsValue = previousValues[1];
   const changedFields = changedFieldsValue
     ? jsonArrayCell(changedFieldsValue)
     : undefined;
@@ -250,7 +270,7 @@ function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata 
   ) return null;
 
   let parentOperations: Partial<Record<keyof TodoItem, string>> | undefined;
-  const parentValue = cellByHeader(headers, row, 'parentOperations');
+  const parentValue = previousValues[3];
   if (parentValue) {
     try {
       const parsed = JSON.parse(String(parentValue)) as Record<string, unknown>;
@@ -360,14 +380,26 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   const metadataIndices = headers.flatMap((header, index) => (
     header === TODO_METADATA_HEADER ? [index] : []
   ));
-  const versionedIds = new Set(values.slice(1).flatMap(row => {
+  const versionedIds = new Set<string>();
+  const legacyParentIds = new Set<string>();
+  for (const row of values.slice(1)) {
     const id = optionalString(cellByHeader(headers, row, 'id'));
-    return id && metadataIndices.some(index => (
-      metadataCell(row[index]) !== null || looksLikeArrangeMetadata(row[index])
-    ))
-      ? [id]
-      : [];
-  }));
+    if (!id) continue;
+    for (const index of metadataIndices) {
+      const metadata = metadataCell(row[index]);
+      if (!metadata && !looksLikeArrangeMetadata(row[index])) continue;
+      versionedIds.add(id);
+      if (
+        metadata
+        && Object.values(metadata.parentOperations || {}).some(
+          operation => operation === `legacy:${id}`
+            || operation.startsWith(`legacy:${id}:`),
+        )
+      ) {
+        legacyParentIds.add(id);
+      }
+    }
+  }
 
   const versionsById = new Map<string, SheetTodoVersion[]>();
   values.slice(1).forEach((row, index) => {
@@ -377,7 +409,11 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
 
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
-    const rawMetadata = managedMetadataCell(headers, row, versionedIds.has(id));
+    const rawMetadata = managedMetadataCell(
+      headers,
+      row,
+      !versionedIds.has(id) || legacyParentIds.has(id),
+    );
     const hasRawMetadata = rawMetadata !== undefined
       && rawMetadata !== null
       && rawMetadata !== '';
@@ -557,12 +593,12 @@ export function serializeSheetRow(
     ? new Set<string>(options.changedFields)
     : null;
   const managedHeaderIndices = new Map(
-    TODO_MANAGED_EXTENSION_HEADERS.map(header => [header, headers.lastIndexOf(header)]),
+    TODO_HEADERS.map(header => [header, managedHeaderIndex(headers, header)]),
   );
   return headers.map((header, index) => {
     if (
-      isManagedExtensionHeader(header)
-      && index !== managedHeaderIndices.get(header)
+      (TODO_HEADERS as readonly string[]).includes(header)
+      && index !== managedHeaderIndices.get(header as typeof TODO_HEADERS[number])
     ) return '';
     if (changedFields && (TODO_FIELD_NAMES as readonly string[]).includes(header)) {
       return changedFields.has(header) ? cells[header] : '';

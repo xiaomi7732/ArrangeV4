@@ -194,6 +194,50 @@ describe('Google Sheets TODO schema', () => {
     );
   });
 
+  it('updates a legacy row without consuming its custom metadata value', () => {
+    const legacy = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 'user formula result',
+    ];
+    const headers = normalizeHeaders(
+      [...TODO_HEADERS.slice(0, 16), TODO_METADATA_HEADER],
+      [legacy],
+    );
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'legacy-id', subject: 'Updated item' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'updated',
+        parentOperations: { subject: 'legacy:legacy-id' },
+      },
+    );
+
+    const [record] = parseSheetRows([headers, legacy, patch]);
+
+    assert.equal(record.item.subject, 'Updated item');
+  });
+
+  it('uses only canonical core columns when reserved headers are duplicated', () => {
+    const headers = ['id', ...TODO_HEADERS, 'subject'];
+    const row = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Canonical subject' },
+      '',
+      '',
+    );
+    row[0] = 'custom-id';
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.equal(row[1], 'todo-1');
+    assert.equal(row.at(-1), '');
+    assert.equal(record.item.id, 'todo-1');
+    assert.equal(record.item.subject, 'Canonical subject');
+  });
+
   it('uses the latest appended version and hides tombstoned items', () => {
     const headers = Array.from(TODO_HEADERS);
     const original = serializeSheetRow(
@@ -562,6 +606,7 @@ describe('Google Sheets TODO schema', () => {
     const deleteOperation = '10000000-0000-4000-8000-000000000003';
     const headers = [
       ...TODO_HEADERS.slice(0, 18),
+      'operationId',
       'deleted',
       'changedFields',
       'operationId',
@@ -572,13 +617,15 @@ describe('Google Sheets TODO schema', () => {
     base[headers.indexOf('id')] = 'todo-1';
     base[headers.indexOf('subject')] = 'Original';
     base[headers.indexOf('status')] = 'new';
-    base[headers.indexOf('operationId')] = baseOperation;
+    base[headers.indexOf('operationId')] = 'custom base value';
+    base[headers.lastIndexOf('operationId')] = baseOperation;
 
     const patch = makeRow();
     patch[headers.indexOf('id')] = 'todo-1';
     patch[headers.indexOf('urgent')] = true;
     patch[headers.indexOf('changedFields')] = '["urgent"]';
-    patch[headers.indexOf('operationId')] = patchOperation;
+    patch[headers.indexOf('operationId')] = 'custom patch value';
+    patch[headers.lastIndexOf('operationId')] = patchOperation;
     patch[headers.indexOf('parentOperations')] = JSON.stringify({
       urgent: baseOperation,
     });
@@ -587,7 +634,8 @@ describe('Google Sheets TODO schema', () => {
     tombstone[headers.indexOf('id')] = 'todo-1';
     tombstone[headers.indexOf('subject')] = 'Original';
     tombstone[headers.indexOf('deleted')] = true;
-    tombstone[headers.indexOf('operationId')] = deleteOperation;
+    tombstone[headers.indexOf('operationId')] = 'custom delete value';
+    tombstone[headers.lastIndexOf('operationId')] = deleteOperation;
 
     const [updated] = parseSheetRows([headers, base, patch]);
     assert.equal(updated.item.urgent, true);
