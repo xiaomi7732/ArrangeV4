@@ -372,10 +372,11 @@ function ScrumPageContent() {
 
   const handleAuthRecovery = async () => {
     if (isAuthenticated) {
+      let booksRecovered = true;
       if (bookAuthRecoveryRequired) {
-        await fetchBooks({ interaction: 'allow-interactive' });
+        booksRecovered = await fetchBooks({ interaction: 'allow-interactive' });
       }
-      if (authRecoveryRequired) {
+      if (booksRecovered && authRecoveryRequired) {
         await fetchEvents();
       }
       return;

@@ -59,7 +59,7 @@ export function useBookId(routePrefix: string) {
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },
   ) => {
-    if (!isAuthenticated || busy) return;
+    if (!isAuthenticated || busy) return false;
     setError(null);
     try {
       const all = await store.listBooks(options);
@@ -72,6 +72,7 @@ export function useBookId(routePrefix: string) {
       } else if (bookId) {
         setLastBookId(bookId);
       }
+      return true;
     } catch (err: unknown) {
       if (
         options.interaction === 'silent-only' &&
@@ -79,12 +80,13 @@ export function useBookId(routePrefix: string) {
       ) {
         setAuthRecoveryRequired(true);
         setError(null);
-        return;
+        return false;
       }
       const message = err instanceof Error ? err.message : 'Failed to fetch books';
       console.error('Error fetching books:', err);
       setAuthRecoveryRequired(options.interaction === 'allow-interactive');
       setError(message);
+      return false;
     }
   }, [isAuthenticated, busy, store, bookId, router]);
 

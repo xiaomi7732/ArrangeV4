@@ -404,9 +404,9 @@ function MatrixPageContent() {
         const snapshotBooks = books.length > 0 ? [...books] : null;
         void (async () => {
           try {
-            const sweepBooks = snapshotBooks ?? (await store.listBooks({
-              interaction: 'silent-only',
-            }));
+            const sweepBooks = (
+              snapshotBooks ?? (await store.listBooks({ interaction: 'silent-only' }))
+            ).filter(book => book.canEdit !== false);
             const CONCURRENCY = 5;
             let i = 0;
             let hasFailure = false;
@@ -852,10 +852,11 @@ function MatrixPageContent() {
 
   const handleAuthRecovery = async () => {
     if (isAuthenticated) {
+      let booksRecovered = true;
       if (bookAuthRecoveryRequired) {
-        await fetchBooks({ interaction: 'allow-interactive' });
+        booksRecovered = await fetchBooks({ interaction: 'allow-interactive' });
       }
-      if (authRecoveryRequired) {
+      if (booksRecovered && authRecoveryRequired) {
         await fetchEvents();
       }
       return;
