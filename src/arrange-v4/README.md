@@ -42,7 +42,9 @@ server, and require an explicit user action to renew after expiration.
 Arrange-created spreadsheets use an append-only history keyed by stable item
 IDs. Updates append field-level patches and deletes append terminal tombstones,
 so edits from another tab or collaborator merge without positional row writes.
-Arrange-managed patches leave user-defined columns untouched.
+Per-field parent revisions make results independent of row sorting and client
+clock differences. Arrange-managed patches leave user-defined columns
+untouched.
 
 ## Validation
 

@@ -65,11 +65,12 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, legacyRow]);
 
-    assert.equal(headers.at(-5), 'matrixOrder');
-    assert.equal(headers.at(-4), 'scrumOrder');
-    assert.equal(headers.at(-3), 'deleted');
-    assert.equal(headers.at(-2), 'changedFields');
-    assert.equal(headers.at(-1), 'operationId');
+    assert.equal(headers.at(-6), 'matrixOrder');
+    assert.equal(headers.at(-5), 'scrumOrder');
+    assert.equal(headers.at(-4), 'deleted');
+    assert.equal(headers.at(-3), 'changedFields');
+    assert.equal(headers.at(-2), 'operationId');
+    assert.equal(headers.at(-1), 'parentOperations');
     assert.equal(record.item.id, 'legacy-id');
     assert.equal(record.item.important, true);
     assert.equal(record.item.matrixOrder, undefined);
@@ -83,12 +84,18 @@ describe('Google Sheets TODO schema', () => {
       { id: 'todo-1', subject: 'Original' },
       '2026-01-01T00:00:00.000Z',
       '2026-01-01T00:00:00.000Z',
+      { operationId: 'base' },
     );
     const updated = serializeSheetRow(
       headers,
       { id: 'todo-1', subject: 'Updated' },
       '2026-01-01T00:00:00.000Z',
       '2026-01-02T00:00:00.000Z',
+      {
+        changedFields: ['subject'],
+        operationId: 'updated',
+        parentOperations: { subject: 'base' },
+      },
     );
     const tombstone = serializeSheetRow(
       headers,
@@ -102,6 +109,7 @@ describe('Google Sheets TODO schema', () => {
       { id: 'todo-2', subject: 'Deleted' },
       '2026-01-01T00:00:00.000Z',
       '2026-01-01T00:00:00.000Z',
+      { operationId: 'deleted-base' },
     );
 
     const records = parseSheetRows([
@@ -148,14 +156,22 @@ describe('Google Sheets TODO schema', () => {
       { id: 'todo-1', subject: 'Renamed', urgent: false },
       '2026-01-01T00:00:00.000Z',
       '2026-01-02T00:00:00.000Z',
-      { changedFields: ['subject'], operationId: 'subject' },
+      {
+        changedFields: ['subject'],
+        operationId: 'subject',
+        parentOperations: { subject: 'base' },
+      },
     );
     const urgencyPatch = serializeSheetRow(
       headers,
       { id: 'todo-1', subject: 'Original', urgent: true },
       '2026-01-01T00:00:00.000Z',
       '2026-01-03T00:00:00.000Z',
-      { changedFields: ['urgent'], operationId: 'urgent' },
+      {
+        changedFields: ['urgent'],
+        operationId: 'urgent',
+        parentOperations: { urgent: 'base' },
+      },
     );
 
     const [record] = parseSheetRows([headers, urgencyPatch, base, subjectPatch]);
@@ -188,5 +204,70 @@ describe('Google Sheets TODO schema', () => {
     );
 
     assert.deepEqual(parseSheetRows([headers, base, tombstone, stalePatch]), []);
+  });
+
+  it('ignores patches with malformed changed-field metadata', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: false },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+      { operationId: 'base' },
+    );
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original', urgent: true },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      {
+        changedFields: ['urgent'],
+        operationId: 'patch',
+        parentOperations: { urgent: 'base' },
+      },
+    );
+    patch[headers.indexOf('changedFields')] = 'not-json';
+
+    const [record] = parseSheetRows([headers, base, patch]);
+
+    assert.equal(record.item.subject, 'Original');
+    assert.equal(record.item.urgent, false);
+  });
+
+  it('follows parent revisions instead of client timestamps or row order', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Base' },
+      '2026-01-01T00:00:00.000Z',
+      '2099-01-01T00:00:00.000Z',
+      { operationId: 'z-base' },
+    );
+    const first = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'First' },
+      '2026-01-01T00:00:00.000Z',
+      '2025-01-01T00:00:00.000Z',
+      {
+        changedFields: ['subject'],
+        operationId: 'a-first',
+        parentOperations: { subject: 'z-base' },
+      },
+    );
+    const second = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Second' },
+      '2026-01-01T00:00:00.000Z',
+      '2024-01-01T00:00:00.000Z',
+      {
+        changedFields: ['subject'],
+        operationId: 'b-second',
+        parentOperations: { subject: 'a-first' },
+      },
+    );
+
+    const [record] = parseSheetRows([headers, second, base, first]);
+
+    assert.equal(record.item.subject, 'Second');
   });
 });

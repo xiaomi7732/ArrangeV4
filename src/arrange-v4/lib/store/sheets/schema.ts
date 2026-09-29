@@ -25,6 +25,7 @@ export const TODO_HEADERS = [
   'deleted',
   'changedFields',
   'operationId',
+  'parentOperations',
 ] as const;
 
 export interface SheetTodoRecord {
@@ -34,6 +35,7 @@ export interface SheetTodoRecord {
   updatedAt: string;
   rawValues: unknown[];
   deleted: boolean;
+  fieldOperations: Partial<Record<keyof TodoItem, string>>;
 }
 
 const TODO_FIELD_NAMES = [
@@ -57,6 +59,7 @@ const TODO_FIELD_NAMES = [
 interface SheetTodoVersion extends SheetTodoRecord {
   changedFields: (keyof TodoItem)[] | null;
   operationId: string;
+  parentOperations: Partial<Record<keyof TodoItem, string>>;
 }
 
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
@@ -94,11 +97,38 @@ function jsonArrayCell(value: unknown): string[] | undefined {
   }
 }
 
-function changedFieldsCell(value: unknown): (keyof TodoItem)[] | null {
+function changedFieldsCell(
+  value: unknown,
+): { fields: (keyof TodoItem)[] | null; valid: boolean } {
+  if (value === null || value === undefined || value === '') {
+    return { fields: null, valid: true };
+  }
   const fields = jsonArrayCell(value);
-  if (!fields) return null;
+  if (!fields) return { fields: null, valid: false };
   const validFields = new Set<string>(TODO_FIELD_NAMES);
-  return fields.filter((field): field is keyof TodoItem => validFields.has(field));
+  return {
+    fields: fields.filter((field): field is keyof TodoItem => validFields.has(field)),
+    valid: true,
+  };
+}
+
+function parentOperationsCell(
+  value: unknown,
+): { operations: Partial<Record<keyof TodoItem, string>>; valid: boolean } {
+  if (!value) return { operations: {}, valid: true };
+  try {
+    const parsed = JSON.parse(String(value)) as Record<string, unknown>;
+    const validFields = new Set<string>(TODO_FIELD_NAMES);
+    return {
+      operations: Object.fromEntries(Object.entries(parsed).filter(
+        (entry): entry is [keyof TodoItem, string] =>
+          validFields.has(entry[0]) && typeof entry[1] === 'string',
+      )),
+      valid: true,
+    };
+  } catch {
+    return { operations: {}, valid: false };
+  }
 }
 
 function remarksCell(value: unknown): TodoItem['remarks'] {
@@ -143,7 +173,15 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
     const deleted = booleanCell(cellByHeader(headers, row, 'deleted'));
-    const operationId = optionalString(cellByHeader(headers, row, 'operationId')) || '';
+    const changedFields = changedFieldsCell(cellByHeader(headers, row, 'changedFields'));
+    if (!changedFields.valid && !deleted) return;
+    const rawOperationId = optionalString(cellByHeader(headers, row, 'operationId'));
+    if (changedFields.fields !== null && !rawOperationId && !deleted) return;
+    const operationId = rawOperationId || `legacy:${id}:${index}`;
+    const parentOperations = parentOperationsCell(
+      cellByHeader(headers, row, 'parentOperations'),
+    );
+    if (changedFields.fields !== null && !parentOperations.valid && !deleted) return;
     const item: TodoItemWithId = {
       id,
       subject: subject || '',
@@ -169,8 +207,10 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       updatedAt,
       rawValues: row,
       deleted,
-      changedFields: changedFieldsCell(cellByHeader(headers, row, 'changedFields')),
+      fieldOperations: {},
+      changedFields: deleted ? [] : changedFields.fields,
       operationId,
+      parentOperations: parentOperations.operations,
     };
     const versions = versionsById.get(id) || [];
     versions.push(version);
@@ -179,28 +219,70 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
 
   return [...versionsById.values()].flatMap(versions => {
     if (versions.some(version => version.deleted)) return [];
-    versions.sort((left, right) => {
-      const timeComparison = left.updatedAt.localeCompare(right.updatedAt);
-      if (timeComparison !== 0) return timeComparison;
-      const operationComparison = left.operationId.localeCompare(right.operationId);
-      if (operationComparison !== 0) return operationComparison;
-      return left.rowNumber - right.rowNumber;
-    });
 
-    let current: SheetTodoRecord | null = null;
-    for (const version of versions) {
-      if (version.changedFields === null) {
-        current = version;
-        continue;
-      }
-      if (!current) continue;
-      const item: TodoItemWithId = { ...current.item };
-      for (const field of version.changedFields) {
-        Object.assign(item, { [field]: version.item[field] });
-      }
-      current = { ...version, item };
+    interface FieldNode {
+      operationId: string;
+      parentOperationId: string | null;
+      value: TodoItem[keyof TodoItem];
     }
-    return current?.item.subject ? [current] : [];
+    const nodesByField = new Map<keyof TodoItem, Map<string, FieldNode>>();
+    for (const version of versions) {
+      const fields = version.changedFields ?? [...TODO_FIELD_NAMES];
+      for (const field of fields) {
+        const nodes = nodesByField.get(field) || new Map<string, FieldNode>();
+        nodes.set(version.operationId, {
+          operationId: version.operationId,
+          parentOperationId: version.changedFields === null
+            ? null
+            : version.parentOperations[field] || null,
+          value: version.item[field],
+        });
+        nodesByField.set(field, nodes);
+      }
+    }
+
+    const item = { id: versions[0].item.id } as TodoItemWithId;
+    const fieldOperations: Partial<Record<keyof TodoItem, string>> = {};
+    for (const field of TODO_FIELD_NAMES) {
+      const nodes = nodesByField.get(field);
+      if (!nodes) continue;
+      const depths = new Map<string, number>();
+      const visiting = new Set<string>();
+      const depth = (node: FieldNode): number => {
+        const cached = depths.get(node.operationId);
+        if (cached !== undefined) return cached;
+        if (visiting.has(node.operationId)) return -1;
+        if (!node.parentOperationId) return 0;
+        const parent = nodes.get(node.parentOperationId);
+        if (!parent) return -1;
+        visiting.add(node.operationId);
+        const parentDepth = depth(parent);
+        visiting.delete(node.operationId);
+        const result = parentDepth < 0 ? -1 : parentDepth + 1;
+        depths.set(node.operationId, result);
+        return result;
+      };
+      const winner = [...nodes.values()]
+        .map(node => ({ node, depth: depth(node) }))
+        .filter(candidate => candidate.depth >= 0)
+        .sort((left, right) => (
+          right.depth - left.depth
+          || right.node.operationId.localeCompare(left.node.operationId)
+        ))[0]?.node;
+      if (!winner) continue;
+      Object.assign(item, { [field]: winner.value });
+      fieldOperations[field] = winner.operationId;
+    }
+    if (!item.subject) return [];
+    const representative = versions.reduce((latest, version) => (
+      version.operationId > latest.operationId ? version : latest
+    ));
+    return [{
+      ...representative,
+      item,
+      fieldOperations,
+      createdAt: versions.find(version => version.createdAt)?.createdAt || '',
+    }];
   });
 }
 
@@ -219,6 +301,7 @@ export function serializeSheetRow(
     changedFields?: (keyof TodoItem)[];
     deleted?: boolean;
     operationId?: string;
+    parentOperations?: Partial<Record<keyof TodoItem, string>>;
   } = {},
 ): unknown[] {
   const cells: Record<string, unknown> = {
@@ -243,6 +326,9 @@ export function serializeSheetRow(
     deleted: options.deleted || false,
     changedFields: options.changedFields ? JSON.stringify(options.changedFields) : '',
     operationId: options.operationId || crypto.randomUUID(),
+    parentOperations: options.parentOperations
+      ? JSON.stringify(options.parentOperations)
+      : '',
   };
   const changedFields = options.changedFields
     ? new Set<string>(options.changedFields)

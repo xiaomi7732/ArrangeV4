@@ -349,7 +349,6 @@ export class GoogleSheetsStore implements TodoStore {
         }
         if (updates.status === 'new' && updates.startDateTime === undefined) {
           updated.startDateTime = null;
-          changedFields.add('startDateTime');
         }
         if (updates.status === 'finished') {
           if (!existing.item.startDateTime && updates.startDateTime === undefined) {
@@ -363,12 +362,12 @@ export class GoogleSheetsStore implements TodoStore {
         }
         if (
           updates.status !== 'finished'
-          && existing.item.status === 'finished'
           && updates.finishDateTime === undefined
         ) {
           updated.finishDateTime = null;
-          changedFields.add('finishDateTime');
         }
+        changedFields.add('startDateTime');
+        changedFields.add('finishDateTime');
       }
       await this.appendValues(
         spreadsheetId,
@@ -377,7 +376,15 @@ export class GoogleSheetsStore implements TodoStore {
           updated,
           existing.createdAt || updatedAt,
           updatedAt,
-          { changedFields: [...changedFields] },
+          {
+            changedFields: [...changedFields],
+            parentOperations: Object.fromEntries(
+              [...changedFields].flatMap(field => {
+                const operationId = existing.fieldOperations[field];
+                return operationId ? [[field, operationId]] : [];
+              }),
+            ),
+          },
         )],
         options,
         token,

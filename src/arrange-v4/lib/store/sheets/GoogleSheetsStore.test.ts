@@ -193,6 +193,13 @@ describe('GoogleSheetsStore', () => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);
         assert.ok(body.values[0][TODO_HEADERS.indexOf('finishDateTime')]);
+        const changedFields = JSON.parse(
+          String(body.values[0][TODO_HEADERS.indexOf('changedFields')]),
+        ) as string[];
+        assert.deepEqual(
+          new Set(changedFields),
+          new Set(['status', 'startDateTime', 'finishDateTime']),
+        );
         return jsonResponse({ updatedRows: 1 });
       },
     ]);
