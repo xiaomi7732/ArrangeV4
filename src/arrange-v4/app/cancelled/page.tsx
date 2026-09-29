@@ -2,59 +2,143 @@
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useStore } from '@/lib/store/useStore';
-import type { TodoItem, TodoItemWithId } from '@/lib/store/types';
+import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
+import { retainExistingIds } from '@/lib/selectionUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import Link from 'next/link';
 import styles from './page.module.css';
+
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+  preserveSelection?: boolean;
+};
 
 function CancelledPageContent() {
   const auth = useAuthClient();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
-  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/cancelled');
+  const {
+    bookId,
+    books,
+    handleBookSwitch,
+    fetchBooks,
+    authRecoveryRequired: bookAuthRecoveryRequired,
+    error: bookError,
+  } = useBookId('/cancelled');
 
   const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
+  const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
   const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const bookIdRef = useRef(bookId);
+  const fetchSequenceRef = useRef(0);
+
+  bookIdRef.current = bookId;
 
   const displayError = error || bookError;
+  const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
 
-  const fetchEvents = useCallback(async () => {
-    if (!isAuthenticated || !bookId) return;
+  const fetchEvents = useCallback(async ({
+    preserveError = false,
+    preserveSelection = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
+    const requestedBookId = bookIdRef.current;
+    if (!isAuthenticated || !requestedBookId) return;
+    const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    setError(null);
+    if (!preserveError) setError(null);
 
     try {
-      const items = await store.listItems(bookId, { range: 'all' });
-      setCancelledItems(items.filter(t => t.status === 'cancelled'));
-      setSelectedIds(new Set());
+      const items = await store.listItems(requestedBookId, {
+        range: 'all',
+        interaction,
+      });
+      if (
+        fetchSequenceRef.current !== fetchSequence ||
+        bookIdRef.current !== requestedBookId
+      ) return;
+      const nextItems = items.filter(t => t.status === 'cancelled');
+      setCancelledItems(nextItems);
+      setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
+      setSelectedIds(previous => preserveSelection
+        ? retainExistingIds(previous, nextItems.map(item => item.id))
+        : new Set<string>());
     } catch (err: unknown) {
+      if (
+        fetchSequenceRef.current !== fetchSequence ||
+        bookIdRef.current !== requestedBookId
+      ) return;
+      if (
+        interaction === 'silent-only' &&
+        isInteractiveAuthenticationRequiredError(err)
+      ) {
+        setAuthRecoveryRequired(true);
+        setShowConfirm(false);
+        setError(null);
+        return;
+      }
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
       setError(message);
     } finally {
-      setLoading(false);
+      if (
+        fetchSequenceRef.current === fetchSequence &&
+        bookIdRef.current === requestedBookId
+      ) {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, bookId, store]);
+  }, [isAuthenticated, store]);
+
+  useEffect(() => {
+    if (bookId && bookId !== itemsBookId) {
+      setLoading(isAuthenticated && !busy);
+      setCancelledItems([]);
+      setSelectedIds(new Set());
+      setSelectedTodo(null);
+      setShowConfirm(false);
+    }
+  }, [bookId, itemsBookId, isAuthenticated, busy]);
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
-      fetchEvents();
+      fetchEvents({ interaction: 'silent-only' });
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
+
+  useRefreshOnPageActivation(
+    () => void fetchEvents({
+      preserveError: true,
+      preserveSelection: true,
+      interaction: 'silent-only',
+    }),
+    isAuthenticated &&
+      !requiresAuthRecovery &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !deleting &&
+      !showConfirm,
+  );
 
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
@@ -62,6 +146,7 @@ function CancelledPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (err) {
@@ -70,8 +155,22 @@ function CancelledPageContent() {
     }
   };
 
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      let booksRecovered = true;
+      if (bookAuthRecoveryRequired) {
+        booksRecovered = await fetchBooks({ interaction: 'allow-interactive' });
+      }
+      if (booksRecovered && authRecoveryRequired) {
+        await fetchEvents();
+      }
+      return;
+    }
+    await handleLogin();
+  };
+
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -93,7 +192,7 @@ function CancelledPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : requiresAuthRecovery ? null : (
       <>
         <button
           onClick={handleDeleteSelected}
@@ -103,7 +202,7 @@ function CancelledPageContent() {
           Delete ({selectedIds.size})
         </button>
         <button
-          onClick={fetchEvents}
+          onClick={() => void fetchEvents()}
           disabled={loading}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
@@ -111,7 +210,16 @@ function CancelledPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, deleting, bookId, books, selectedIds.size],
+    [
+      isAuthenticated,
+      requiresAuthRecovery,
+      busy,
+      loading,
+      deleting,
+      bookId,
+      books,
+      selectedIds.size,
+    ],
   );
 
   const toggleSelect = (id: string) => {
@@ -187,13 +295,27 @@ function CancelledPageContent() {
     }
   };
 
-  if (!bookId) {
+  if (!bookId && isAuthenticated && !requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
             No book selected. Please select a book from the <Link href="/books" className={styles.warningLink}>Books page</Link>.
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || requiresAuthRecovery) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy || (requiresAuthRecovery && loading)}
+            error={displayError}
+            onLogin={handleAuthRecovery}
+          />
         </div>
       </div>
     );
@@ -215,7 +337,7 @@ function CancelledPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
           <div className={styles.card}>
             {cancelledItems.length === 0 ? (
               <div className={styles.empty}>

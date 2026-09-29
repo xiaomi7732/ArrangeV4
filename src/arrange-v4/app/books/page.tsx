@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store/useStore';
-import type { Book } from '@/lib/store/types';
+import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import CalendarList from '@/components/CalendarList';
 import CreateCalendar from '@/components/CreateCalendar';
 import styles from './page.module.css';
@@ -16,6 +18,7 @@ export default function BooksPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [userName, setUserName] = useState<string>('');
 
   const handleLogin = async () => {
@@ -35,7 +38,9 @@ export default function BooksPage() {
     }
   };
 
-  const fetchBooks = async () => {
+  const fetchBooks = useCallback(async (
+    options: StoreOperationOptions = { interaction: 'allow-interactive' },
+  ) => {
     if (!isAuthenticated) return;
 
     setLoading(true);
@@ -45,15 +50,33 @@ export default function BooksPage() {
       const user = auth.getUser();
       setUserName(user?.displayName || user?.email || '');
 
-      const allBooks = await store.listBooks();
+      const allBooks = await store.listBooks(options);
       setBooks(allBooks);
+      setAuthRecoveryRequired(false);
     } catch (err: unknown) {
+      if (
+        options.interaction === 'silent-only' &&
+        isInteractiveAuthenticationRequiredError(err)
+      ) {
+        setAuthRecoveryRequired(true);
+        setError(null);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Failed to fetch books';
       console.error('Error fetching books:', err);
+      setAuthRecoveryRequired(options.interaction === 'allow-interactive');
       setError(message);
     } finally {
       setLoading(false);
     }
+  }, [isAuthenticated, auth, store]);
+
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      await fetchBooks();
+      return;
+    }
+    await handleLogin();
   };
 
   const handleCreateBook = async (name: string) => {
@@ -80,9 +103,9 @@ export default function BooksPage() {
 
   useEffect(() => {
     if (isAuthenticated && !busy) {
-      fetchBooks();
+      void fetchBooks({ interaction: 'silent-only' });
     }
-  }, [isAuthenticated, busy]);
+  }, [isAuthenticated, busy, fetchBooks]);
 
   useSetTopBarActions(
     null,
@@ -94,14 +117,14 @@ export default function BooksPage() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : authRecoveryRequired ? null : (
       <>
         <CreateCalendar
           onCreateCalendar={handleCreateBook}
           disabled={loading}
         />
         <button
-          onClick={fetchBooks}
+          onClick={() => void fetchBooks()}
           disabled={loading}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
@@ -115,8 +138,22 @@ export default function BooksPage() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading],
+    [isAuthenticated, authRecoveryRequired, busy, loading],
   );
+
+  if (authRecoveryRequired) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy || loading}
+            error={error}
+            onLogin={handleAuthRecovery}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>

@@ -8,6 +8,8 @@
  * within the context of a Book.
  */
 
+import type { AcquireTokenOptions } from '@/lib/auth/types';
+
 export type TodoStatus = 'new' | 'inProgress' | 'blocked' | 'finished' | 'cancelled';
 
 export const ALL_STATUSES: TodoStatus[] = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'];
@@ -67,7 +69,7 @@ export interface Book {
 
 export type ListItemsRange = 'all' | 'window';
 
-export interface ListItemsOptions {
+export interface ListItemsOptions extends StoreOperationOptions {
   /**
    * Explicit range. No implicit defaults — callers must pick.
    * - 'window' requires `fromDate` and `toDate`.
@@ -86,14 +88,29 @@ export interface CreateBookOptions {
   backend: BackendKind;
 }
 
+export type AuthInteraction = 'allow-interactive' | 'silent-only';
+
+export interface StoreOperationOptions {
+  /**
+   * Whether token acquisition may fall back to an interactive flow.
+   * Defaults to `allow-interactive` for user-initiated operations.
+   */
+  interaction?: AuthInteraction;
+}
+
 export interface TodoStore {
-  listBooks(): Promise<Book[]>;
+  listBooks(options?: StoreOperationOptions): Promise<Book[]>;
   createBook(name: string, opts: CreateBookOptions): Promise<Book>;
   deleteBook(bookId: string): Promise<void>;
 
   listItems(bookId: string, opts: ListItemsOptions): Promise<TodoItemWithId[]>;
   createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId>;
-  updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId>;
+  updateItem(
+    bookId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId>;
   deleteItem(bookId: string, itemId: string): Promise<void>;
 }
 
@@ -102,7 +119,7 @@ export interface TodoStore {
  * that future backends with different auth providers can plug in without
  * touching the interface.
  */
-export type AcquireToken = () => Promise<string>;
+export type AcquireToken = (options?: AcquireTokenOptions) => Promise<string>;
 
 export interface StoreOptions {
   acquireToken: AcquireToken;

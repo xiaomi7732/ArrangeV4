@@ -4,7 +4,8 @@ import { useCallback, useMemo } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { loginRequest } from '@/lib/msalConfig';
-import type { AuthClient, AuthUser } from '../types';
+import { InteractiveAuthenticationRequiredError } from '../errors';
+import type { AcquireTokenOptions, AuthClient, AuthUser } from '../types';
 
 /**
  * React hook that adapts MSAL into the `AuthClient` shape.
@@ -17,7 +18,7 @@ export function useMicrosoftAuthClient(): AuthClient {
   const isAuthenticated = accounts.length > 0;
   const busy = inProgress !== 'none';
 
-  const acquireToken = useCallback(async (options?: { silentOnly?: boolean }): Promise<string> => {
+  const acquireToken = useCallback(async (options?: AcquireTokenOptions): Promise<string> => {
     // Read accounts fresh from the MSAL instance, not from the captured React
     // state. The captured state can lag by one render after loginPopup resolves,
     // which would cause the post-login "no account" race.
@@ -31,10 +32,10 @@ export function useMicrosoftAuthClient(): AuthClient {
       const response = await instance.acquireTokenSilent({ ...loginRequest, account });
       return response.accessToken;
     } catch (silentError: unknown) {
-      if (options?.silentOnly) {
-        throw silentError;
-      }
       if (silentError instanceof InteractionRequiredAuthError) {
+        if (options?.silentOnly) {
+          throw new InteractiveAuthenticationRequiredError(silentError);
+        }
         const response = await instance.acquireTokenPopup(loginRequest);
         return response.accessToken;
       }

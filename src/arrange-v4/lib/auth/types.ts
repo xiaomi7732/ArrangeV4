@@ -17,6 +17,11 @@ export interface AuthUser {
   email?: string;
 }
 
+export interface AcquireTokenOptions {
+  /** Never start an interactive flow when silent acquisition fails. */
+  silentOnly?: boolean;
+}
+
 export interface AuthClient {
   /** Which provider this client implements. */
   readonly provider: AuthProvider;
@@ -34,7 +39,7 @@ export interface AuthClient {
    * background checks (e.g. from a `useEffect`) where an unexpected popup
    * would be a poor UX.
    */
-  acquireToken(options?: { silentOnly?: boolean }): Promise<string>;
+  acquireToken(options?: AcquireTokenOptions): Promise<string>;
 
   /** Starts an interactive sign-in flow. */
   login(): Promise<void>;

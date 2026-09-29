@@ -14,6 +14,8 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
+import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
+import { isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -23,8 +25,11 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -40,6 +45,7 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
 
 const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
 
@@ -57,19 +63,10 @@ const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
   cancelled: 'hide',
 };
 
-function isToday(dateStr: string | undefined | null): boolean {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  const now = new Date();
-  return d.getUTCFullYear() === now.getUTCFullYear() &&
-    d.getUTCMonth() === now.getUTCMonth() &&
-    d.getUTCDate() === now.getUTCDate();
-}
-
 function passesTodayFilter(todo: TodoItem): boolean {
   const status = todo.status || 'new';
-  if (status === 'finished') return isToday(todo.finishDateTime);
-  return isToday(todo.etsDateTime);
+  if (status === 'finished') return isDateToday(todo.finishDateTime);
+  return isDateToday(todo.etsDateTime);
 }
 
 const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
@@ -97,13 +94,21 @@ function ScrumPageContent() {
   const auth = useAuthClient();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
-  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/scrum');
+  const {
+    bookId,
+    books,
+    handleBookSwitch,
+    fetchBooks,
+    authRecoveryRequired: bookAuthRecoveryRequired,
+    error: bookError,
+  } = useBookId('/scrum');
   const bookIdRef = useRef(bookId);
   const mutationVersionRef = useRef(0);
   const isSavingOrderRef = useRef(false);
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
 
@@ -111,6 +116,7 @@ function ScrumPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [showTags, setShowTags] = useState(true);
@@ -127,6 +133,7 @@ function ScrumPageContent() {
   );
 
   const displayError = error || bookError;
+  const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -190,12 +197,18 @@ function ScrumPageContent() {
     return result;
   }, [canonicalLanes, visibleItemIds]);
 
-  const fetchEvents = useCallback(async (
-    { preserveError = false }: { preserveError?: boolean } = {},
-  ) => {
+  const fetchEvents = useCallback(async ({
+    preserveError = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
+      if (!pendingFetchRef.current) {
+        pendingFetchInteractionRef.current = interaction;
+      } else if (interaction === 'allow-interactive') {
+        pendingFetchInteractionRef.current = 'allow-interactive';
+      }
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current ||= preserveError;
       return;
@@ -216,6 +229,7 @@ function ScrumPageContent() {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
+        interaction,
       });
       if (fetchSequenceRef.current !== fetchSequence) return;
       if (
@@ -223,15 +237,25 @@ function ScrumPageContent() {
         mutationVersionRef.current !== requestedMutationVersion
       ) {
         if (bookIdRef.current === requestedBookId) {
+          if (!pendingFetchRef.current) {
+            pendingFetchInteractionRef.current = interaction;
+          } else if (interaction === 'allow-interactive') {
+            pendingFetchInteractionRef.current = 'allow-interactive';
+          }
           pendingFetchRef.current = true;
           pendingFetchPreserveErrorRef.current ||= preserveError;
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
-                void fetchEvents({ preserveError: replayPreserveError });
+                pendingFetchInteractionRef.current = 'allow-interactive';
+                void fetchEvents({
+                  preserveError: replayPreserveError,
+                  interaction: replayInteraction,
+                });
               }
             });
           }
@@ -240,12 +264,21 @@ function ScrumPageContent() {
       }
       setTodoItems(items);
       setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
     } catch (err: unknown) {
       console.error('Error fetching events:', err);
       if (
         fetchSequenceRef.current === fetchSequence &&
         bookIdRef.current === requestedBookId
       ) {
+        if (
+          interaction === 'silent-only' &&
+          isInteractiveAuthenticationRequiredError(err)
+        ) {
+          setAuthRecoveryRequired(true);
+          setError(null);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
         setError(message);
       }
@@ -264,9 +297,11 @@ function ScrumPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
-      void fetchEvents({ preserveError });
+      pendingFetchInteractionRef.current = 'allow-interactive';
+      void fetchEvents({ preserveError, interaction });
     }
   };
 
@@ -280,9 +315,22 @@ function ScrumPageContent() {
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
-      fetchEvents();
+      fetchEvents({ interaction: 'silent-only' });
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
+
+  useRefreshOnPageActivation(
+    () => void fetchEvents({
+      preserveError: true,
+      interaction: 'silent-only',
+    }),
+    isAuthenticated &&
+      !requiresAuthRecovery &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !isSavingOrder,
+  );
 
   const handleAddTodo = async (todoItem: TodoItem) => {
     if (!bookId) throw new Error('No book selected');
@@ -313,6 +361,7 @@ function ScrumPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (err) {
@@ -321,8 +370,22 @@ function ScrumPageContent() {
     }
   };
 
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      let booksRecovered = true;
+      if (bookAuthRecoveryRequired) {
+        booksRecovered = await fetchBooks({ interaction: 'allow-interactive' });
+      }
+      if (booksRecovered && authRecoveryRequired) {
+        await fetchEvents();
+      }
+      return;
+    }
+    await handleLogin();
+  };
+
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -344,7 +407,7 @@ function ScrumPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : requiresAuthRecovery ? null : (
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
@@ -356,7 +419,17 @@ function ScrumPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
+    [
+      isAuthenticated,
+      requiresAuthRecovery,
+      busy,
+      loading,
+      isSavingOrder,
+      bookId,
+      books,
+      allCategories,
+      todoItems,
+    ],
   );
 
   const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {
@@ -620,13 +693,27 @@ function ScrumPageContent() {
     );
   };
 
-  if (!bookId) {
+  if (!bookId && isAuthenticated && !requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
             No book selected. Please select a book from the <Link href="/books" className={styles.warningLink}>Books page</Link>.
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || requiresAuthRecovery) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy || (requiresAuthRecovery && loading)}
+            error={displayError}
+            onLogin={handleAuthRecovery}
+          />
         </div>
       </div>
     );
@@ -648,7 +735,7 @@ function ScrumPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
           <div className={styles.boardSection}>
             <div className={styles.boardHeader}>
               <span className={styles.filterCount}>

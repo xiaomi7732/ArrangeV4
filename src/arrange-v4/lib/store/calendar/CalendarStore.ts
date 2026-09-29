@@ -1,10 +1,10 @@
 import { Client } from '@microsoft/microsoft-graph-client';
 import { createGraphClient } from '@/lib/graphService';
 import type {
-  AcquireToken,
   Book,
   CreateBookOptions,
   ListItemsOptions,
+  StoreOperationOptions,
   StoreOptions,
   TodoItem,
   TodoItemWithId,
@@ -14,6 +14,7 @@ import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
 import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
 import { computeBumpedDates } from './bump';
+import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
 
 const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
 const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
@@ -61,45 +62,21 @@ interface StoredTodoBody {
  * `====ArrangeDataStart====` / `====ArrangeDataEnd====` markers.
  */
 export class CalendarStore implements TodoStore {
-  private readonly acquireToken: AcquireToken;
-  /**
-   * In-flight token acquisition. Concurrent calls share the same promise to
-   * avoid (a) redundant silent acquisitions and (b) — in the worst case where
-   * silent acquisition has failed and a popup is required — multiple
-   * simultaneous popup attempts that would all error with `interaction_in_progress`.
-   * Cleared as soon as the in-flight promise settles, so subsequent calls
-   * re-validate the token freshness.
-   */
-  private tokenInFlight: Promise<string> | null = null;
+  private readonly tokenAcquisition: TokenAcquisitionCoordinator;
 
   constructor(opts: StoreOptions) {
-    this.acquireToken = opts.acquireToken;
+    this.tokenAcquisition = new TokenAcquisitionCoordinator(opts.acquireToken);
   }
 
-  private getToken(): Promise<string> {
-    if (this.tokenInFlight) return this.tokenInFlight;
-    const p = this.acquireToken();
-    this.tokenInFlight = p;
-    // Attach both fulfillment and rejection handlers so we don't create an
-    // unhandled rejection from a chained promise. The returned chained
-    // promise from .then(clear, clear) cannot reject because we handle both
-    // settlement cases with a no-throw clear function.
-    const clear = () => {
-      if (this.tokenInFlight === p) this.tokenInFlight = null;
-    };
-    p.then(clear, clear);
-    return p;
-  }
-
-  private async client(): Promise<Client> {
-    const token = await this.getToken();
+  private async client(options?: StoreOperationOptions): Promise<Client> {
+    const token = await this.tokenAcquisition.getToken(options);
     return createGraphClient(token);
   }
 
   /* ---- Books ---- */
 
-  async listBooks(): Promise<Book[]> {
-    const client = await this.client();
+  async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
+    const client = await this.client(options);
     const all: Calendar[] = [];
 
     let response = await client.api('/me/calendars').top(100).get();
@@ -140,7 +117,7 @@ export class CalendarStore implements TodoStore {
 
   async listItems(bookId: string, opts: ListItemsOptions): Promise<TodoItemWithId[]> {
     const calendarId = unwrap(bookId);
-    const client = await this.client();
+    const client = await this.client(opts);
 
     const events: CalendarEvent[] = [];
 
@@ -217,7 +194,12 @@ export class CalendarStore implements TodoStore {
     return parsed;
   }
 
-  async updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId> {
+  async updateItem(
+    bookId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId> {
     const calendarId = unwrap(bookId);
     const queueKey = `${calendarId}:${itemId}`;
     const previous = itemUpdateQueues.get(queueKey) ?? Promise.resolve();
@@ -231,7 +213,7 @@ export class CalendarStore implements TodoStore {
     await previous.catch(() => undefined);
     await acquireItemUpdateSlot();
     try {
-      return await this.updateItemCore(calendarId, itemId, updates);
+      return await this.updateItemCore(calendarId, itemId, updates, options);
     } finally {
       releaseItemUpdateSlot();
       release();
@@ -245,8 +227,9 @@ export class CalendarStore implements TodoStore {
     calendarId: string,
     itemId: string,
     updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
   ): Promise<TodoItemWithId> {
-    const client = await this.client();
+    const client = await this.client(options);
 
     const existingEvent: CalendarEvent = await client
       .api(`/me/calendars/${calendarId}/events/${itemId}`)
@@ -374,7 +357,11 @@ export class CalendarStore implements TodoStore {
    * that were bumped. Calendar-specific: compensates for the ±30-day
    * calendarView window.
    */
-  async sweepStaleItems(bookId: string, items: TodoItemWithId[]): Promise<string[]> {
+  async sweepStaleItems(
+    bookId: string,
+    items: TodoItemWithId[],
+    options?: StoreOperationOptions,
+  ): Promise<string[]> {
     const stale = items.filter(
       (item) =>
         item.id &&
@@ -386,6 +373,7 @@ export class CalendarStore implements TodoStore {
     const bumped: string[] = [];
     const concurrency = 5;
     let index = 0;
+    let firstError: unknown;
 
     const worker = async (): Promise<void> => {
       while (true) {
@@ -393,9 +381,10 @@ export class CalendarStore implements TodoStore {
         if (i >= stale.length) break;
         const item = stale[i];
         try {
-          await this.updateItem(bookId, item.id, {});
+          await this.updateItem(bookId, item.id, {}, options);
           bumped.push(item.id);
         } catch (error) {
+          firstError ??= error;
           console.error(`Error bumping stale TODO ${item.id}:`, error);
         }
       }
@@ -403,6 +392,7 @@ export class CalendarStore implements TodoStore {
 
     const workers = Math.min(concurrency, stale.length);
     await Promise.all(Array.from({ length: workers }, () => worker()));
+    if (firstError) throw firstError;
     return bumped;
   }
 

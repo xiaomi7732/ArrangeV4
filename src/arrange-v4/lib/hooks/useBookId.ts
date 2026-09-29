@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
-import type { Book } from '@/lib/store/types';
+import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 
 /**
  * Shared hook for resolving the selected book.
@@ -31,6 +32,7 @@ export function useBookId(routePrefix: string) {
 
   const [books, setBooks] = useState<Book[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
 
   // Normalize unprefixed URL bookIds to their prefixed form for canonical URLs.
   useEffect(() => {
@@ -54,12 +56,15 @@ export function useBookId(routePrefix: string) {
     }
   }, [rawBookId, bookId, router, routePrefix]);
 
-  const fetchBooks = useCallback(async () => {
-    if (!isAuthenticated || busy) return;
+  const fetchBooks = useCallback(async (
+    options: StoreOperationOptions = { interaction: 'silent-only' },
+  ) => {
+    if (!isAuthenticated || busy) return false;
     setError(null);
     try {
-      const all = await store.listBooks();
+      const all = await store.listBooks(options);
       setBooks(all);
+      setAuthRecoveryRequired(false);
 
       if (bookId && !all.some(b => b.id === bookId)) {
         clearLastBookId();
@@ -67,10 +72,21 @@ export function useBookId(routePrefix: string) {
       } else if (bookId) {
         setLastBookId(bookId);
       }
+      return true;
     } catch (err: unknown) {
+      if (
+        options.interaction === 'silent-only' &&
+        isInteractiveAuthenticationRequiredError(err)
+      ) {
+        setAuthRecoveryRequired(true);
+        setError(null);
+        return false;
+      }
       const message = err instanceof Error ? err.message : 'Failed to fetch books';
       console.error('Error fetching books:', err);
+      setAuthRecoveryRequired(options.interaction === 'allow-interactive');
       setError(message);
+      return false;
     }
   }, [isAuthenticated, busy, store, bookId, router]);
 
@@ -91,6 +107,7 @@ export function useBookId(routePrefix: string) {
     currentBookName,
     handleBookSwitch,
     fetchBooks,
+    authRecoveryRequired,
     error,
     setError,
   };

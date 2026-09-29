@@ -14,7 +14,8 @@ import {
 } from '@dnd-kit/core';
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
-import { formatRelativeDate } from '@/lib/dateUtils';
+import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
+import { formatRelativeDate, isDateToday } from '@/lib/dateUtils';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -25,8 +26,11 @@ import {
 } from '@/lib/orderUtils';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -41,6 +45,7 @@ import Link from 'next/link';
 import styles from './page.module.css';
 
 type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
+type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
 
 const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
   showAll: 'All',
@@ -58,19 +63,10 @@ const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
 
 const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
 
-function isToday(dateStr: string | undefined | null): boolean {
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  const now = new Date();
-  return d.getUTCFullYear() === now.getUTCFullYear() &&
-    d.getUTCMonth() === now.getUTCMonth() &&
-    d.getUTCDate() === now.getUTCDate();
-}
-
 function passesTodayFilter(todo: TodoItem): boolean {
   const status = todo.status || 'new';
-  if (status === 'finished') return isToday(todo.finishDateTime);
-  return isToday(todo.etsDateTime);
+  if (status === 'finished') return isDateToday(todo.finishDateTime);
+  return isDateToday(todo.etsDateTime);
 }
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
@@ -218,7 +214,14 @@ function MatrixPageContent() {
   const auth = useAuthClient();
   const { isAuthenticated, busy } = auth;
   const store = useStore();
-  const { bookId, books, handleBookSwitch, error: bookError } = useBookId('/matrix');
+  const {
+    bookId,
+    books,
+    handleBookSwitch,
+    fetchBooks,
+    authRecoveryRequired: bookAuthRecoveryRequired,
+    error: bookError,
+  } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
   const mutationVersionRef = useRef(0);
@@ -226,6 +229,7 @@ function MatrixPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
 
@@ -233,6 +237,7 @@ function MatrixPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
@@ -250,6 +255,7 @@ function MatrixPageContent() {
 
   // Merge book-level errors into the page error state
   const displayError = error || bookError;
+  const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -314,12 +320,27 @@ function MatrixPageContent() {
     eliminate: canonicalQuadrants.eliminate.filter(todo => visibleTodoIds.has(todo.id)),
   }), [canonicalQuadrants, visibleTodoIds]);
 
-  const fetchEvents = async ({ preserveError = false }: { preserveError?: boolean } = {}) => {
+  const queuePendingFetch = (
+    preserveError: boolean,
+    interaction: AuthInteraction,
+  ) => {
+    if (!pendingFetchRef.current) {
+      pendingFetchInteractionRef.current = interaction;
+    } else if (interaction === 'allow-interactive') {
+      pendingFetchInteractionRef.current = 'allow-interactive';
+    }
+    pendingFetchRef.current = true;
+    pendingFetchPreserveErrorRef.current ||= preserveError;
+  };
+
+  const fetchEvents = async ({
+    preserveError = false,
+    interaction = 'allow-interactive',
+  }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
-      pendingFetchRef.current = true;
-      pendingFetchPreserveErrorRef.current ||= preserveError;
+      queuePendingFetch(preserveError, interaction);
       return;
     }
     const requestedMutationVersion = mutationVersionRef.current;
@@ -339,6 +360,7 @@ function MatrixPageContent() {
         range: 'window',
         fromDate: startDate.toISOString(),
         toDate: endDate.toISOString(),
+        interaction,
       });
       if (fetchSequenceRef.current !== fetchSequence) return;
       if (
@@ -346,15 +368,19 @@ function MatrixPageContent() {
         mutationVersionRef.current !== requestedMutationVersion
       ) {
         if (bookIdRef.current === requestedBookId) {
-          pendingFetchRef.current = true;
-          pendingFetchPreserveErrorRef.current ||= preserveError;
+          queuePendingFetch(preserveError, interaction);
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
-                void fetchEvents({ preserveError: replayPreserveError });
+                pendingFetchInteractionRef.current = 'allow-interactive';
+                void fetchEvents({
+                  preserveError: replayPreserveError,
+                  interaction: replayInteraction,
+                });
               }
             });
           }
@@ -363,9 +389,14 @@ function MatrixPageContent() {
       }
       setTodoItems(todos);
       setItemsBookId(requestedBookId);
+      setAuthRecoveryRequired(false);
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
-      if (!hasSessionSweepRun() && !isSessionSweepInProgress() && !sweepAttemptedRef.current) {
+      if (
+        !hasSessionSweepRun() &&
+        !isSessionSweepInProgress() &&
+        !sweepAttemptedRef.current
+      ) {
         sweepAttemptedRef.current = true;
         markSessionSweepInProgress();
         const sweepBookId = requestedBookId;
@@ -373,7 +404,9 @@ function MatrixPageContent() {
         const snapshotBooks = books.length > 0 ? [...books] : null;
         void (async () => {
           try {
-            const sweepBooks = snapshotBooks ?? (await store.listBooks());
+            const sweepBooks = (
+              snapshotBooks ?? (await store.listBooks({ interaction: 'silent-only' }))
+            ).filter(book => book.canEdit !== false);
             const CONCURRENCY = 5;
             let i = 0;
             let hasFailure = false;
@@ -385,8 +418,11 @@ function MatrixPageContent() {
                     range: 'window',
                     fromDate: startDate.toISOString(),
                     toDate: endDate.toISOString(),
+                    interaction: 'silent-only',
                   });
-                  await store.calendar.sweepStaleItems(book.id, calItems);
+                  await store.calendar.sweepStaleItems(book.id, calItems, {
+                    interaction: 'silent-only',
+                  });
                 } catch (calError) {
                   hasFailure = true;
                   console.error(`Error sweeping book ${book.id}:`, calError);
@@ -408,6 +444,7 @@ function MatrixPageContent() {
                   range: 'window',
                   fromDate: startDate.toISOString(),
                   toDate: endDate.toISOString(),
+                  interaction: 'silent-only',
                 });
                 if (
                   bookIdRef.current === sweepBookId &&
@@ -431,6 +468,14 @@ function MatrixPageContent() {
         fetchSequenceRef.current === fetchSequence &&
         bookIdRef.current === requestedBookId
       ) {
+        if (
+          interaction === 'silent-only' &&
+          isInteractiveAuthenticationRequiredError(err)
+        ) {
+          setAuthRecoveryRequired(true);
+          setError(null);
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
         setError(message);
       }
@@ -449,9 +494,11 @@ function MatrixPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
-      void fetchEvents({ preserveError });
+      pendingFetchInteractionRef.current = 'allow-interactive';
+      void fetchEvents({ preserveError, interaction });
     }
   };
 
@@ -794,12 +841,27 @@ function MatrixPageContent() {
   };
 
   const handleLogin = async () => {
+    setError(null);
     try {
       await auth.login();
     } catch (error) {
       console.error('Login failed:', error);
       setError('Login failed. Please try again.');
     }
+  };
+
+  const handleAuthRecovery = async () => {
+    if (isAuthenticated) {
+      let booksRecovered = true;
+      if (bookAuthRecoveryRequired) {
+        booksRecovered = await fetchBooks({ interaction: 'allow-interactive' });
+      }
+      if (booksRecovered && authRecoveryRequired) {
+        await fetchEvents();
+      }
+      return;
+    }
+    await handleLogin();
   };
 
   useEffect(() => {
@@ -812,13 +874,26 @@ function MatrixPageContent() {
 
   useEffect(() => {
     if (isAuthenticated && !busy && bookId) {
-      fetchEvents();
+      fetchEvents({ interaction: 'silent-only' });
     }
   }, [isAuthenticated, busy, bookId]);
 
+  useRefreshOnPageActivation(
+    () => void fetchEvents({
+      preserveError: true,
+      interaction: 'silent-only',
+    }),
+    isAuthenticated &&
+      !requiresAuthRecovery &&
+      !busy &&
+      !!bookId &&
+      !loading &&
+      !isSavingOrder,
+  );
+
   // Push page actions into the shared top bar
   useSetTopBarActions(
-    books.length > 1 ? (
+    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -840,7 +915,7 @@ function MatrixPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : (
+    ) : requiresAuthRecovery ? null : (
       <>
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
@@ -852,16 +927,40 @@ function MatrixPageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, busy, loading, isSavingOrder, bookId, books, allCategories, todoItems],
+    [
+      isAuthenticated,
+      requiresAuthRecovery,
+      busy,
+      loading,
+      isSavingOrder,
+      bookId,
+      books,
+      allCategories,
+      todoItems,
+    ],
   );
 
-  if (!bookId) {
+  if (!bookId && isAuthenticated && !requiresAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
           <div className={styles.warning}>
             No book selected. Please select a book from the <Link href="/books" className={styles.warningLink}>Books page</Link>.
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || requiresAuthRecovery) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.inner}>
+          <AuthRecoveryPanel
+            busy={busy || (requiresAuthRecovery && loading)}
+            error={displayError}
+            onLogin={handleAuthRecovery}
+          />
         </div>
       </div>
     );
@@ -883,7 +982,7 @@ function MatrixPageContent() {
           </div>
         )}
 
-        {!loading && isAuthenticated && (
+        {!loading && (
             <div className={styles.matrixSection}>
               <div className={styles.matrixHeader}>
                 <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>

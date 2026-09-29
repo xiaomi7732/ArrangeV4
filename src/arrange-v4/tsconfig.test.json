@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "incremental": false,
+    "rootDir": ".",
+    "outDir": ".test-dist",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "types": ["node"]
+  },
+  "include": [
+    "lib/auth/recoveryState.ts",
+    "lib/auth/recoveryState.test.ts",
+    "lib/dateUtils.ts",
+    "lib/dateUtils.test.ts",
+    "lib/hooks/useRefreshOnPageActivation.ts",
+    "lib/hooks/useRefreshOnPageActivation.test.ts",
+    "lib/selectionUtils.ts",
+    "lib/selectionUtils.test.ts",
+    "lib/store/tokenAcquisition.ts",
+    "lib/store/tokenAcquisition.test.ts"
+  ]
+}

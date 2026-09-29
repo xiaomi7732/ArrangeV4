@@ -2,6 +2,7 @@ import type {
   Book,
   CreateBookOptions,
   ListItemsOptions,
+  StoreOperationOptions,
   StoreOptions,
   TodoItem,
   TodoItemWithId,
@@ -28,9 +29,9 @@ export class MultiBackendStore implements TodoStore {
     return this.calendarStore;
   }
 
-  async listBooks(): Promise<Book[]> {
+  async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
     // Only one backend today; future versions would merge results from each.
-    return this.calendarStore.listBooks();
+    return this.calendarStore.listBooks(options);
   }
 
   createBook(name: string, opts: CreateBookOptions): Promise<Book> {
@@ -49,8 +50,13 @@ export class MultiBackendStore implements TodoStore {
     return this.routeByBookId(bookId).createItem(bookId, item);
   }
 
-  updateItem(bookId: string, itemId: string, updates: Partial<TodoItem>): Promise<TodoItemWithId> {
-    return this.routeByBookId(bookId).updateItem(bookId, itemId, updates);
+  updateItem(
+    bookId: string,
+    itemId: string,
+    updates: Partial<TodoItem>,
+    options?: StoreOperationOptions,
+  ): Promise<TodoItemWithId> {
+    return this.routeByBookId(bookId).updateItem(bookId, itemId, updates, options);
   }
 
   deleteItem(bookId: string, itemId: string): Promise<void> {
