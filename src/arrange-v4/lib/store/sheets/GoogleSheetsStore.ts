@@ -391,10 +391,11 @@ export class GoogleSheetsStore implements TodoStore {
       const token = await this.tokenAcquisition.getToken(options);
       const loaded = await this.loadSheet(spreadsheetId, options, token, true);
       const updatedAt = new Date().toISOString();
+      const recordsById = new Map(
+        loaded.records.map(record => [record.item.id, record]),
+      );
       const prepared = updates.map(update => {
-        const existing = loaded.records.find(
-          record => record.item.id === update.itemId,
-        );
+        const existing = recordsById.get(update.itemId);
         if (!existing) {
           throw new Error(`TODO item "${update.itemId}" no longer exists.`);
         }

@@ -49,7 +49,10 @@ export function setLastBookId(bookId: string): void {
     const backend = parseBookId(bookId)?.backend;
     if (!backend) return;
     localStorage.setItem(lastBookKey(backend), bookId);
-    localStorage.removeItem(LAST_BOOK_ID_KEY);
+    const legacy = localStorage.getItem(LAST_BOOK_ID_KEY);
+    if (legacy && parseBookId(legacy)?.backend === backend) {
+      localStorage.removeItem(LAST_BOOK_ID_KEY);
+    }
   } catch {
     // Storage full or blocked — silently ignore
   }

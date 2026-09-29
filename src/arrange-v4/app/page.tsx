@@ -7,13 +7,12 @@ import type { AuthProvider } from '@/lib/auth/types';
 import { useStore } from '@/lib/store/useStore';
 import { normalizeBookId } from '@/lib/store/types';
 import { getLastBookId } from '@/lib/bookStorage';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 
 export default function Home() {
   const auth = useAuthClient();
   const {
-    activeProvider,
     googleBusy,
     googleEnabled,
     googleReady,
@@ -23,6 +22,8 @@ export default function Home() {
   const store = useStore();
   const router = useRouter();
   const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
+  const [signingInProvider, setSigningInProvider] = useState<AuthProvider | null>(null);
+  const loginInProgressRef = useRef(false);
 
   const { isAuthenticated, busy } = auth;
 
@@ -69,11 +70,17 @@ export default function Home() {
   }, [isAuthenticated, auth, store]);
 
   const handleLogin = async (provider: AuthProvider) => {
+    if (loginInProgressRef.current) return;
+    loginInProgressRef.current = true;
+    setSigningInProvider(provider);
     try {
       await loginWithProvider(provider);
       router.push('/books');
     } catch (error) {
       console.error('Login failed:', error);
+    } finally {
+      loginInProgressRef.current = false;
+      setSigningInProvider(null);
     }
   };
 
@@ -118,24 +125,24 @@ export default function Home() {
               <p className={styles.providerPrompt}>Choose where Arrange stores your books:</p>
               <button
                 onClick={() => void handleLogin('microsoft')}
-                disabled={activeProvider === 'microsoft' && busy}
+                disabled={signingInProvider !== null || busy}
                 className={`${styles.button} ${styles.buttonPrimary}`}
               >
-                {activeProvider === 'microsoft' && busy
+                {signingInProvider === 'microsoft'
                   ? 'Signing in...'
                   : 'Continue with Microsoft'}
               </button>
               {googleEnabled && (
                 <button
                   onClick={() => void handleGoogleAction()}
-                  disabled={googleBusy}
+                  disabled={signingInProvider !== null || busy || googleBusy}
                   className={`${styles.button} ${styles.buttonGoogle}`}
                 >
                   {!googleReady && googleBusy
                     ? 'Loading Google sign-in...'
                     : !googleReady
                       ? 'Retry Google sign-in'
-                    : activeProvider === 'google' && busy
+                    : signingInProvider === 'google'
                       ? 'Signing in...'
                       : 'Continue with Google'}
                 </button>
