@@ -55,7 +55,7 @@ export function useBookId(routePrefix: string) {
   // a different book — that's misleading. Send to /books in that case.
   useEffect(() => {
     if (!rawBookId) {
-      const saved = normalizeBookId(getLastBookId());
+      const saved = normalizeBookId(getLastBookId(store.activeBackend));
       const savedBackend = saved ? parseBookId(saved)?.backend : undefined;
       if (saved && savedBackend && authProviderForBackend(savedBackend) === provider) {
         router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
@@ -65,7 +65,6 @@ export function useBookId(routePrefix: string) {
     } else {
       const backend = parseBookId(normalizedBookId)?.backend;
       if (backend && authProviderForBackend(backend) !== provider) {
-        clearLastBookId();
         try {
           selectProvider(authProviderForBackend(backend));
         } catch (providerError) {
@@ -81,6 +80,7 @@ export function useBookId(routePrefix: string) {
     router,
     routePrefix,
     selectProvider,
+    store.activeBackend,
   ]);
 
   const fetchBooks = useCallback(async (
@@ -96,7 +96,7 @@ export function useBookId(routePrefix: string) {
       setAuthRecoveryRequired(false);
 
       if (bookId && !all.some(b => b.id === bookId)) {
-        clearLastBookId();
+        clearLastBookId(store.activeBackend);
         router.replace('/books');
       } else if (bookId) {
         setLastBookId(bookId);

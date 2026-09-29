@@ -68,6 +68,10 @@ export class MultiBackendStore implements TodoStore {
     return this.routeByBookId(bookId).deleteItem(bookId, itemId);
   }
 
+  deleteItems(bookId: string, itemIds: string[]): Promise<void> {
+    return this.routeByBookId(bookId).deleteItems(bookId, itemIds);
+  }
+
   updateItems(
     bookId: string,
     updates: ItemUpdate[],

@@ -122,6 +122,7 @@ export interface TodoStore {
     options?: StoreOperationOptions,
   ): Promise<TodoItemWithId[]>;
   deleteItem(bookId: string, itemId: string): Promise<void>;
+  deleteItems(bookId: string, itemIds: string[]): Promise<void>;
 }
 
 /**

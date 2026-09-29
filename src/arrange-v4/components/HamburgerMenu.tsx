@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { getLastBookId } from '@/lib/bookStorage';
+import { backendForAuthProvider } from '@/lib/store/types';
 import { useTopBarActions } from './TopBarProvider';
 import styles from './HamburgerMenu.module.css';
 
@@ -27,7 +28,9 @@ const BASE_NAV_ITEMS: NavItem[] = [
 
 function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isOnScrum: boolean }) {
   const searchParams = useSearchParams();
-  const bookId = searchParams.get('bookId') || getLastBookId();
+  const auth = useAuthClient();
+  const bookId = searchParams.get('bookId')
+    || getLastBookId(backendForAuthProvider(auth.provider));
   const query = bookId ? `?bookId=${encodeURIComponent(bookId)}` : '';
 
   return (
@@ -68,14 +71,14 @@ export default function HamburgerMenu() {
   const showViewSwitcher = isOnMatrix || isOnScrum;
   const navItems = useMemo(() => {
     void isOpen;
-    const savedBookId = getLastBookId();
+    const savedBookId = getLastBookId(backendForAuthProvider(auth.provider));
     if (!savedBookId) return BASE_NAV_ITEMS;
     return BASE_NAV_ITEMS.map(item =>
       item.matchPrefix
         ? { ...item, href: `${item.href}?bookId=${encodeURIComponent(savedBookId)}` }
         : item,
     );
-  }, [isOpen]);
+  }, [isOpen, auth.provider]);
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) {

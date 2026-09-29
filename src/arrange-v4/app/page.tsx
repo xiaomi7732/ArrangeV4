@@ -45,7 +45,7 @@ export default function Home() {
           return;
         }
 
-        const savedBookId = normalizeBookId(getLastBookId());
+        const savedBookId = normalizeBookId(getLastBookId(store.activeBackend));
         if (savedBookId && books.some(b => b.id === savedBookId)) {
           setMatrixAvailable({ show: true, bookId: savedBookId });
           return;

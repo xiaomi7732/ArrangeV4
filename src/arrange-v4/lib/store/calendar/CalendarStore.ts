@@ -375,6 +375,14 @@ export class CalendarStore implements TodoStore {
     await client.api(`/me/calendars/${calendarId}/events/${itemId}`).delete();
   }
 
+  async deleteItems(bookId: string, itemIds: string[]): Promise<void> {
+    const results = await Promise.allSettled(
+      itemIds.map(itemId => this.deleteItem(bookId, itemId)),
+    );
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
+
   /* ---- Calendar-specific: not on the TodoStore interface ---- */
 
   /**

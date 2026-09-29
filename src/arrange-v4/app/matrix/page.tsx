@@ -771,21 +771,15 @@ function MatrixPageContent() {
     updateFilterState();
 
     try {
-      const CONCURRENCY = 5;
-      let idx = 0;
-      const worker = async () => {
-        while (idx < affectedItems.length) {
-          const item = affectedItems[idx++];
-          await store.updateItem(operationBookId, item.id, {
+      await store.updateItems(
+        operationBookId,
+        affectedItems.map(item => ({
+          itemId: item.id,
+          updates: {
             categories: computeNewCategories(item),
-          });
-        }
-      };
-      const results = await Promise.allSettled(
-        Array.from({ length: Math.min(CONCURRENCY, affectedItems.length) }, () => worker()),
+          },
+        })),
       );
-      const failure = results.find(result => result.status === 'rejected');
-      if (failure?.status === 'rejected') throw failure.reason;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return;

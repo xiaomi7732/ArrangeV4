@@ -385,6 +385,34 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
+  it('deletes multiple items with one read and one tombstone append', async () => {
+    const first = [
+      'todo-1', 'First', '', '', 'cancelled', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const second = [
+      'todo-2', 'Second', '', '', 'cancelled', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS), first, second] }),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values.length, 2);
+        assert.ok(body.values.every(
+          row => row[TODO_HEADERS.indexOf('deleted')] === true,
+        ));
+        return jsonResponse({ updates: { updatedRows: 2 } });
+      },
+    ]);
+    try {
+      await createStore().deleteItems('sheet:sheet-1', ['todo-1', 'todo-2']);
+      assert.equal(mock.requests.length, 2);
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('invalidates rejected cached tokens and requests explicit recovery', async () => {
     let invalidations = 0;
     const mock = installFetchMock([

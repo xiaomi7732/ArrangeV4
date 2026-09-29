@@ -143,7 +143,17 @@ export class GoogleSheetsStore implements TodoStore {
     if (init.body && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    const response = await fetch(url, { ...init, headers });
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetch(url, { ...init, headers });
+      if (response.status !== 429 || attempt === 2) break;
+      const retryAfterSeconds = Number(response.headers.get('Retry-After'));
+      const delayMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : 500 * (2 ** attempt);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    if (!response) throw new Error('Google API request did not return a response.');
     if (!response.ok) {
       if (response.status === 401) {
         this.invalidateToken();
@@ -385,22 +395,34 @@ export class GoogleSheetsStore implements TodoStore {
   }
 
   async deleteItem(bookId: string, itemId: string): Promise<void> {
+    await this.deleteItems(bookId, [itemId]);
+  }
+
+  async deleteItems(bookId: string, itemIds: string[]): Promise<void> {
+    if (itemIds.length === 0) return;
     const spreadsheetId = nativeSheetId(bookId);
     await this.enqueueMutation(spreadsheetId, async () => {
       const token = await this.tokenAcquisition.getToken();
       const loaded = await this.loadSheet(spreadsheetId, undefined, token);
-      const existing = loaded.records.find(record => record.item.id === itemId);
-      if (!existing) return;
       const updatedAt = new Date().toISOString();
-      await this.appendValues(
-        spreadsheetId,
-        [serializeSheetRow(
+      const recordsById = new Map(
+        loaded.records.map(record => [record.item.id, record]),
+      );
+      const tombstones = itemIds.flatMap(itemId => {
+        const existing = recordsById.get(itemId);
+        if (!existing) return [];
+        return [serializeSheetRow(
           loaded.headers,
           existing.item,
           existing.createdAt || updatedAt,
           updatedAt,
           { deleted: true },
-        )],
+        )];
+      });
+      if (tombstones.length === 0) return;
+      await this.appendValues(
+        spreadsheetId,
+        tombstones,
         undefined,
         token,
       );
