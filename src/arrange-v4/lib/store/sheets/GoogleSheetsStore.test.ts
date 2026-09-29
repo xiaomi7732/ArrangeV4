@@ -82,7 +82,7 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
-  it('creates and tags a spreadsheet before initializing its TODO header', async () => {
+  it('initializes a spreadsheet before tagging it for discovery', async () => {
     const mock = installFetchMock([
       request => {
         assert.equal(request.init.method, 'POST');
@@ -92,15 +92,15 @@ describe('GoogleSheetsStore', () => {
         });
       },
       request => {
-        assert.equal(request.init.method, 'PATCH');
-        assert.match(String(request.init.body), /"arrange":"v4"/);
-        return jsonResponse({ id: 'created-sheet' });
-      },
-      request => {
         assert.equal(request.init.method, 'PUT');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.deepEqual(body.values[0], Array.from(TODO_HEADERS));
         return jsonResponse({ updatedRows: 1 });
+      },
+      request => {
+        assert.equal(request.init.method, 'PATCH');
+        assert.match(String(request.init.body), /"arrange":"v4"/);
+        return jsonResponse({ id: 'created-sheet' });
       },
     ]);
     try {
@@ -156,6 +156,78 @@ describe('GoogleSheetsStore', () => {
       assert.equal(updated.subject, 'Existing subject');
       assert.equal(updated.urgent, true);
       assert.deepEqual(updated.categories, ['tag']);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('preserves values in user-defined columns when updating a row', async () => {
+    const headers = [...TODO_HEADERS, 'customNotes'];
+    const row = [
+      'todo-1', 'Existing subject', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '', 'keep this',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [headers, row] }),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values[0][headers.indexOf('customNotes')], 'keep this');
+        return jsonResponse({ updatedRows: 1 });
+      },
+    ]);
+    try {
+      await createStore().updateItem('sheet:sheet-1', 'todo-1', { urgent: true });
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('derives lifecycle timestamps during status transitions', async () => {
+    const row = [
+      'todo-1', 'Finish me', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS), row] }),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);
+        assert.ok(body.values[0][TODO_HEADERS.indexOf('finishDateTime')]);
+        return jsonResponse({ updatedRows: 1 });
+      },
+    ]);
+    try {
+      const updated = await createStore().updateItem(
+        'sheet:sheet-1',
+        'todo-1',
+        { status: 'finished' },
+      );
+      assert.ok(updated.startDateTime);
+      assert.ok(updated.finishDateTime);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('filters windowed item queries by event overlap', async () => {
+    const inWindow = [
+      'todo-1', 'In range', '2026-01-15T10:00:00.000Z', '2026-01-15T11:00:00.000Z',
+      'new', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const outOfWindow = [
+      'todo-2', 'Out of range', '2026-03-15T10:00:00.000Z', '2026-03-15T11:00:00.000Z',
+      'new', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS), inWindow, outOfWindow] }),
+    ]);
+    try {
+      const items = await createStore().listItems('sheet:sheet-1', {
+        range: 'window',
+        fromDate: '2026-01-01T00:00:00.000Z',
+        toDate: '2026-02-01T00:00:00.000Z',
+      });
+      assert.deepEqual(items.map(item => item.id), ['todo-1']);
     } finally {
       mock.restore();
     }

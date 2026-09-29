@@ -248,13 +248,12 @@ function ScrumPageContent() {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
-                const replayInteraction = pendingFetchInteractionRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
                 pendingFetchInteractionRef.current = 'allow-interactive';
                 void fetchEvents({
                   preserveError: replayPreserveError,
-                  interaction: replayInteraction,
+                  interaction: 'silent-only',
                 });
               }
             });
@@ -297,11 +296,10 @@ function ScrumPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
-      const interaction = pendingFetchInteractionRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
       pendingFetchInteractionRef.current = 'allow-interactive';
-      void fetchEvents({ preserveError, interaction });
+      void fetchEvents({ preserveError, interaction: 'silent-only' });
     }
   };
 

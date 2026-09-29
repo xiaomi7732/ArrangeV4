@@ -20,6 +20,7 @@ interface AuthContextValue {
   client: AuthClient;
   activeProvider: AuthProvider;
   googleEnabled: boolean;
+  googleReady: boolean;
   loginWithProvider(provider: AuthProvider): Promise<void>;
   selectProvider(provider: AuthProvider): void;
 }
@@ -68,7 +69,7 @@ export function ActiveAuthProvider({ children }: { children: ReactNode }) {
   const googleConfigured = isGoogleProviderEnabled();
   const microsoft = useMicrosoftAuthClient();
   const google = useGoogleAuthClient(googleConfigured);
-  const googleEnabled = googleConfigured && google.ready;
+  const googleEnabled = googleConfigured;
   const activeProvider = useSyncExternalStore<AuthProvider>(
     subscribeToProvider,
     () => readStoredProvider(googleConfigured),
@@ -94,9 +95,17 @@ export function ActiveAuthProvider({ children }: { children: ReactNode }) {
     client,
     activeProvider,
     googleEnabled,
+    googleReady: google.ready,
     loginWithProvider,
     selectProvider,
-  }), [client, activeProvider, googleEnabled, loginWithProvider, selectProvider]);
+  }), [
+    client,
+    activeProvider,
+    googleEnabled,
+    google.ready,
+    loginWithProvider,
+    selectProvider,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

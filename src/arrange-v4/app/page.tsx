@@ -12,7 +12,12 @@ import styles from './page.module.css';
 
 export default function Home() {
   const auth = useAuthClient();
-  const { googleEnabled, loginWithProvider } = useAuthProvider();
+  const {
+    activeProvider,
+    googleEnabled,
+    googleReady,
+    loginWithProvider,
+  } = useAuthProvider();
   const store = useStore();
   const router = useRouter();
   const [matrixAvailable, setMatrixAvailable] = useState<{ show: boolean; bookId?: string }>({ show: false });
@@ -99,18 +104,24 @@ export default function Home() {
               <p className={styles.providerPrompt}>Choose where Arrange stores your books:</p>
               <button
                 onClick={() => void handleLogin('microsoft')}
-                disabled={busy}
+                disabled={activeProvider === 'microsoft' && busy}
                 className={`${styles.button} ${styles.buttonPrimary}`}
               >
-                {busy ? 'Signing in...' : 'Continue with Microsoft'}
+                {activeProvider === 'microsoft' && busy
+                  ? 'Signing in...'
+                  : 'Continue with Microsoft'}
               </button>
               {googleEnabled && (
                 <button
                   onClick={() => void handleLogin('google')}
-                  disabled={busy}
+                  disabled={!googleReady || (activeProvider === 'google' && busy)}
                   className={`${styles.button} ${styles.buttonGoogle}`}
                 >
-                  {busy ? 'Signing in...' : 'Continue with Google'}
+                  {!googleReady
+                    ? 'Loading Google sign-in...'
+                    : activeProvider === 'google' && busy
+                      ? 'Signing in...'
+                      : 'Continue with Google'}
                 </button>
               )}
             </>

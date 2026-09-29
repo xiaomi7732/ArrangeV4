@@ -54,6 +54,8 @@ interface CachedToken {
 }
 
 let gisScriptPromise: Promise<void> | null = null;
+let volatileToken: CachedToken | null = null;
+let volatileUser: AuthUser | null = null;
 
 function loadGoogleIdentityServices(): Promise<void> {
   if (window.google?.accounts.oauth2) return Promise.resolve();
@@ -103,7 +105,27 @@ function writeSessionValue(key: string, value: unknown): void {
   }
 }
 
+function readCachedToken(): CachedToken | null {
+  return readSessionValue<CachedToken>(TOKEN_KEY) ?? volatileToken;
+}
+
+function writeCachedToken(token: CachedToken): void {
+  volatileToken = token;
+  writeSessionValue(TOKEN_KEY, token);
+}
+
+function readCachedUser(): AuthUser | null {
+  return readSessionValue<AuthUser>(USER_KEY) ?? volatileUser;
+}
+
+function writeCachedUser(user: AuthUser): void {
+  volatileUser = user;
+  writeSessionValue(USER_KEY, user);
+}
+
 function clearGoogleSession(): void {
+  volatileToken = null;
+  volatileUser = null;
   try {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(USER_KEY);
@@ -113,6 +135,7 @@ function clearGoogleSession(): void {
 }
 
 function clearGoogleToken(): void {
+  volatileToken = null;
   try {
     sessionStorage.removeItem(TOKEN_KEY);
   } catch {
@@ -148,17 +171,24 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [user, setUser] = useState<AuthUser | null>(() => readSessionValue<AuthUser>(USER_KEY));
+  const [initializationFailed, setInitializationFailed] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(readCachedUser);
 
   useEffect(() => {
     if (!enabled || !clientId) return;
     let cancelled = false;
     void loadGoogleIdentityServices()
       .then(() => {
-        if (!cancelled) setReady(true);
+        if (!cancelled) {
+          setInitializationFailed(false);
+          setReady(true);
+        }
       })
       .catch(error => {
-        if (!cancelled) console.error('Failed to initialize Google sign-in:', error);
+        if (!cancelled) {
+          setInitializationFailed(true);
+          console.error('Failed to initialize Google sign-in:', error);
+        }
       });
     return () => {
       cancelled = true;
@@ -175,6 +205,8 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     setBusy(true);
     try {
       await loadGoogleIdentityServices();
+      setInitializationFailed(false);
+      setReady(true);
       const oauth2 = window.google?.accounts.oauth2;
       if (!oauth2) throw new Error('Google OAuth is unavailable.');
 
@@ -199,7 +231,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
         accessToken: response.access_token,
         expiresAt: Date.now() + Math.max(0, response.expires_in || 3600) * 1000,
       };
-      writeSessionValue(TOKEN_KEY, token);
+      writeCachedToken(token);
       return token.accessToken;
     } finally {
       setBusy(false);
@@ -207,7 +239,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   }, [clientId, enabled]);
 
   const acquireToken = useCallback(async (options?: AcquireTokenOptions): Promise<string> => {
-    const cached = readSessionValue<CachedToken>(TOKEN_KEY);
+    const cached = readCachedToken();
     if (validToken(cached)) return cached.accessToken;
     if (options?.silentOnly) {
       throw new InteractiveAuthenticationRequiredError(
@@ -225,7 +257,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     const token = await requestToken('select_account');
     try {
       const nextUser = await fetchGoogleUser(token);
-      writeSessionValue(USER_KEY, nextUser);
+      writeCachedUser(nextUser);
       setUser(nextUser);
     } catch (error) {
       clearGoogleSession();
@@ -234,7 +266,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   }, [requestToken]);
 
   const logout = useCallback(async (): Promise<void> => {
-    const cached = readSessionValue<CachedToken>(TOKEN_KEY);
+    const cached = readCachedToken();
     clearGoogleSession();
     setUser(null);
     if (!cached?.accessToken) return;
@@ -252,11 +284,21 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     provider: 'google',
     ready,
     isAuthenticated: !!user,
-    busy: !ready || busy,
+    busy: busy || (!ready && !initializationFailed),
     acquireToken,
     invalidateToken,
     login,
     logout,
     getUser,
-  }), [user, ready, busy, acquireToken, invalidateToken, login, logout, getUser]);
+  }), [
+    user,
+    ready,
+    busy,
+    initializationFailed,
+    acquireToken,
+    invalidateToken,
+    login,
+    logout,
+    getUser,
+  ]);
 }

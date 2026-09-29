@@ -25,6 +25,7 @@ const SHEETS_API = 'https://sheets.googleapis.com/v4';
 const SPREADSHEET_MIME_TYPE = 'application/vnd.google-apps.spreadsheet';
 const ARRANGE_PROPERTY_KEY = 'arrange';
 const ARRANGE_PROPERTY_VALUE = 'v4';
+const PENDING_CLEANUP_KEY = 'arrange_google_pending_cleanup';
 const mutationQueues = new Map<string, Promise<void>>();
 
 interface DriveFile {
@@ -78,6 +79,42 @@ function driveFileToBook(file: DriveFile): Book | null {
   };
 }
 
+function readPendingCleanup(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PENDING_CLEANUP_KEY) || '[]');
+    return Array.isArray(value)
+      ? value.filter((id): id is string => typeof id === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingCleanup(ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (ids.length > 0) {
+      sessionStorage.setItem(PENDING_CLEANUP_KEY, JSON.stringify(ids));
+    } else {
+      sessionStorage.removeItem(PENDING_CLEANUP_KEY);
+    }
+  } catch {
+    // Best-effort cleanup tracking is unavailable in storage-restricted contexts.
+  }
+}
+
+function itemOverlapsWindow(item: TodoItem, fromDate: string, toDate: string): boolean {
+  const from = Date.parse(fromDate);
+  const to = Date.parse(toDate);
+  const start = Date.parse(item.etsDateTime || '');
+  const end = Date.parse(item.etaDateTime || item.etsDateTime || '');
+  return Number.isFinite(start)
+    && Number.isFinite(end)
+    && start < to
+    && end > from;
+}
+
 export class GoogleSheetsStore implements TodoStore {
   private readonly tokenAcquisition: TokenAcquisitionCoordinator;
   private readonly invalidateToken: () => void;
@@ -127,6 +164,7 @@ export class GoogleSheetsStore implements TodoStore {
 
   async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
     const token = await this.tokenAcquisition.getToken(options);
+    await this.cleanupPendingSpreadsheets(token, options);
     const files: DriveFile[] = [];
     let pageToken: string | undefined;
     do {
@@ -180,6 +218,13 @@ export class GoogleSheetsStore implements TodoStore {
     if (sheetId !== undefined) this.sheetIdCache.set(spreadsheetId, sheetId);
 
     try {
+      await this.writeValues(
+        spreadsheetId,
+        `${TODO_SHEET_NAME}!A1:R1`,
+        [Array.from(TODO_HEADERS)],
+        undefined,
+        token,
+      );
       await this.request(
         `${DRIVE_API}/files/${encodeURIComponent(spreadsheetId)}?fields=id,name,capabilities(canEdit),owners(displayName,emailAddress)`,
         {
@@ -191,20 +236,16 @@ export class GoogleSheetsStore implements TodoStore {
         undefined,
         token,
       );
-      await this.writeValues(
-        spreadsheetId,
-        `${TODO_SHEET_NAME}!A1:R1`,
-        [Array.from(TODO_HEADERS)],
-        undefined,
-        token,
-      );
     } catch (error) {
+      writePendingCleanup([...new Set([...readPendingCleanup(), spreadsheetId])]);
       await this.request(
         `${DRIVE_API}/files/${encodeURIComponent(spreadsheetId)}`,
         { method: 'DELETE' },
         undefined,
         token,
-      ).catch(cleanupError => {
+      ).then(() => {
+        writePendingCleanup(readPendingCleanup().filter(id => id !== spreadsheetId));
+      }, cleanupError => {
         console.error('Failed to remove partially-created Arrange spreadsheet:', cleanupError);
       });
       throw error;
@@ -234,7 +275,17 @@ export class GoogleSheetsStore implements TodoStore {
     const spreadsheetId = nativeSheetId(bookId);
     const token = await this.tokenAcquisition.getToken(opts);
     const loaded = await this.loadSheet(spreadsheetId, opts, token);
-    return loaded.records.map(record => record.item);
+    const items = loaded.records.map(record => record.item);
+    if (opts.range === 'all') return items;
+    if (!opts.fromDate || !opts.toDate) {
+      throw new Error("listItems with range='window' requires fromDate and toDate.");
+    }
+    const from = Date.parse(opts.fromDate);
+    const to = Date.parse(opts.toDate);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+      throw new Error('listItems requires a valid date window with fromDate before toDate.');
+    }
+    return items.filter(item => itemOverlapsWindow(item, opts.fromDate!, opts.toDate!));
   }
 
   async createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId> {
@@ -288,12 +339,45 @@ export class GoogleSheetsStore implements TodoStore {
       const loaded = await this.loadSheet(spreadsheetId, options, token, true);
       const existing = loaded.records.find(record => record.item.id === itemId);
       if (!existing) throw new Error(`TODO item "${itemId}" no longer exists.`);
-      const updated: TodoItemWithId = { ...existing.item, ...updates, id: itemId };
       const updatedAt = new Date().toISOString();
+      const updated: TodoItemWithId = { ...existing.item, ...updates, id: itemId };
+      if (updates.status !== undefined) {
+        if (
+          updates.status === 'inProgress'
+          && !existing.item.startDateTime
+          && updates.startDateTime === undefined
+        ) {
+          updated.startDateTime = updatedAt;
+        }
+        if (updates.status === 'new' && updates.startDateTime === undefined) {
+          updated.startDateTime = null;
+        }
+        if (updates.status === 'finished') {
+          if (!existing.item.startDateTime && updates.startDateTime === undefined) {
+            updated.startDateTime = updatedAt;
+          }
+          if (!existing.item.finishDateTime && updates.finishDateTime === undefined) {
+            updated.finishDateTime = updatedAt;
+          }
+        }
+        if (
+          updates.status !== 'finished'
+          && existing.item.status === 'finished'
+          && updates.finishDateTime === undefined
+        ) {
+          updated.finishDateTime = null;
+        }
+      }
       await this.writeValues(
         spreadsheetId,
         `${TODO_SHEET_NAME}!A${existing.rowNumber}:${columnName(loaded.headers.length)}${existing.rowNumber}`,
-        [serializeSheetRow(loaded.headers, updated, existing.createdAt || updatedAt, updatedAt)],
+        [serializeSheetRow(
+          loaded.headers,
+          updated,
+          existing.createdAt || updatedAt,
+          updatedAt,
+          existing.rawValues,
+        )],
         options,
         token,
       );
@@ -381,6 +465,30 @@ export class GoogleSheetsStore implements TodoStore {
       options,
       accessToken,
     );
+  }
+
+  private async cleanupPendingSpreadsheets(
+    accessToken: string,
+    options?: StoreOperationOptions,
+  ): Promise<void> {
+    const pending = readPendingCleanup();
+    if (pending.length === 0) return;
+
+    const remaining: string[] = [];
+    for (const spreadsheetId of pending) {
+      try {
+        await this.request(
+          `${DRIVE_API}/files/${encodeURIComponent(spreadsheetId)}`,
+          { method: 'DELETE' },
+          options,
+          accessToken,
+        );
+      } catch (error) {
+        remaining.push(spreadsheetId);
+        console.error('Failed to remove partially-created Arrange spreadsheet:', error);
+      }
+    }
+    writePendingCleanup(remaining);
   }
 
   private async getSheetId(spreadsheetId: string, accessToken: string): Promise<number> {

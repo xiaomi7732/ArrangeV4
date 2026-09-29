@@ -29,6 +29,7 @@ export interface SheetTodoRecord {
   rowNumber: number;
   createdAt: string;
   updatedAt: string;
+  rawValues: unknown[];
 }
 
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
@@ -124,7 +125,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       matrixOrder: numberCell(cellByHeader(headers, row, 'matrixOrder')),
       scrumOrder: numberCell(cellByHeader(headers, row, 'scrumOrder')),
     };
-    return [{ item, rowNumber: index + 2, createdAt, updatedAt }];
+    return [{ item, rowNumber: index + 2, createdAt, updatedAt, rawValues: row }];
   });
 }
 
@@ -139,6 +140,7 @@ export function serializeSheetRow(
   item: TodoItemWithId,
   createdAt: string,
   updatedAt: string,
+  existingValues?: unknown[],
 ): unknown[] {
   const cells: Record<string, unknown> = {
     id: item.id,
@@ -160,5 +162,9 @@ export function serializeSheetRow(
     matrixOrder: item.matrixOrder ?? '',
     scrumOrder: item.scrumOrder ?? '',
   };
-  return headers.map(header => cells[header] ?? '');
+  return headers.map((header, index) => (
+    Object.prototype.hasOwnProperty.call(cells, header)
+      ? cells[header]
+      : existingValues?.[index] ?? ''
+  ));
 }
