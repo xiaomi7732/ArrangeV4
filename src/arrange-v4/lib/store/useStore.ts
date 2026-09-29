@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { MultiBackendStore } from './multiStore';
+import { backendForAuthProvider } from './types';
 
 /**
  * React hook that returns a `MultiBackendStore` bound to the current user's
@@ -11,6 +12,13 @@ import { MultiBackendStore } from './multiStore';
  * from re-firing on every parent render.
  */
 export function useStore(): MultiBackendStore {
-  const { acquireToken } = useAuthClient();
-  return useMemo(() => new MultiBackendStore({ acquireToken }), [acquireToken]);
+  const { acquireToken, invalidateToken, provider } = useAuthClient();
+  return useMemo(
+    () => new MultiBackendStore({
+      acquireToken,
+      invalidateToken,
+      activeBackend: backendForAuthProvider(provider),
+    }),
+    [acquireToken, invalidateToken, provider],
+  );
 }

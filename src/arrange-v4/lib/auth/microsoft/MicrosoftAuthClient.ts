@@ -47,6 +47,10 @@ export function useMicrosoftAuthClient(): AuthClient {
     await instance.loginPopup(loginRequest);
   }, [instance]);
 
+  const invalidateToken = useCallback(() => {
+    // MSAL owns its token cache and evaluates expiry/refresh on every silent request.
+  }, []);
+
   const logout = useCallback(async (): Promise<void> => {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
     const postLogoutRedirectUri =
@@ -70,13 +74,15 @@ export function useMicrosoftAuthClient(): AuthClient {
   return useMemo<AuthClient>(
     () => ({
       provider: 'microsoft',
+      ready: true,
       isAuthenticated,
       busy,
       acquireToken,
+      invalidateToken,
       login,
       logout,
       getUser,
     }),
-    [isAuthenticated, busy, acquireToken, login, logout, getUser],
+    [isAuthenticated, busy, acquireToken, invalidateToken, login, logout, getUser],
   );
 }
