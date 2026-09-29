@@ -45,6 +45,12 @@
   align-items: center;
 }
 
+.providerPrompt {
+  margin: 0 0 4px;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
 .button {
   font-weight: 500;
   padding: 10px 32px;
@@ -78,6 +84,17 @@
 
 .buttonSecondary:hover:not(:disabled) {
   background-color: #d1d5db;
+}
+
+.buttonGoogle {
+  background-color: white;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+}
+
+.buttonGoogle:hover:not(:disabled) {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
 }
 
 @media (max-width: 600px) {

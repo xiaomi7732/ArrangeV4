@@ -6,9 +6,14 @@ import styles from './CreateCalendar.module.css';
 interface CreateCalendarProps {
   onCreateCalendar: (name: string) => Promise<void>;
   disabled?: boolean;
+  appendArrangeSuffix?: boolean;
 }
 
-export default function CreateCalendar({ onCreateCalendar, disabled = false }: CreateCalendarProps) {
+export default function CreateCalendar({
+  onCreateCalendar,
+  disabled = false,
+  appendArrangeSuffix = true,
+}: CreateCalendarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [calendarName, setCalendarName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -26,18 +31,18 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
     setError(null);
 
     try {
-      // Automatically append " by arrange" if not already present
-      const finalName = calendarName.toLowerCase().endsWith(' by arrange')
-        ? calendarName
-        : `${calendarName} by arrange`;
+      const finalName = appendArrangeSuffix
+        && !calendarName.toLowerCase().endsWith(' by arrange')
+        ? `${calendarName} by arrange`
+        : calendarName;
       
       await onCreateCalendar(finalName);
       
       // Reset form and close modal on success
       setCalendarName('');
       setIsOpen(false);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create book');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create book');
     } finally {
       setIsCreating(false);
     }
@@ -92,9 +97,11 @@ export default function CreateCalendar({ onCreateCalendar, disabled = false }: C
                   disabled={isCreating}
                   autoFocus
                 />
-                <p className={styles.hint}>
-                  &quot; by arrange&quot; will be automatically added to the end
-                </p>
+                {appendArrangeSuffix && (
+                  <p className={styles.hint}>
+                    &quot; by arrange&quot; will be automatically added to the end
+                  </p>
+                )}
               </div>
 
               {error && (

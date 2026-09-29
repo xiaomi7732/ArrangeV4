@@ -393,6 +393,7 @@ function MatrixPageContent() {
 
       // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
       if (
+        store.activeBackend === 'calendar' &&
         !hasSessionSweepRun() &&
         !isSessionSweepInProgress() &&
         !sweepAttemptedRef.current

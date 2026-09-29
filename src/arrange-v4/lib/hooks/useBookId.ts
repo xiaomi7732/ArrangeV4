@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
-import { normalizeBookId } from '@/lib/store/types';
+import { authProviderForBackend, normalizeBookId, parseBookId } from '@/lib/store/types';
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -27,7 +27,7 @@ export function useBookId(routePrefix: string) {
   const rawBookId = searchParams.get('bookId');
   const bookId = normalizeBookId(rawBookId);
 
-  const { isAuthenticated, busy } = useAuthClient();
+  const { isAuthenticated, busy, provider } = useAuthClient();
   const store = useStore();
 
   const [books, setBooks] = useState<Book[]>([]);
@@ -48,13 +48,20 @@ export function useBookId(routePrefix: string) {
   useEffect(() => {
     if (!rawBookId) {
       const saved = normalizeBookId(getLastBookId());
-      if (saved) {
+      const savedBackend = saved ? parseBookId(saved)?.backend : undefined;
+      if (saved && savedBackend && authProviderForBackend(savedBackend) === provider) {
         router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
       }
     } else if (!bookId) {
       router.replace('/books');
+    } else {
+      const backend = parseBookId(bookId)?.backend;
+      if (backend && authProviderForBackend(backend) !== provider) {
+        clearLastBookId();
+        router.replace('/books');
+      }
     }
-  }, [rawBookId, bookId, router, routePrefix]);
+  }, [rawBookId, bookId, provider, router, routePrefix]);
 
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },
