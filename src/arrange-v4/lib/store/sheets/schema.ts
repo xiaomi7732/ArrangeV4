@@ -260,14 +260,23 @@ function looksLikeUnsupportedArrangeMetadata(value: unknown): boolean {
 function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata | null {
   const requiredHeaders = ['deleted', 'changedFields', 'operationId', 'parentOperations'];
   const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
-  if (
-    metadataIndex < requiredHeaders.length
-    || requiredHeaders.some(
-      (header, index) => headers[metadataIndex - requiredHeaders.length + index] !== header,
-    )
-  ) return null;
+  const orderBoundary = Math.max(
+    managedHeaderIndex(headers, 'matrixOrder'),
+    managedHeaderIndex(headers, 'scrumOrder'),
+  );
+  const blockStart = headers
+    .map((_, index) => index)
+    .filter(index => (
+      index > orderBoundary
+      && index + requiredHeaders.length <= metadataIndex
+      && requiredHeaders.every(
+        (header, offset) => headers[index + offset] === header,
+      )
+    ))
+    .at(-1);
+  if (blockStart === undefined) return null;
   const previousValues = requiredHeaders.map(
-    (_, index) => row[metadataIndex - requiredHeaders.length + index],
+    (_, index) => row[blockStart + index],
   );
   const operationId = optionalString(previousValues[2]);
   if (!operationId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)) {

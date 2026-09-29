@@ -769,6 +769,7 @@ describe('Google Sheets TODO schema', () => {
       'changedFields',
       'operationId',
       'parentOperations',
+      'customAfterRevision',
     ];
     const makeRow = () => Array<unknown>(headers.length).fill('');
     const base = makeRow();
@@ -777,6 +778,7 @@ describe('Google Sheets TODO schema', () => {
     base[headers.indexOf('status')] = 'new';
     base[headers.indexOf('operationId')] = 'custom base value';
     base[headers.lastIndexOf('operationId')] = baseOperation;
+    base[headers.indexOf('customAfterRevision')] = 'keep base';
 
     const patch = makeRow();
     patch[headers.indexOf('id')] = 'todo-1';
@@ -784,6 +786,7 @@ describe('Google Sheets TODO schema', () => {
     patch[headers.indexOf('changedFields')] = '["urgent"]';
     patch[headers.indexOf('operationId')] = 'custom patch value';
     patch[headers.lastIndexOf('operationId')] = patchOperation;
+    patch[headers.indexOf('customAfterRevision')] = 'keep patch';
     patch[headers.indexOf('parentOperations')] = JSON.stringify({
       urgent: baseOperation,
     });
@@ -794,6 +797,7 @@ describe('Google Sheets TODO schema', () => {
     tombstone[headers.indexOf('deleted')] = true;
     tombstone[headers.indexOf('operationId')] = 'custom delete value';
     tombstone[headers.lastIndexOf('operationId')] = deleteOperation;
+    tombstone[headers.indexOf('customAfterRevision')] = 'keep delete';
 
     const [updated] = parseSheetRows([headers, base, patch]);
     assert.equal(updated.item.urgent, true);
