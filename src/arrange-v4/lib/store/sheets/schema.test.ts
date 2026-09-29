@@ -238,6 +238,45 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.subject, 'Canonical subject');
   });
 
+  it('preserves extension columns appended after a canonical managed schema', () => {
+    const canonicalHeaders = Array.from(TODO_HEADERS);
+    const canonicalRow = serializeSheetRow(
+      canonicalHeaders,
+      {
+        id: 'todo-1',
+        subject: 'Canonical item',
+        matrixOrder: 2,
+        scrumOrder: 3,
+      },
+      '',
+      '',
+      { operationId: 'canonical-base' },
+    );
+    const headers = [
+      ...canonicalHeaders,
+      'matrixOrder',
+      'scrumOrder',
+      TODO_METADATA_HEADER,
+    ];
+    const row = [...canonicalRow, 100, 200, 'custom metadata'];
+    const normalized = normalizeHeaders(headers, [row]);
+
+    const [record] = parseSheetRows([normalized, row]);
+    const serialized = serializeSheetRow(
+      normalized,
+      { id: 'todo-2', subject: 'New item', matrixOrder: 4, scrumOrder: 5 },
+      '',
+      '',
+    );
+
+    assert.equal(record.item.matrixOrder, 2);
+    assert.equal(record.item.scrumOrder, 3);
+    assert.equal(serialized[16], 4);
+    assert.equal(serialized[17], 5);
+    assert.equal(serialized[18] !== '', true);
+    assert.deepEqual(serialized.slice(19), ['', '', '']);
+  });
+
   it('uses the latest appended version and hides tombstoned items', () => {
     const headers = Array.from(TODO_HEADERS);
     const original = serializeSheetRow(
@@ -473,7 +512,7 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.important, true);
   });
 
-  it('quarantines falsy non-empty metadata cells', () => {
+  it('preserves falsy values in appended custom metadata columns', () => {
     const headers = [...TODO_HEADERS, TODO_METADATA_HEADER];
     const base = serializeSheetRow(
       headers,
@@ -488,8 +527,14 @@ describe('Google Sheets TODO schema', () => {
     falseMetadata[metadataIndex] = false;
     zeroMetadata[metadataIndex] = 0;
 
-    assert.deepEqual(parseSheetRows([headers, falseMetadata]), []);
-    assert.deepEqual(parseSheetRows([headers, zeroMetadata]), []);
+    assert.equal(
+      parseSheetRows([headers, falseMetadata])[0]?.item.subject,
+      'Original',
+    );
+    assert.equal(
+      parseSheetRows([headers, zeroMetadata])[0]?.item.subject,
+      'Original',
+    );
   });
 
   it('ignores parentless patches rather than treating them as snapshots', () => {

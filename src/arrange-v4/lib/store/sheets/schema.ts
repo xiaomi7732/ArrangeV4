@@ -327,6 +327,9 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
   }
   const canonicalNewSheet = normalized.length === TODO_HEADERS.length
     && TODO_HEADERS.every((header, index) => normalized[index] === header);
+  const hasCanonicalSchema = TODO_HEADERS.every(
+    (header, index) => normalized[index] === header,
+  );
   const canonicalOrderSchema = normalized.length >= 18
     && TODO_HEADERS.slice(0, 18).every(
       (header, index) => normalized[index] === header,
@@ -371,6 +374,21 @@ export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): st
   ) {
     normalized.push(TODO_METADATA_HEADER);
   }
+  const canonicalMetadataIsTrusted = hasCanonicalSchema && (
+    rows.every(row => row[TODO_HEADERS.length - 1] === undefined
+      || row[TODO_HEADERS.length - 1] === '')
+    || verifiedMetadataIndices.includes(TODO_HEADERS.length - 1)
+  );
+  if (canonicalMetadataIsTrusted) {
+    for (const header of TODO_MANAGED_EXTENSION_HEADERS) {
+      const canonicalIndex = TODO_HEADERS.indexOf(header);
+      normalized.forEach((candidate, index) => {
+        if (candidate === header && index !== canonicalIndex) {
+          normalized[index] = `__arrange_custom_${index}_${header}`;
+        }
+      });
+    }
+  }
   return normalized;
 }
 
@@ -387,7 +405,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     if (!id) continue;
     for (const index of metadataIndices) {
       const metadata = metadataCell(row[index]);
-      if (!metadata && !looksLikeArrangeMetadata(row[index])) continue;
+      if (!metadata) continue;
       versionedIds.add(id);
       if (
         metadata
