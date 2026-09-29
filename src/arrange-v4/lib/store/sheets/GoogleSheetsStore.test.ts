@@ -180,6 +180,11 @@ describe('GoogleSheetsStore', () => {
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
       request => {
+        assert.equal(request.init.method, 'PUT');
+        return jsonResponse({ updatedRows: 1 });
+      },
+      request => {
+        assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values[0][headers.indexOf('customNotes')], '');
         return jsonResponse({ updatedRows: 1 });

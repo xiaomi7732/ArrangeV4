@@ -443,7 +443,7 @@ export class GoogleSheetsStore implements TodoStore {
     );
     const values = response.values || [];
     const originalHeaders = values[0] || [];
-    const headers = normalizeHeaders(originalHeaders);
+    const headers = normalizeHeaders(originalHeaders, values.slice(1));
     if (ensureSchema && headers.length > originalHeaders.length) {
       const firstMissingColumn = originalHeaders.length + 1;
       await this.writeValues(

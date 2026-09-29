@@ -73,6 +73,11 @@ function cellByHeader(headers: string[], row: unknown[], header: string): unknow
   return index >= 0 ? row[index] : undefined;
 }
 
+function cellByLastHeader(headers: string[], row: unknown[], header: string): unknown {
+  const index = headers.lastIndexOf(header);
+  return index >= 0 ? row[index] : undefined;
+}
+
 function optionalString(value: unknown): string | undefined {
   if (value === null || value === undefined || value === '') return undefined;
   return String(value);
@@ -164,7 +169,7 @@ function metadataCell(value: unknown): SheetMetadata | null {
 
 function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata | null {
   const requiredHeaders = ['deleted', 'changedFields', 'operationId', 'parentOperations'];
-  const metadataIndex = headers.indexOf(TODO_METADATA_HEADER);
+  const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
   if (
     metadataIndex < requiredHeaders.length
     || requiredHeaders.some(
@@ -247,17 +252,36 @@ function statusCell(value: unknown): TodoStatus {
   return ALL_STATUSES.includes(status) ? status : 'new';
 }
 
-export function normalizeHeaders(headers: unknown[]): string[] {
+export function normalizeHeaders(headers: unknown[], rows: unknown[][] = []): string[] {
   const normalized = headers.map(value => String(value || '').trim());
   for (const required of TODO_HEADERS) {
+    if (required === TODO_METADATA_HEADER) continue;
     if (!normalized.includes(required)) normalized.push(required);
+  }
+  const metadataIndices = normalized.flatMap((header, index) => (
+    header === TODO_METADATA_HEADER ? [index] : []
+  ));
+  const canonicalNewSheet = normalized.length === TODO_HEADERS.length
+    && TODO_HEADERS.every((header, index) => normalized[index] === header);
+  const hasVersionedValues = metadataIndices.some(index =>
+    rows.some(row => metadataCell(row[index]) !== null)
+  );
+  if (
+    metadataIndices.length === 0
+    || (
+      metadataIndices.length === 1
+      && !canonicalNewSheet
+      && !hasVersionedValues
+    )
+  ) {
+    normalized.push(TODO_METADATA_HEADER);
   }
   return normalized;
 }
 
 export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
   if (values.length < 2) return [];
-  const headers = normalizeHeaders(values[0]);
+  const headers = normalizeHeaders(values[0], values.slice(1));
 
   const versionsById = new Map<string, SheetTodoVersion[]>();
   values.slice(1).forEach((row, index) => {
@@ -267,7 +291,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
 
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
-    const rawMetadata = cellByHeader(headers, row, TODO_METADATA_HEADER);
+    const rawMetadata = cellByLastHeader(headers, row, TODO_METADATA_HEADER);
     const hasRawMetadata = rawMetadata !== undefined
       && rawMetadata !== null
       && rawMetadata !== '';
@@ -446,7 +470,9 @@ export function serializeSheetRow(
   const changedFields = options.changedFields
     ? new Set<string>(options.changedFields)
     : null;
-  return headers.map(header => {
+  const metadataIndex = headers.lastIndexOf(TODO_METADATA_HEADER);
+  return headers.map((header, index) => {
+    if (header === TODO_METADATA_HEADER && index !== metadataIndex) return '';
     if (changedFields && (TODO_FIELD_NAMES as readonly string[]).includes(header)) {
       return changedFields.has(header) ? cells[header] : '';
     }

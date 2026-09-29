@@ -96,6 +96,24 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.subject, 'Legacy item');
   });
 
+  it('preserves a legacy custom column with the reserved metadata name', () => {
+    const rawHeaders = [...TODO_HEADERS.slice(0, 16), TODO_METADATA_HEADER];
+    const row = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 'user formula result',
+    ];
+    const headers = normalizeHeaders(rawHeaders, [row]);
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.equal(
+      headers.filter(header => header === TODO_METADATA_HEADER).length,
+      2,
+    );
+    assert.equal(record.item.id, 'legacy-id');
+    assert.equal(record.item.subject, 'Legacy item');
+  });
+
   it('uses the latest appended version and hides tombstoned items', () => {
     const headers = Array.from(TODO_HEADERS);
     const original = serializeSheetRow(
