@@ -232,7 +232,7 @@ export class CalendarStore implements TodoStore {
     updates: ItemUpdate[],
     options?: StoreOperationOptions,
   ): Promise<TodoItemWithId[]> {
-    return Promise.all(
+    const results = await Promise.allSettled(
       updates.map(update => this.updateItem(
         bookId,
         update.itemId,
@@ -240,6 +240,12 @@ export class CalendarStore implements TodoStore {
         options,
       )),
     );
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+    return results.map(result => {
+      if (result.status === 'rejected') throw result.reason;
+      return result.value;
+    });
   }
 
   private async updateItemCore(
