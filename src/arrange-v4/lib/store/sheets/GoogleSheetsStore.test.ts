@@ -223,10 +223,16 @@ describe('GoogleSheetsStore', () => {
     ];
     const outOfWindow = [
       'todo-2', 'Out of range', '2026-03-15T10:00:00.000Z', '2026-03-15T11:00:00.000Z',
-      'new', false, false, '', '', '', '', '', '', '', '', '', '', '',
+      'finished', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const undatedActive = [
+      'todo-3', 'Undated active', '', '', 'blocked', false, false,
+      '', '', '', '', '', '', '', '', '', '', '',
     ];
     const mock = installFetchMock([
-      () => jsonResponse({ values: [Array.from(TODO_HEADERS), inWindow, outOfWindow] }),
+      () => jsonResponse({
+        values: [Array.from(TODO_HEADERS), inWindow, outOfWindow, undatedActive],
+      }),
     ]);
     try {
       const items = await createStore().listItems('sheet:sheet-1', {
@@ -234,7 +240,7 @@ describe('GoogleSheetsStore', () => {
         fromDate: '2026-01-01T00:00:00.000Z',
         toDate: '2026-02-01T00:00:00.000Z',
       });
-      assert.deepEqual(items.map(item => item.id), ['todo-1']);
+      assert.deepEqual(items.map(item => item.id), ['todo-1', 'todo-3']);
       assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
       assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
     } finally {
@@ -256,6 +262,7 @@ describe('GoogleSheetsStore', () => {
         tokenCalls += 1;
         return 'google-token';
       });
+
       const created = await store.createItem('sheet:sheet-1', {
         subject: 'Started task',
         status: 'inProgress',
@@ -269,6 +276,28 @@ describe('GoogleSheetsStore', () => {
       assert.ok(created.etaDateTime);
       assert.ok(created.startDateTime);
       assert.equal(tokenCalls, 1);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('initializes lifecycle timestamps when creating a finished item', async () => {
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS)] }),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);
+        assert.ok(body.values[0][TODO_HEADERS.indexOf('finishDateTime')]);
+        return jsonResponse({ updates: { updatedRows: 1 } });
+      },
+    ]);
+    try {
+      const created = await createStore().createItem('sheet:sheet-1', {
+        subject: 'Already done',
+        status: 'finished',
+      });
+      assert.ok(created.startDateTime);
+      assert.ok(created.finishDateTime);
     } finally {
       mock.restore();
     }

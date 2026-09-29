@@ -22,8 +22,9 @@ Google support is enabled when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set and
 3. Configure an OAuth consent screen.
 4. Create a Web application OAuth client and add the local and deployed origins
    to **Authorized JavaScript origins**.
-5. Grant the app the `drive.file`, `spreadsheets`, `openid`, `email`, and
-   `profile` scopes.
+5. Grant the app the `drive.file`, `openid`, `email`, and `profile` scopes.
+   The file-scoped Drive grant also authorizes Sheets API access only to files
+   Arrange creates or the user explicitly opens with Arrange.
 6. Set:
 
    ```bash

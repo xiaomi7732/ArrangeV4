@@ -8,7 +8,7 @@ import type {
   TodoItemWithId,
   TodoStore,
 } from '../types';
-import { makeBookId, parseBookId } from '../types';
+import { isNonTerminalStatus, makeBookId, parseBookId } from '../types';
 import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
 import { InteractiveAuthenticationRequiredError } from '../../auth/errors';
 import {
@@ -279,7 +279,10 @@ export class GoogleSheetsStore implements TodoStore {
     if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
       throw new Error('listItems requires a valid date window with fromDate before toDate.');
     }
-    return items.filter(item => itemOverlapsWindow(item, opts.fromDate!, opts.toDate!));
+    return items.filter(item => (
+      isNonTerminalStatus(item.status)
+      || itemOverlapsWindow(item, opts.fromDate!, opts.toDate!)
+    ));
   }
 
   async createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId> {
@@ -293,6 +296,7 @@ export class GoogleSheetsStore implements TodoStore {
       const etaDateTime = item.etaDateTime
         || new Date(new Date(etsDateTime).getTime() + 30 * 60 * 1000).toISOString();
       const status = item.status || 'new';
+      const lifecycleNow = new Date().toISOString();
       const created: TodoItemWithId = {
         ...item,
         id: crypto.randomUUID(),
@@ -302,8 +306,9 @@ export class GoogleSheetsStore implements TodoStore {
         urgent: item.urgent || false,
         important: item.important || false,
         startDateTime: item.startDateTime
-          ?? (status === 'inProgress' ? now : null),
-        finishDateTime: item.finishDateTime ?? null,
+          ?? (status === 'inProgress' || status === 'finished' ? lifecycleNow : null),
+        finishDateTime: item.finishDateTime
+          ?? (status === 'finished' ? lifecycleNow : null),
         originalEtsDateTime: item.originalEtsDateTime ?? null,
         originalEtaDateTime: item.originalEtaDateTime ?? null,
       };

@@ -84,20 +84,24 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const nextEts = etsDateTime ? new Date(etsDateTime).toISOString() : undefined;
       const nextEta = etaDateTime ? new Date(etaDateTime).toISOString() : undefined;
       const nextRemarks = remarks.trim()
-        ? { type: 'text' as const, content: remarks.trim() }
+        ? { type: todo.remarks?.type || 'text', content: remarks.trim() }
         : null;
       const nextChecklist = checklist.length > 0 ? checklist : [];
       const nextCategories = categories.length > 0 ? categories : [];
       const sameValue = (left: unknown, right: unknown) =>
         JSON.stringify(left) === JSON.stringify(right);
 
-      if (nextSubject !== todo.subject) updatedFields.subject = nextSubject;
+      if (subject !== todo.subject) updatedFields.subject = nextSubject;
       if (urgent !== (todo.urgent ?? false)) updatedFields.urgent = urgent;
       if (important !== (todo.important ?? false)) updatedFields.important = important;
       if (status !== (todo.status || 'new')) updatedFields.status = status;
-      if (nextEts !== todo.etsDateTime) updatedFields.etsDateTime = nextEts;
-      if (nextEta !== todo.etaDateTime) updatedFields.etaDateTime = nextEta;
-      if (!sameValue(nextRemarks, todo.remarks ?? null)) updatedFields.remarks = nextRemarks;
+      if (etsDateTime !== formatLocalDateTime(todo.etsDateTime)) {
+        updatedFields.etsDateTime = nextEts;
+      }
+      if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
+        updatedFields.etaDateTime = nextEta;
+      }
+      if (remarks !== (todo.remarks?.content || '')) updatedFields.remarks = nextRemarks;
       if (!sameValue(nextChecklist, todo.checklist || [])) {
         updatedFields.checklist = nextChecklist;
       }

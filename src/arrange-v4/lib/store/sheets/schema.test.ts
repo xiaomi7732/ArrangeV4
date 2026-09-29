@@ -234,6 +234,28 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.item.urgent, false);
   });
 
+  it('ignores parentless patches rather than treating them as snapshots', () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z',
+      { operationId: 'z-base' },
+    );
+    const parentlessPatch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Unsafe patch' },
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-02T00:00:00.000Z',
+      { changedFields: ['subject'], operationId: 'a-patch' },
+    );
+
+    const [record] = parseSheetRows([headers, base, parentlessPatch]);
+
+    assert.equal(record.item.subject, 'Original');
+  });
+
   it('follows parent revisions instead of client timestamps or row order', () => {
     const headers = Array.from(TODO_HEADERS);
     const base = serializeSheetRow(

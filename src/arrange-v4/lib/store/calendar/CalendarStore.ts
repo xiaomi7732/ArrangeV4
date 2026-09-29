@@ -160,14 +160,17 @@ export class CalendarStore implements TodoStore {
     const client = await this.client();
 
     const status = item.status || 'new';
+    const lifecycleNow = new Date().toISOString();
     const stored: StoredTodoBody = {
       status,
       urgent: item.urgent || false,
       important: item.important || false,
       checklist: item.checklist || [],
       remarks: item.remarks || null,
-      startDateTime: status === 'inProgress' ? new Date().toISOString() : null,
-      finishDateTime: null,
+      startDateTime: item.startDateTime
+        ?? (status === 'inProgress' || status === 'finished' ? lifecycleNow : null),
+      finishDateTime: item.finishDateTime
+        ?? (status === 'finished' ? lifecycleNow : null),
       originalEtsDateTime: null,
       originalEtaDateTime: null,
       matrixOrder: item.matrixOrder,

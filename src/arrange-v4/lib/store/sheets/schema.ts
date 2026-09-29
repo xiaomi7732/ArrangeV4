@@ -182,6 +182,11 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       cellByHeader(headers, row, 'parentOperations'),
     );
     if (changedFields.fields !== null && !parentOperations.valid && !deleted) return;
+    if (
+      changedFields.fields !== null
+      && changedFields.fields.some(field => !parentOperations.operations[field])
+      && !deleted
+    ) return;
     const item: TodoItemWithId = {
       id,
       subject: subject || '',
