@@ -7,6 +7,7 @@ import { authProviderForBackend, normalizeBookId, parseBookId } from '@/lib/stor
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { useAuthProvider } from '@/lib/auth/AuthContext';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 
 /**
@@ -26,6 +27,7 @@ export function useBookId(routePrefix: string) {
   const router = useRouter();
   const rawBookId = searchParams.get('bookId');
   const { isAuthenticated, busy, provider } = useAuthClient();
+  const { selectProvider } = useAuthProvider();
   const normalizedBookId = normalizeBookId(rawBookId);
   const normalizedBackend = normalizedBookId
     ? parseBookId(normalizedBookId)?.backend
@@ -63,10 +65,22 @@ export function useBookId(routePrefix: string) {
       const backend = parseBookId(normalizedBookId)?.backend;
       if (backend && authProviderForBackend(backend) !== provider) {
         clearLastBookId();
-        router.replace('/books');
+        try {
+          selectProvider(authProviderForBackend(backend));
+        } catch (providerError) {
+          console.error('Unable to select the book provider:', providerError);
+          router.replace('/');
+        }
       }
     }
-  }, [rawBookId, normalizedBookId, provider, router, routePrefix]);
+  }, [
+    rawBookId,
+    normalizedBookId,
+    provider,
+    router,
+    routePrefix,
+    selectProvider,
+  ]);
 
   const fetchBooks = useCallback(async (
     options: StoreOperationOptions = { interaction: 'silent-only' },

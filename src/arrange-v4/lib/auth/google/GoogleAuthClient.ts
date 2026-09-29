@@ -243,6 +243,15 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
         expiresAt: Date.now() + Math.max(0, response.expires_in || 3600) * 1000,
       };
       writeCachedToken(token);
+      try {
+        const nextUser = await fetchGoogleUser(token.accessToken);
+        writeCachedUser(nextUser);
+        setUser(nextUser);
+      } catch (error) {
+        clearGoogleSession();
+        setUser(null);
+        throw error;
+      }
       return token.accessToken;
     } finally {
       setBusy(false);
@@ -265,15 +274,7 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   }, []);
 
   const login = useCallback(async (): Promise<void> => {
-    const token = await requestToken('select_account');
-    try {
-      const nextUser = await fetchGoogleUser(token);
-      writeCachedUser(nextUser);
-      setUser(nextUser);
-    } catch (error) {
-      clearGoogleSession();
-      throw error;
-    }
+    await requestToken('select_account');
   }, [requestToken]);
 
   const logout = useCallback(async (): Promise<void> => {

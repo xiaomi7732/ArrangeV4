@@ -292,4 +292,30 @@ describe('Google Sheets TODO schema', () => {
 
     assert.equal(record.item.subject, 'Second');
   });
+
+  it('keeps legacy revision identity stable when rows move', () => {
+    const legacyHeaders = Array.from(TODO_HEADERS.slice(0, 16));
+    const headers = normalizeHeaders(legacyHeaders);
+    const base = [
+      'todo-1', 'Base', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '',
+    ];
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Updated' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'patch',
+        parentOperations: { subject: 'legacy:todo-1' },
+      },
+    );
+
+    const [beforeMove] = parseSheetRows([headers, base, patch]);
+    const [afterMove] = parseSheetRows([headers, [], base, patch]);
+
+    assert.equal(beforeMove.item.subject, 'Updated');
+    assert.equal(afterMove.item.subject, 'Updated');
+  });
 });

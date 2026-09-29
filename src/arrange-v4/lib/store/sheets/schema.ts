@@ -177,7 +177,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     if (!changedFields.valid && !deleted) return;
     const rawOperationId = optionalString(cellByHeader(headers, row, 'operationId'));
     if (changedFields.fields !== null && !rawOperationId && !deleted) return;
-    const operationId = rawOperationId || `legacy:${id}:${index}`;
+    const operationId = rawOperationId || `legacy:${id}`;
     const parentOperations = parentOperationsCell(
       cellByHeader(headers, row, 'parentOperations'),
     );
