@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { GoogleSheetsStore } from './GoogleSheetsStore';
-import { TODO_HEADERS } from './schema';
+import { TODO_HEADERS, TODO_METADATA_HEADER } from './schema';
 import { isInteractiveAuthenticationRequiredError } from '../../auth/errors';
 import type { AcquireTokenOptions } from '@/lib/auth/types';
 
 interface CapturedRequest {
   url: string;
   init: RequestInit;
+}
+
+function rowMetadata(row: unknown[]): {
+  deleted?: boolean;
+  changedFields?: string[];
+} {
+  return JSON.parse(
+    String(row[TODO_HEADERS.indexOf(TODO_METADATA_HEADER)]),
+  ) as { deleted?: boolean; changedFields?: string[] };
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -163,10 +172,11 @@ describe('GoogleSheetsStore', () => {
 
   it('does not copy rendered custom-column values into update patches', async () => {
     const headers = [...TODO_HEADERS, 'customNotes'];
-    const row = [
-      'todo-1', 'Existing subject', '', '', 'new', false, false,
-      '', '', '', '', '', '', '', '', '', '', '', false, '', '', 'displayed formula result',
-    ];
+    const row: unknown[] = Array(headers.length).fill('');
+    row[headers.indexOf('id')] = 'todo-1';
+    row[headers.indexOf('subject')] = 'Existing subject';
+    row[headers.indexOf('status')] = 'new';
+    row[headers.indexOf('customNotes')] = 'displayed formula result';
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
       request => {
@@ -174,6 +184,34 @@ describe('GoogleSheetsStore', () => {
         assert.equal(body.values[0][headers.indexOf('customNotes')], '');
         return jsonResponse({ updatedRows: 1 });
       },
+    ]);
+    try {
+      await createStore().updateItem('sheet:sheet-1', 'todo-1', { urgent: true });
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('appends missing schema headers without rewriting custom headers', async () => {
+    const legacyHeaders = [...TODO_HEADERS.slice(0, 16), 'customFormulaHeader'];
+    const row = [
+      'todo-1', 'Existing subject', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '', 'formula result',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [legacyHeaders, row] }),
+      request => {
+        assert.equal(request.init.method, 'PUT');
+        assert.match(decodeURIComponent(request.url), /TODOs!R1:T1/);
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.deepEqual(body.values[0], [
+          'matrixOrder',
+          'scrumOrder',
+          TODO_METADATA_HEADER,
+        ]);
+        return jsonResponse({ updatedRows: 1 });
+      },
+      () => jsonResponse({ updates: { updatedRows: 1 } }),
     ]);
     try {
       await createStore().updateItem('sheet:sheet-1', 'todo-1', { urgent: true });
@@ -193,9 +231,7 @@ describe('GoogleSheetsStore', () => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);
         assert.ok(body.values[0][TODO_HEADERS.indexOf('finishDateTime')]);
-        const changedFields = JSON.parse(
-          String(body.values[0][TODO_HEADERS.indexOf('changedFields')]),
-        ) as string[];
+        const changedFields = rowMetadata(body.values[0]).changedFields || [];
         assert.deepEqual(
           new Set(changedFields),
           new Set(['status', 'startDateTime', 'finishDateTime']),
@@ -373,7 +409,7 @@ describe('GoogleSheetsStore', () => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values[0][TODO_HEADERS.indexOf('id')], 'todo-1');
-        assert.equal(body.values[0][TODO_HEADERS.indexOf('deleted')], true);
+        assert.equal(rowMetadata(body.values[0]).deleted, true);
         return jsonResponse({ updates: { updatedRows: 1 } });
       },
     ]);
@@ -400,7 +436,7 @@ describe('GoogleSheetsStore', () => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values.length, 2);
         assert.ok(body.values.every(
-          row => row[TODO_HEADERS.indexOf('deleted')] === true,
+          row => rowMetadata(row).deleted === true,
         ));
         return jsonResponse({ updates: { updatedRows: 2 } });
       },
@@ -464,7 +500,7 @@ describe('GoogleSheetsStore', () => {
       request => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values[0][TODO_HEADERS.indexOf('id')], 'todo-2');
-        assert.equal(body.values[0][TODO_HEADERS.indexOf('deleted')], true);
+        assert.equal(rowMetadata(body.values[0]).deleted, true);
         return jsonResponse({ updates: { updatedRows: 1 } });
       },
     ]);

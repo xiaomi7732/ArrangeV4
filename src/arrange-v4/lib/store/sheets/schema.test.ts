@@ -5,6 +5,7 @@ import {
   parseSheetRows,
   serializeSheetRow,
   TODO_HEADERS,
+  TODO_METADATA_HEADER,
 } from './schema';
 import type { TodoItemWithId } from '../types';
 
@@ -65,16 +66,33 @@ describe('Google Sheets TODO schema', () => {
 
     const [record] = parseSheetRows([headers, legacyRow]);
 
-    assert.equal(headers.at(-6), 'matrixOrder');
-    assert.equal(headers.at(-5), 'scrumOrder');
-    assert.equal(headers.at(-4), 'deleted');
-    assert.equal(headers.at(-3), 'changedFields');
-    assert.equal(headers.at(-2), 'operationId');
-    assert.equal(headers.at(-1), 'parentOperations');
+    assert.equal(headers.at(-3), 'matrixOrder');
+    assert.equal(headers.at(-2), 'scrumOrder');
+    assert.equal(headers.at(-1), TODO_METADATA_HEADER);
     assert.equal(record.item.id, 'legacy-id');
     assert.equal(record.item.important, true);
     assert.equal(record.item.matrixOrder, undefined);
     assert.equal(record.item.scrumOrder, undefined);
+  });
+
+  it('does not reinterpret generic custom columns as revision metadata', () => {
+    const headers = normalizeHeaders([
+      ...TODO_HEADERS.slice(0, 16),
+      'deleted',
+      'changedFields',
+      'operationId',
+      'parentOperations',
+    ]);
+    const row = [
+      'legacy-id', 'Legacy item', '', '', 'new', false, false,
+      '', '', '', '', '', '', '', '', '',
+      true, 'not-json', 'custom-operation', '{"subject":"custom"}',
+    ];
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.equal(record.item.id, 'legacy-id');
+    assert.equal(record.item.subject, 'Legacy item');
   });
 
   it('uses the latest appended version and hides tombstoned items', () => {
@@ -226,7 +244,7 @@ describe('Google Sheets TODO schema', () => {
         parentOperations: { urgent: 'base' },
       },
     );
-    patch[headers.indexOf('changedFields')] = 'not-json';
+    patch[headers.indexOf(TODO_METADATA_HEADER)] = 'not-json';
 
     const [record] = parseSheetRows([headers, base, patch]);
 

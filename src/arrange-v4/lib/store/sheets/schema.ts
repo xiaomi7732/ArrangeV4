@@ -2,6 +2,7 @@ import type { TodoItem, TodoItemWithId, TodoStatus } from '../types';
 import { ALL_STATUSES } from '../types';
 
 export const TODO_SHEET_NAME = 'TODOs';
+export const TODO_METADATA_HEADER = '__arrange_metadata';
 
 export const TODO_HEADERS = [
   'id',
@@ -22,10 +23,7 @@ export const TODO_HEADERS = [
   'updatedAt',
   'matrixOrder',
   'scrumOrder',
-  'deleted',
-  'changedFields',
-  'operationId',
-  'parentOperations',
+  TODO_METADATA_HEADER,
 ] as const;
 
 export interface SheetTodoRecord {
@@ -60,6 +58,14 @@ interface SheetTodoVersion extends SheetTodoRecord {
   changedFields: (keyof TodoItem)[] | null;
   operationId: string;
   parentOperations: Partial<Record<keyof TodoItem, string>>;
+}
+
+interface SheetMetadata {
+  schemaVersion: 1;
+  deleted?: boolean;
+  changedFields?: (keyof TodoItem)[];
+  operationId: string;
+  parentOperations?: Partial<Record<keyof TodoItem, string>>;
 }
 
 function cellByHeader(headers: string[], row: unknown[], header: string): unknown {
@@ -97,37 +103,35 @@ function jsonArrayCell(value: unknown): string[] | undefined {
   }
 }
 
-function changedFieldsCell(
-  value: unknown,
-): { fields: (keyof TodoItem)[] | null; valid: boolean } {
-  if (value === null || value === undefined || value === '') {
-    return { fields: null, valid: true };
-  }
-  const fields = jsonArrayCell(value);
-  if (!fields) return { fields: null, valid: false };
-  const validFields = new Set<string>(TODO_FIELD_NAMES);
-  return {
-    fields: fields.filter((field): field is keyof TodoItem => validFields.has(field)),
-    valid: true,
-  };
-}
-
-function parentOperationsCell(
-  value: unknown,
-): { operations: Partial<Record<keyof TodoItem, string>>; valid: boolean } {
-  if (!value) return { operations: {}, valid: true };
+function metadataCell(value: unknown): SheetMetadata | null {
+  if (!value) return null;
   try {
-    const parsed = JSON.parse(String(value)) as Record<string, unknown>;
+    const parsed = JSON.parse(String(value)) as Partial<SheetMetadata>;
+    if (parsed.schemaVersion !== 1 || typeof parsed.operationId !== 'string') {
+      return null;
+    }
     const validFields = new Set<string>(TODO_FIELD_NAMES);
-    return {
-      operations: Object.fromEntries(Object.entries(parsed).filter(
+    const changedFields = Array.isArray(parsed.changedFields)
+      ? parsed.changedFields.filter(
+        (field): field is keyof TodoItem =>
+          typeof field === 'string' && validFields.has(field),
+      )
+      : undefined;
+    const parentOperations = parsed.parentOperations
+      ? Object.fromEntries(Object.entries(parsed.parentOperations).filter(
         (entry): entry is [keyof TodoItem, string] =>
           validFields.has(entry[0]) && typeof entry[1] === 'string',
-      )),
-      valid: true,
+      ))
+      : undefined;
+    return {
+      schemaVersion: 1,
+      operationId: parsed.operationId,
+      deleted: parsed.deleted === true,
+      changedFields,
+      parentOperations,
     };
   } catch {
-    return { operations: {}, valid: false };
+    return null;
   }
 }
 
@@ -172,25 +176,24 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
 
     const createdAt = optionalString(cellByHeader(headers, row, 'createdAt')) || '';
     const updatedAt = optionalString(cellByHeader(headers, row, 'updatedAt')) || createdAt;
-    const deleted = booleanCell(cellByHeader(headers, row, 'deleted'));
-    const changedFields = changedFieldsCell(cellByHeader(headers, row, 'changedFields'));
-    if (!changedFields.valid && !deleted) return;
-    const rawOperationId = optionalString(cellByHeader(headers, row, 'operationId'));
-    if (changedFields.fields !== null && !rawOperationId && !deleted) return;
-    const operationId = rawOperationId || `legacy:${id}`;
-    const parentOperations = parentOperationsCell(
-      cellByHeader(headers, row, 'parentOperations'),
-    );
+    const rawMetadata = cellByHeader(headers, row, TODO_METADATA_HEADER);
+    const metadata = metadataCell(rawMetadata);
+    if (rawMetadata && !metadata && !subject) return;
+    const deleted = metadata?.deleted === true;
+    const changedFields = metadata?.changedFields ?? null;
+    const operationId = metadata?.operationId || `legacy:${id}`;
+    const parentOperations = {
+      operations: metadata?.parentOperations || {},
+    };
     for (const field of TODO_FIELD_NAMES) {
       const parent = parentOperations.operations[field];
       if (parent?.startsWith(`legacy:${id}:`)) {
         parentOperations.operations[field] = `legacy:${id}`;
       }
     }
-    if (changedFields.fields !== null && !parentOperations.valid && !deleted) return;
     if (
-      changedFields.fields !== null
-      && changedFields.fields.some(field => !parentOperations.operations[field])
+      changedFields !== null
+      && changedFields.some(field => !parentOperations.operations[field])
       && !deleted
     ) return;
     const item: TodoItemWithId = {
@@ -219,7 +222,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
       rawValues: row,
       deleted,
       fieldOperations: {},
-      changedFields: deleted ? [] : changedFields.fields,
+      changedFields: deleted ? [] : changedFields,
       operationId,
       parentOperations: parentOperations.operations,
     };
@@ -334,12 +337,15 @@ export function serializeSheetRow(
     updatedAt,
     matrixOrder: item.matrixOrder ?? '',
     scrumOrder: item.scrumOrder ?? '',
-    deleted: options.deleted || false,
-    changedFields: options.changedFields ? JSON.stringify(options.changedFields) : '',
-    operationId: options.operationId || crypto.randomUUID(),
-    parentOperations: options.parentOperations
-      ? JSON.stringify(options.parentOperations)
-      : '',
+    [TODO_METADATA_HEADER]: JSON.stringify({
+      schemaVersion: 1,
+      operationId: options.operationId || crypto.randomUUID(),
+      ...(options.deleted ? { deleted: true } : {}),
+      ...(options.changedFields ? { changedFields: options.changedFields } : {}),
+      ...(options.parentOperations
+        ? { parentOperations: options.parentOperations }
+        : {}),
+    } satisfies SheetMetadata),
   };
   const changedFields = options.changedFields
     ? new Set<string>(options.changedFields)

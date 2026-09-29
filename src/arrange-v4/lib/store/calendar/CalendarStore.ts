@@ -376,11 +376,22 @@ export class CalendarStore implements TodoStore {
   }
 
   async deleteItems(bookId: string, itemIds: string[]): Promise<void> {
-    const results = await Promise.allSettled(
-      itemIds.map(itemId => this.deleteItem(bookId, itemId)),
+    let index = 0;
+    let firstError: unknown;
+    const worker = async () => {
+      while (index < itemIds.length) {
+        const itemId = itemIds[index++];
+        try {
+          await this.deleteItem(bookId, itemId);
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(5, itemIds.length) }, () => worker()),
     );
-    const failure = results.find(result => result.status === 'rejected');
-    if (failure?.status === 'rejected') throw failure.reason;
+    if (firstError) throw firstError;
   }
 
   /* ---- Calendar-specific: not on the TodoStore interface ---- */

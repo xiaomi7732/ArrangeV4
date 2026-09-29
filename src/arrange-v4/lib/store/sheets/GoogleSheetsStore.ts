@@ -442,16 +442,14 @@ export class GoogleSheetsStore implements TodoStore {
       accessToken,
     );
     const values = response.values || [];
-    const headers = normalizeHeaders(values[0] || []);
-    if (ensureSchema && (
-      values.length === 0
-      || headers.length !== (values[0] || []).length
-      || headers.some((header, index) => header !== String((values[0] || [])[index] || '').trim())
-    )) {
+    const originalHeaders = values[0] || [];
+    const headers = normalizeHeaders(originalHeaders);
+    if (ensureSchema && headers.length > originalHeaders.length) {
+      const firstMissingColumn = originalHeaders.length + 1;
       await this.writeValues(
         spreadsheetId,
-        `${TODO_SHEET_NAME}!A1:${columnName(headers.length)}1`,
-        [headers],
+        `${TODO_SHEET_NAME}!${columnName(firstMissingColumn)}1:${columnName(headers.length)}1`,
+        [headers.slice(originalHeaders.length)],
         options,
         accessToken,
       );
