@@ -18,6 +18,7 @@ export interface Calendar {
 
 export interface CalendarEvent {
   id?: string;
+  webLink?: string;
   subject?: string;
   body?: {
     contentType: string;

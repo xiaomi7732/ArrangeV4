@@ -50,6 +50,12 @@ interface ValuesResponse {
   values?: unknown[][];
 }
 
+interface AppendValuesResponse {
+  updates?: {
+    updatedRange?: string;
+  };
+}
+
 interface LoadedSheet {
   headers: string[];
   records: SheetTodoRecord[];
@@ -120,6 +126,27 @@ function dateFallsInWindow(dateTime: string | null | undefined, fromDate: string
   const from = Date.parse(fromDate);
   const to = Date.parse(toDate);
   return Number.isFinite(value) && value >= from && value < to;
+}
+
+function sheetRowSource(
+  spreadsheetId: string,
+  rowNumber: number,
+  columnCount: number,
+): NonNullable<TodoItemWithId['source']> {
+  const range = `A${rowNumber}:${columnName(columnCount)}${rowNumber}`;
+  return {
+    url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit#gid=0&range=${encodeURIComponent(range)}`,
+    label: 'Open row in Google Sheets',
+  };
+}
+
+function appendedStartRow(response: AppendValuesResponse): number | null {
+  const range = response.updates?.updatedRange;
+  if (!range) return null;
+  const match = range.match(/![A-Z]+(\d+)(?::[A-Z]+\d+)?$/i);
+  if (!match) return null;
+  const rowNumber = Number(match[1]);
+  return Number.isInteger(rowNumber) && rowNumber > 0 ? rowNumber : null;
 }
 
 async function isRetryableGoogleQuotaResponse(response: Response): Promise<boolean> {
@@ -242,7 +269,7 @@ export class GoogleSheetsStore implements TodoStore {
         method: 'POST',
         body: JSON.stringify({
           properties: { title },
-          sheets: [{ properties: { title: TODO_SHEET_NAME } }],
+          sheets: [{ properties: { sheetId: 0, title: TODO_SHEET_NAME } }],
         }),
       },
       undefined,
@@ -308,7 +335,14 @@ export class GoogleSheetsStore implements TodoStore {
     const spreadsheetId = nativeSheetId(bookId);
     const token = await this.tokenAcquisition.getToken(opts);
     const loaded = await this.loadSheet(spreadsheetId, opts, token);
-    const items = loaded.records.map(record => record.item);
+    const items = loaded.records.map(record => ({
+      ...record.item,
+      source: sheetRowSource(
+        spreadsheetId,
+        record.rowNumber,
+        loaded.headers.length,
+      ),
+    }));
     if (opts.range === 'all') return items;
     if (!opts.fromDate || !opts.toDate) {
       throw new Error("listItems with range='window' requires fromDate and toDate.");
@@ -353,7 +387,7 @@ export class GoogleSheetsStore implements TodoStore {
         originalEtaDateTime: item.originalEtaDateTime ?? null,
       };
       const row = serializeSheetRow(loaded.headers, created, now, now);
-      await this.request(
+      const response = await this.request<AppendValuesResponse>(
         `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${TODO_SHEET_NAME}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
         {
           method: 'POST',
@@ -362,6 +396,10 @@ export class GoogleSheetsStore implements TodoStore {
         undefined,
         token,
       );
+      const rowNumber = appendedStartRow(response);
+      if (rowNumber) {
+        created.source = sheetRowSource(spreadsheetId, rowNumber, loaded.headers.length);
+      }
       return created;
     });
   }
@@ -406,13 +444,25 @@ export class GoogleSheetsStore implements TodoStore {
           updatedAt,
         );
       });
-      await this.appendValues(
+      const response = await this.appendValues(
         spreadsheetId,
         prepared.map(item => item.row),
         options,
         token,
       );
-      return prepared.map(item => item.updated);
+      const startRow = appendedStartRow(response);
+      return prepared.map((item, index) => ({
+        ...item.updated,
+        ...(startRow
+          ? {
+            source: sheetRowSource(
+              spreadsheetId,
+              startRow + index,
+              loaded.headers.length,
+            ),
+          }
+          : {}),
+      }));
     });
   }
 
@@ -505,8 +555,8 @@ export class GoogleSheetsStore implements TodoStore {
     values: unknown[][],
     options?: StoreOperationOptions,
     accessToken?: string,
-  ): Promise<void> {
-    await this.request(
+  ): Promise<AppendValuesResponse> {
+    return await this.request<AppendValuesResponse>(
       `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${TODO_SHEET_NAME}!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       {
         method: 'POST',

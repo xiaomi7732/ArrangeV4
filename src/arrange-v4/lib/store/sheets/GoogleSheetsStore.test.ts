@@ -120,9 +120,15 @@ describe('GoogleSheetsStore', () => {
     const mock = installFetchMock([
       request => {
         assert.equal(request.init.method, 'POST');
+        const body = JSON.parse(String(request.init.body)) as {
+          sheets: Array<{ properties: { sheetId: number; title: string } }>;
+        };
+        assert.deepEqual(body.sheets, [{
+          properties: { sheetId: 0, title: 'TODOs' },
+        }]);
         return jsonResponse({
           spreadsheetId: 'created-sheet',
-          sheets: [{ properties: { sheetId: 42, title: 'TODOs' } }],
+          sheets: [{ properties: { sheetId: 0, title: 'TODOs' } }],
         });
       },
       request => {
@@ -295,7 +301,9 @@ describe('GoogleSheetsStore', () => {
         assert.equal(body.values.length, 2);
         assert.equal(body.values[0][TODO_HEADERS.indexOf('matrixOrder')], 2);
         assert.equal(body.values[1][TODO_HEADERS.indexOf('matrixOrder')], 1);
-        return jsonResponse({ updates: { updatedRows: 2 } });
+        return jsonResponse({
+          updates: { updatedRows: 2, updatedRange: "'TODOs'!A4:S5" },
+        });
       },
     ]);
     try {
@@ -304,6 +312,8 @@ describe('GoogleSheetsStore', () => {
         { itemId: 'todo-2', updates: { matrixOrder: 1 } },
       ]);
       assert.deepEqual(updated.map(item => item.matrixOrder), [2, 1]);
+      assert.match(updated[0].source?.url || '', /range=A4%3AS4$/);
+      assert.match(updated[1].source?.url || '', /range=A5%3AS5$/);
       assert.equal(mock.requests.length, 2);
     } finally {
       mock.restore();
@@ -346,6 +356,11 @@ describe('GoogleSheetsStore', () => {
         toDate: '2026-02-01T00:00:00.000Z',
       });
       assert.deepEqual(items.map(item => item.id), ['todo-1', 'todo-3', 'todo-4']);
+      assert.match(
+        items[0].source?.url || '',
+        /^https:\/\/docs\.google\.com\/spreadsheets\/d\/sheet-1\/edit#gid=0&range=A2%3AS2$/,
+      );
+      assert.equal(items[0].source?.label, 'Open row in Google Sheets');
       assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
       assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
     } finally {
@@ -359,7 +374,9 @@ describe('GoogleSheetsStore', () => {
       () => jsonResponse({ values: [Array.from(TODO_HEADERS)] }),
       request => {
         assert.equal(request.init.method, 'POST');
-        return jsonResponse({ updates: { updatedRows: 1 } });
+        return jsonResponse({
+          updates: { updatedRows: 1, updatedRange: "'TODOs'!A2:S2" },
+        });
       },
     ]);
     try {
@@ -380,6 +397,7 @@ describe('GoogleSheetsStore', () => {
       assert.ok(created.etsDateTime);
       assert.ok(created.etaDateTime);
       assert.ok(created.startDateTime);
+      assert.match(created.source?.url || '', /range=A2%3AS2$/);
       assert.equal(tokenCalls, 1);
     } finally {
       mock.restore();

@@ -347,6 +347,14 @@
   background-color: #f9fafb;
 }
 
+.sourceLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
 .addButton {
   background-color: #2563eb;
   color: white;

@@ -626,7 +626,7 @@ export function parseSheetRows(values: unknown[][]): SheetTodoRecord[] {
     }
     if (!item.subject) return [];
     const representative = versions.reduce((latest, version) => (
-      version.operationId > latest.operationId ? version : latest
+      version.rowNumber > latest.rowNumber ? version : latest
     ));
     return [{
       ...representative,

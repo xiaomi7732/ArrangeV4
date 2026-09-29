@@ -7,7 +7,13 @@ import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
 interface ViewTodoItemProps {
-  todo: TodoItem & { id?: string };
+  todo: TodoItem & {
+    id?: string;
+    source?: {
+      url: string;
+      label: string;
+    };
+  };
   onClose: () => void;
   onUpdate?: (updatedFields: Partial<TodoItem>) => Promise<void>;
   availableCategories?: string[];
@@ -413,6 +419,16 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           <div className={styles.actions}>
+            {todo.source && (
+              <a
+                href={todo.source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${styles.button} ${styles.buttonSecondary} ${styles.sourceLink}`}
+              >
+                {todo.source.label}
+              </a>
+            )}
             {onUpdate && (
               <button type="button"
                 onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
