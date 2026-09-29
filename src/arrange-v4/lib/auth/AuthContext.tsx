@@ -36,15 +36,22 @@ export function isGoogleProviderEnabled(): boolean {
 
 function readStoredProvider(googleEnabled: boolean): AuthProvider {
   if (typeof window === 'undefined') return 'microsoft';
+  if (volatileProvider === 'google' && googleEnabled) return 'google';
+  if (volatileProvider === 'microsoft') return 'microsoft';
   try {
     const stored = localStorage.getItem(AUTH_PROVIDER_KEY);
-    if (stored === 'google' && googleEnabled) return 'google';
-    if (stored === 'microsoft') return 'microsoft';
+    if (stored === 'google' && googleEnabled) {
+      volatileProvider = 'google';
+      return 'google';
+    }
+    if (stored === 'microsoft') {
+      volatileProvider = 'microsoft';
+      return 'microsoft';
+    }
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
-  if (volatileProvider === 'google' && googleEnabled) return 'google';
-  if (volatileProvider === 'microsoft') return 'microsoft';
+  volatileProvider = 'microsoft';
   return 'microsoft';
 }
 
@@ -60,10 +67,8 @@ function storeProvider(provider: AuthProvider): void {
 
 function subscribeToProvider(listener: () => void): () => void {
   providerListeners.add(listener);
-  window.addEventListener('storage', listener);
   return () => {
     providerListeners.delete(listener);
-    window.removeEventListener('storage', listener);
   };
 }
 
