@@ -282,12 +282,16 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
     clearGoogleSession();
     setUser(null);
     if (!cached?.accessToken) return;
-    await loadGoogleIdentityServices();
-    const oauth2 = window.google?.accounts.oauth2;
-    if (!oauth2) return;
-    await new Promise<void>(resolve => {
-      oauth2.revoke(cached.accessToken, resolve);
-    });
+    try {
+      await loadGoogleIdentityServices();
+      const oauth2 = window.google?.accounts.oauth2;
+      if (!oauth2) return;
+      await new Promise<void>(resolve => {
+        oauth2.revoke(cached.accessToken, resolve);
+      });
+    } catch (error) {
+      console.warn('Google token revocation failed after local logout:', error);
+    }
   }, []);
 
   const getUser = useCallback(() => user, [user]);
