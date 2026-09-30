@@ -31,6 +31,17 @@ export function isDateToday(
 }
 
 /**
+ * Absolute date and time for detail views and tooltips, e.g.
+ * "Sep 30, 2026, 11:23 AM". One spelling everywhere so the same instant never
+ * reads differently on two screens.
+ */
+export function formatAbsoluteDateTime(dateStr: string): string {
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return dateStr;
+  return target.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
  * Formats a date as a relative string when it's within ±14 days of now,
  * otherwise falls back to a short absolute date (e.g. "Jan 15").
  *
@@ -52,7 +63,7 @@ export function formatRelativeDate(
     return { text: dateStr, isOverdue: false, fullDate: dateStr };
   }
 
-  const fullDate = target.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' });
+  const fullDate = formatAbsoluteDateTime(dateStr);
 
   const diffDays = differenceInLocalCalendarDays(target, now);
 

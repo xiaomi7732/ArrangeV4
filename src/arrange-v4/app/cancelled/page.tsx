@@ -427,9 +427,12 @@ function CancelledPageContent() {
                         <div className={styles.taskInfo}>
                           <div className={styles.taskSubject}>{todo.subject}</div>
                           <div className={styles.taskMeta}>
-                            {todo.etsDateTime && (
-                              <span>ETS: {new Date(todo.etsDateTime).toLocaleDateString()}</span>
-                            )}
+                            {todo.etsDateTime && (() => {
+                              const ets = formatRelativeDate(todo.etsDateTime);
+                              return (
+                                <span title={`ETS: ${ets.fullDate}`}>ETS: {ets.text}</span>
+                              );
+                            })()}
                             {todo.etaDateTime && (() => {
                               const eta = formatRelativeDate(todo.etaDateTime);
                               return (

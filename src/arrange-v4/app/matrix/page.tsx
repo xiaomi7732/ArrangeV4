@@ -116,14 +116,17 @@ function TodoCard({ todo, onClick, onStatusChange }: {
           {(todo.etsDateTime || todo.etaDateTime) && (
             <div className={styles.todoDateRow}>
               <span className={styles.todoDateLabel}>Planned:</span>
-              {todo.etsDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`ETS: ${new Date(todo.etsDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.etsDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.etsDateTime && (() => {
+                const ets = formatRelativeDate(todo.etsDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`ETS: ${ets.fullDate}`}
+                  >
+                    {ets.text}
+                  </span>
+                );
+              })()}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
               {todo.etaDateTime && (() => {
                 const eta = formatRelativeDate(todo.etaDateTime);
@@ -142,23 +145,29 @@ function TodoCard({ todo, onClick, onStatusChange }: {
           {(todo.startDateTime || todo.finishDateTime) && (
             <div className={styles.todoDateRow}>
               <span className={styles.todoDateLabel}>Actual:</span>
-              {todo.startDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`Started: ${new Date(todo.startDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.startDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.startDateTime && (() => {
+                const started = formatRelativeDate(todo.startDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`Started: ${started.fullDate}`}
+                  >
+                    {started.text}
+                  </span>
+                );
+              })()}
               {todo.startDateTime && todo.finishDateTime && <span className={styles.todoDateSep}>→</span>}
-              {todo.finishDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`Finished: ${new Date(todo.finishDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.finishDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.finishDateTime && (() => {
+                const finished = formatRelativeDate(todo.finishDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`Finished: ${finished.fullDate}`}
+                  >
+                    {finished.text}
+                  </span>
+                );
+              })()}
             </div>
           )}
         </div>

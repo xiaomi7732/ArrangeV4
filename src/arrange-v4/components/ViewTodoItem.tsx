@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
+import { formatAbsoluteDateTime } from '@/lib/dateUtils';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -64,10 +65,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
   const formatDateTime = (dateTime?: string) => {
     if (!dateTime) return 'Not set';
-    return new Date(dateTime).toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+    return formatAbsoluteDateTime(dateTime);
   };
 
   const handleSave = async (e: React.FormEvent) => {
