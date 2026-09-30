@@ -42,6 +42,16 @@ export function formatAbsoluteDateTime(dateStr: string): string {
 }
 
 /**
+ * Short absolute date without a time, e.g. "Sep 10". For dates that are not
+ * deadlines, where relative phrasing like "20d overdue" would be wrong.
+ */
+export function formatShortDate(dateStr: string): string {
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return dateStr;
+  return target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/**
  * Formats a date as a relative string when it's within ±14 days of now,
  * otherwise falls back to a short absolute date (e.g. "Jan 15").
  *

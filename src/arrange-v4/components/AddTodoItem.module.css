@@ -94,6 +94,12 @@
   color: #6b7280;
 }
 
+.hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
 .remarksBox {
   background-color: #f9fafb;
   border: 1px solid #e5e7eb;

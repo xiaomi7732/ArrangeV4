@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { formatAbsoluteDateTime } from '@/lib/dateUtils';
+import { describeDateBump } from '@/lib/bumpNotice';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -151,6 +152,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   }, [editing, isSubmitting, onClose, handleCancelEdit]);
 
   const dialogRef = useModalDialog<HTMLDivElement>(true, editing);
+  const bumpedFrom = describeDateBump(todo);
 
   useEffect(() => {
     document.addEventListener('keydown', handleEsc);
@@ -362,6 +364,21 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                 <span className={styles.label}>ETA (Estimated Time of Accomplishment)</span>
                 <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
               </div>
+
+              {bumpedFrom && (
+                <div className={styles.formGroup}>
+                  <span className={styles.label}>Originally planned</span>
+                  <span className={styles.value} title={bumpedFrom.tooltip}>
+                    {[todo.originalEtsDateTime, todo.originalEtaDateTime]
+                      .filter(Boolean)
+                      .map(value => formatDateTime(value as string))
+                      .join(' → ')}
+                  </span>
+                  <span className={styles.hint}>
+                    Arrange moved these dates forward so the task stays in view.
+                  </span>
+                </div>
+              )}
 
               <div className={styles.preview}>
                 <p className={styles.previewText}>

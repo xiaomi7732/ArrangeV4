@@ -16,6 +16,7 @@ import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
+import { describeDateBump } from '@/lib/bumpNotice';
 import {
   FILTER_MODE_LABELS,
   FILTER_MODES,
@@ -32,6 +33,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -68,6 +70,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
   onStatusChange?: (todo: TodoItemWithId, newStatus: TodoStatus) => void
 }) {
   const currentStatus = todo.status || 'new';
+  const bumpedFrom = describeDateBump(todo);
 
   const handleStatusClick = (e: React.MouseEvent<HTMLButtonElement>, status: TodoStatus) => {
     e.stopPropagation(); // Prevent card click when clicking status
@@ -110,7 +113,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       </div>
       
       {/* Dates section - compact layout */}
-      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime) && (
+      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime || bumpedFrom) && (
         <div className={styles.todoDates}>
           {/* Planned times */}
           {(todo.etsDateTime || todo.etaDateTime) && (
@@ -139,6 +142,23 @@ function TodoCard({ todo, onClick, onStatusChange }: {
                   </span>
                 );
               })()}
+              {bumpedFrom && (
+                <span
+                  className={styles.todoDateBumped}
+                  title={bumpedFrom.tooltip}
+                  aria-label={bumpedFrom.tooltip}
+                >
+                  ↻ moved
+                </span>
+              )}
+            </div>
+          )}
+          {bumpedFrom && (
+            <div className={styles.todoDateRow}>
+              <span className={styles.todoDateLabel}>Originally:</span>
+              <span className={styles.todoDateValue} title={bumpedFrom.tooltip}>
+                {bumpedFrom.text}
+              </span>
             </div>
           )}
           {/* Actual times */}
@@ -690,25 +710,8 @@ function MatrixPageContent() {
     const statusSnapshot = snapshotItems(todoItems, [todo.id]);
     beginMutation();
 
-    const currentStatus = todo.status || 'new';
     const now = new Date().toISOString();
-
-    // Calculate timestamp changes based on status transition
-    const updatedTimestamps: Partial<TodoItem> = {};
-
-    if (newStatus === 'inProgress' && !todo.startDateTime) {
-      updatedTimestamps.startDateTime = now;
-    }
-    if (newStatus === 'new') {
-      updatedTimestamps.startDateTime = undefined;
-    }
-    if (newStatus === 'finished') {
-      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
-      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
-    }
-    if (newStatus !== 'finished' && currentStatus === 'finished') {
-      updatedTimestamps.finishDateTime = undefined;
-    }
+    const updatedTimestamps = statusTimestampUpdates(todo, newStatus, now);
     const scrumOrder = nextOrder(
       todoItems.filter(item => item.id !== todo.id && (item.status || 'new') === newStatus),
       'scrumOrder',
@@ -726,7 +729,7 @@ function MatrixPageContent() {
       const updated = await store.updateItem(
         operationBookId,
         todo.id,
-        { status: newStatus, scrumOrder },
+        { status: newStatus, scrumOrder, ...updatedTimestamps },
       );
       if (bookIdRef.current === operationBookId) mergePersistedSources([updated]);
     } catch (err: unknown) {

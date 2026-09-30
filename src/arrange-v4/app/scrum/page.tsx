@@ -32,6 +32,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -411,26 +412,8 @@ function ScrumPageContent() {
     ],
   );
 
-  const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {
-    const currentStatus = todo.status || 'new';
-    const now = new Date().toISOString();
-    const updatedTimestamps: Partial<TodoItem> = {};
-
-    if (newStatus === 'inProgress' && !todo.startDateTime) {
-      updatedTimestamps.startDateTime = now;
-    }
-    if (newStatus === 'new') {
-      updatedTimestamps.startDateTime = undefined;
-    }
-    if (newStatus === 'finished') {
-      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
-      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
-    }
-    if (newStatus !== 'finished' && currentStatus === 'finished') {
-      updatedTimestamps.finishDateTime = undefined;
-    }
-    return updatedTimestamps;
-  };
+  const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> =>
+    statusTimestampUpdates(todo, newStatus, new Date().toISOString());
 
   const laneId = (status: TodoStatus) => `scrum:${status}`;
   const parseLaneId = (id: string) => id.slice('scrum:'.length) as LaneStatus;
@@ -548,6 +531,7 @@ function ScrumPageContent() {
       updates.set(activeId, {
         ...updates.get(activeId),
         status: destinationStatus,
+        ...timestamps,
       });
     }
 
