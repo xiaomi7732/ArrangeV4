@@ -15,7 +15,14 @@ import {
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
-import { formatRelativeDate, isDateToday } from '@/lib/dateUtils';
+import { formatRelativeDate } from '@/lib/dateUtils';
+import {
+  FILTER_MODE_LABELS,
+  FILTER_MODES,
+  filterTasks,
+  isCategoryFilterActive,
+  isStatusFilterActive,
+} from '@/lib/search/taskQuery';import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -34,6 +41,7 @@ import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
+import TaskSearchBar from '@/components/TaskSearchBar';
 import {
   SortableTodo,
   SortableTodoList,
@@ -44,30 +52,7 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
 type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
-
-const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
-  showAll: 'All',
-  todayOnly: 'Today',
-  hide: 'Hide',
-};
-
-const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
-  new: 'showAll',
-  inProgress: 'showAll',
-  blocked: 'showAll',
-  finished: 'todayOnly',
-  cancelled: 'hide',
-};
-
-const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
-
-function passesTodayFilter(todo: TodoItem): boolean {
-  const status = todo.status || 'new';
-  if (status === 'finished') return isDateToday(todo.finishDateTime);
-  return isDateToday(todo.etsDateTime);
-}
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
   return (a.etsDateTime || '').localeCompare(b.etsDateTime || '') ||
@@ -240,11 +225,10 @@ function MatrixPageContent() {
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
-  const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
+  const taskQuery = useTaskQuery(bookId);
+  const { query } = taskQuery;
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
@@ -267,23 +251,12 @@ function MatrixPageContent() {
     return Array.from(cats).sort((a, b) => a.localeCompare(b));
   }, [todoItems]);
 
-  const categoryFilterActive = selectedCategories.size > 0 || showUncategorized;
+  const categoryFilterActive = isCategoryFilterActive(query);
 
-  const filteredTodoItems = todoItems.filter(todo => {
-    const status = todo.status || 'new';
-    const mode = statusFilters[status];
-    if (mode === 'hide') return false;
-    if (mode === 'todayOnly' && !passesTodayFilter(todo)) return false;
-
-    if (categoryFilterActive) {
-      const hasCats = todo.categories && todo.categories.length > 0;
-      if (showUncategorized && !hasCats) return true;
-      if (hasCats && todo.categories!.some(c => selectedCategories.has(c))) return true;
-      return false;
-    }
-
-    return true;
-  });
+  const filteredTodoItems = useMemo(
+    () => filterTasks(todoItems, query),
+    [todoItems, query],
+  );
 
   const canonicalQuadrants = useMemo(() => ({
     doFirst: sortByPersistedOrder(
@@ -812,8 +785,7 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return;
-      setSelectedCategories(new Set());
-      setShowUncategorized(false);
+      taskQuery.clearCategoryFilters();
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -828,7 +800,7 @@ function MatrixPageContent() {
     await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).filter(c => c !== tag),
-      () => setSelectedCategories(prev => { const next = new Set(prev); next.delete(tag); return next; }),
+      () => taskQuery.renameCategoryFilter(tag, null),
     );
   };
 
@@ -837,10 +809,7 @@ function MatrixPageContent() {
     await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
-      () => setSelectedCategories(prev => {
-        if (!prev.has(oldTag)) return prev;
-        const next = new Set(prev); next.delete(oldTag); next.add(newTag); return next;
-      }),
+      () => taskQuery.renameCategoryFilter(oldTag, newTag),
     );
   };
 
@@ -853,10 +822,7 @@ function MatrixPageContent() {
         const without = cats.filter(c => c !== sourceTag);
         return without.includes(targetTag) ? without : [...without, targetTag];
       },
-      () => setSelectedCategories(prev => {
-        if (!prev.has(sourceTag)) return prev;
-        const next = new Set(prev); next.delete(sourceTag); next.add(targetTag); return next;
-      }),
+      () => taskQuery.renameCategoryFilter(sourceTag, targetTag),
     );
   };
 
@@ -1004,8 +970,27 @@ function MatrixPageContent() {
 
         {!loading && (
             <div className={styles.matrixSection}>
+              <TaskSearchBar
+                query={query}
+                queryActive={taskQuery.queryActive}
+                resultCount={filteredTodoItems.length}
+                totalCount={todoItems.length}
+                onTextChange={taskQuery.setText}
+                onClearAll={taskQuery.clearAll}
+                presets={taskQuery.presets}
+                activePresetId={taskQuery.activePresetId}
+                presetError={taskQuery.presetError}
+                onApplyPreset={taskQuery.applyPreset}
+                onSavePreset={taskQuery.savePreset}
+                onRenamePreset={taskQuery.renamePreset}
+                onDeletePreset={taskQuery.deletePreset}
+                onDismissPresetError={taskQuery.dismissPresetError}
+                showPriorityFilters
+                onToggleUrgentOnly={taskQuery.toggleUrgentOnly}
+                onToggleImportantOnly={taskQuery.toggleImportantOnly}
+              />
               <div className={styles.matrixHeader}>
-                <span className={styles.filterCount}>Showing {filteredTodoItems.length} of {todoItems.length} items</span>
+                <span className={styles.filterCount} />
                 <div className={styles.matrixHeaderActions}>
                   {allCategories.length > 0 && (
                     <div className={styles.comboButton}>
@@ -1030,8 +1015,9 @@ function MatrixPageContent() {
                   <button
                     className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                     onClick={() => setShowFilters(prev => !prev)}
+                    aria-expanded={showFilters}
                   >
-                    {showFilters ? '▲ Status' : '▼ Status'}
+                    {showFilters ? '▲ Status' : '▼ Status'}{isStatusFilterActive(query) ? ' ●' : ''}
                   </button>
                 </div>
               </div>
@@ -1044,8 +1030,9 @@ function MatrixPageContent() {
                         {FILTER_MODES.map(mode => (
                           <button
                             key={mode}
-                            className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
-                            onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
+                            className={`${styles.filterMode} ${query.statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                            onClick={() => taskQuery.setStatusFilter(status, mode)}
+                            aria-pressed={query.statusFilters[status] === mode}
                           >
                             {FILTER_MODE_LABELS[mode]}
                           </button>
@@ -1053,28 +1040,34 @@ function MatrixPageContent() {
                       </div>
                     </div>
                   ))}
+                  {isStatusFilterActive(query) && (
+                    <button
+                      className={`${styles.filterMode} ${styles.categoryFilterClear}`}
+                      onClick={taskQuery.resetStatusFilters}
+                    >
+                      ✕ Reset
+                    </button>
+                  )}
                 </div>
               )}
               {showTags && allCategories.length > 0 && (
                 <div className={styles.tagBar}>
                   <div className={styles.categoryFilterChips}>
                       <button
-                        className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
-                        onClick={() => setShowUncategorized(prev => !prev)}
+                        className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}
+                        onClick={taskQuery.toggleUncategorized}
+                        aria-pressed={query.includeUncategorized}
                       >
                         Untagged
                       </button>
                       {allCategories.map(cat => {
-                        const isSelected = selectedCategories.has(cat);
+                        const isSelected = query.categories.includes(cat);
                         return (
                           <button
                             key={cat}
                             className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
-                            onClick={() => setSelectedCategories(prev => {
-                              const next = new Set(prev);
-                              if (isSelected) next.delete(cat); else next.add(cat);
-                              return next;
-                            })}
+                            onClick={() => taskQuery.toggleCategory(cat)}
+                            aria-pressed={isSelected}
                           >
                             {cat}
                           </button>
@@ -1083,7 +1076,7 @@ function MatrixPageContent() {
                       {categoryFilterActive && (
                         <button
                           className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
-                          onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                          onClick={taskQuery.clearCategoryFilters}
                         >
                           ✕ Clear
                         </button>

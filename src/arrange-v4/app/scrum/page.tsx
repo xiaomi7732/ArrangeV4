@@ -15,7 +15,14 @@ import {
 import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
-import { isDateToday } from '@/lib/dateUtils';
+import {
+  FILTER_MODE_LABELS,
+  FILTER_MODES,
+  filterTasks,
+  isCategoryFilterActive,
+  isStatusFilterActive,
+} from '@/lib/search/taskQuery';
+import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -34,6 +41,7 @@ import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
 import ScrumCard from '@/components/ScrumCard';
+import TaskSearchBar from '@/components/TaskSearchBar';
 import {
   SortableTodo,
   SortableTodoList,
@@ -44,30 +52,7 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
 type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
-
-const FILTER_MODES: StatusFilterMode[] = ['showAll', 'todayOnly', 'hide'];
-
-const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
-  showAll: 'All',
-  todayOnly: 'Today',
-  hide: 'Hide',
-};
-
-const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
-  new: 'showAll',
-  inProgress: 'showAll',
-  blocked: 'showAll',
-  finished: 'todayOnly',
-  cancelled: 'hide',
-};
-
-function passesTodayFilter(todo: TodoItem): boolean {
-  const status = todo.status || 'new';
-  if (status === 'finished') return isDateToday(todo.finishDateTime);
-  return isDateToday(todo.etsDateTime);
-}
 
 const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
 type LaneStatus = (typeof LANE_STATUSES)[number];
@@ -120,10 +105,9 @@ function ScrumPageContent() {
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
   const [showTags, setShowTags] = useState(true);
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
-  const [showUncategorized, setShowUncategorized] = useState(false);
   const [showManageTags, setShowManageTags] = useState(false);
-  const [statusFilters, setStatusFilters] = useState<Record<TodoStatus, StatusFilterMode>>(DEFAULT_STATUS_FILTERS);
+  const taskQuery = useTaskQuery(bookId);
+  const { query } = taskQuery;
   const [showStatusFilters, setShowStatusFilters] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
@@ -145,32 +129,23 @@ function ScrumPageContent() {
     return Array.from(cats).sort((a, b) => a.localeCompare(b));
   }, [todoItems]);
 
-  const categoryFilterActive = selectedCategories.size > 0 || showUncategorized;
+  const categoryFilterActive = isCategoryFilterActive(query);
 
-  const statusFilterActive = ALL_STATUSES.some(s => statusFilters[s] !== DEFAULT_STATUS_FILTERS[s]);
+  const statusFilterActive = isStatusFilterActive(query);
 
-  const filteredItems = useMemo(() => {
-    return todoItems.filter(todo => {
-      const status = todo.status || 'new';
-      if (!(LANE_STATUSES as readonly string[]).includes(status)) return false;
+  const laneItems = useMemo(
+    () => todoItems.filter(todo => (LANE_STATUSES as readonly string[]).includes(todo.status || 'new')),
+    [todoItems],
+  );
 
-      const mode = statusFilters[status as LaneStatus];
-      if (mode === 'hide') return false;
-      if (mode === 'todayOnly' && !passesTodayFilter(todo)) return false;
-
-      if (categoryFilterActive) {
-        const hasCats = todo.categories && todo.categories.length > 0;
-        if (showUncategorized && !hasCats) return true;
-        if (hasCats && todo.categories!.some(c => selectedCategories.has(c))) return true;
-        return false;
-      }
-      return true;
-    });
-  }, [todoItems, selectedCategories, showUncategorized, categoryFilterActive, statusFilters]);
+  const filteredItems = useMemo(
+    () => filterTasks(laneItems, query),
+    [laneItems, query],
+  );
 
   const visibleLanes = useMemo(() => {
-    return LANE_STATUSES.filter(s => statusFilters[s] !== 'hide');
-  }, [statusFilters]);
+    return LANE_STATUSES.filter(s => query.statusFilters[s] !== 'hide');
+  }, [query.statusFilters]);
 
   const canonicalLanes = useMemo(() => {
     const result = {} as Record<LaneStatus, TodoItemWithId[]>;
@@ -665,8 +640,7 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return;
-      setSelectedCategories(new Set());
-      setShowUncategorized(false);
+      taskQuery.clearCategoryFilters();
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -681,7 +655,7 @@ function ScrumPageContent() {
     await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).filter(c => c !== tag),
-      () => setSelectedCategories(prev => { const next = new Set(prev); next.delete(tag); return next; }),
+      () => taskQuery.renameCategoryFilter(tag, null),
     );
   };
 
@@ -690,10 +664,7 @@ function ScrumPageContent() {
     await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
-      () => setSelectedCategories(prev => {
-        if (!prev.has(oldTag)) return prev;
-        const next = new Set(prev); next.delete(oldTag); next.add(newTag); return next;
-      }),
+      () => taskQuery.renameCategoryFilter(oldTag, newTag),
     );
   };
 
@@ -706,10 +677,7 @@ function ScrumPageContent() {
         const without = cats.filter(c => c !== sourceTag);
         return without.includes(targetTag) ? without : [...without, targetTag];
       },
-      () => setSelectedCategories(prev => {
-        if (!prev.has(sourceTag)) return prev;
-        const next = new Set(prev); next.delete(sourceTag); next.add(targetTag); return next;
-      }),
+      () => taskQuery.renameCategoryFilter(sourceTag, targetTag),
     );
   };
 
@@ -757,10 +725,27 @@ function ScrumPageContent() {
 
         {!loading && (
           <div className={styles.boardSection}>
+            <TaskSearchBar
+              query={query}
+              queryActive={taskQuery.queryActive}
+              resultCount={filteredItems.length}
+              totalCount={laneItems.length}
+              onTextChange={taskQuery.setText}
+              onClearAll={taskQuery.clearAll}
+              presets={taskQuery.presets}
+              activePresetId={taskQuery.activePresetId}
+              presetError={taskQuery.presetError}
+              onApplyPreset={taskQuery.applyPreset}
+              onSavePreset={taskQuery.savePreset}
+              onRenamePreset={taskQuery.renamePreset}
+              onDeletePreset={taskQuery.deletePreset}
+              onDismissPresetError={taskQuery.dismissPresetError}
+              showPriorityFilters
+              onToggleUrgentOnly={taskQuery.toggleUrgentOnly}
+              onToggleImportantOnly={taskQuery.toggleImportantOnly}
+            />
             <div className={styles.boardHeader}>
-              <span className={styles.filterCount}>
-                Showing {filteredItems.length} of {todoItems.length} items
-              </span>
+              <span className={styles.filterCount} />
               <div className={styles.boardHeaderActions}>
                 <button
                   className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
@@ -802,9 +787,9 @@ function ScrumPageContent() {
                         <button
                           key={mode}
                           type="button"
-                          className={`${styles.filterMode} ${statusFilters[status] === mode ? styles.filterModeActive : ''}`}
-                          aria-pressed={statusFilters[status] === mode}
-                          onClick={() => setStatusFilters(prev => ({ ...prev, [status]: mode }))}
+                          className={`${styles.filterMode} ${query.statusFilters[status] === mode ? styles.filterModeActive : ''}`}
+                          aria-pressed={query.statusFilters[status] === mode}
+                          onClick={() => taskQuery.setStatusFilter(status, mode)}
                         >
                           {FILTER_MODE_LABELS[mode]}
                         </button>
@@ -815,7 +800,7 @@ function ScrumPageContent() {
                 {statusFilterActive && (
                   <button
                     className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
-                    onClick={() => setStatusFilters(DEFAULT_STATUS_FILTERS)}
+                    onClick={taskQuery.resetStatusFilters}
                   >
                     ✕ Reset
                   </button>
@@ -827,22 +812,20 @@ function ScrumPageContent() {
               <div className={styles.tagBar}>
                 <div className={styles.categoryFilterChips}>
                   <button
-                    className={`${styles.categoryFilterChip} ${showUncategorized ? styles.categoryFilterChipActive : ''}`}
-                    onClick={() => setShowUncategorized(prev => !prev)}
+                    className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}
+                    onClick={taskQuery.toggleUncategorized}
+                    aria-pressed={query.includeUncategorized}
                   >
                     Untagged
                   </button>
                   {allCategories.map(cat => {
-                    const isSelected = selectedCategories.has(cat);
+                    const isSelected = query.categories.includes(cat);
                     return (
                       <button
                         key={cat}
                         className={`${styles.categoryFilterChip} ${isSelected ? styles.categoryFilterChipActive : ''}`}
-                        onClick={() => setSelectedCategories(prev => {
-                          const next = new Set(prev);
-                          if (isSelected) next.delete(cat); else next.add(cat);
-                          return next;
-                        })}
+                        onClick={() => taskQuery.toggleCategory(cat)}
+                        aria-pressed={isSelected}
                       >
                         {cat}
                       </button>
@@ -851,7 +834,7 @@ function ScrumPageContent() {
                   {categoryFilterActive && (
                     <button
                       className={`${styles.categoryFilterChip} ${styles.categoryFilterClear}`}
-                      onClick={() => { setSelectedCategories(new Set()); setShowUncategorized(false); }}
+                      onClick={taskQuery.clearCategoryFilters}
                     >
                       ✕ Clear
                     </button>

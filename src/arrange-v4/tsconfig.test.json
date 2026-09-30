@@ -31,6 +31,10 @@
     "lib/store/sheets/schema.test.ts",
     "lib/store/sheets/GoogleSheetsStore.ts",
     "lib/store/sheets/GoogleSheetsStore.test.ts",
+    "lib/search/taskQuery.ts",
+    "lib/search/taskQuery.test.ts",
+    "lib/search/filterPresets.ts",
+    "lib/search/filterPresets.test.ts",
     "lib/auth/types.ts"
   ]
 }

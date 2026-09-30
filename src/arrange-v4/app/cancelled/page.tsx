@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
+import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
+import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -12,6 +14,7 @@ import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivati
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import TaskSearchBar from '@/components/TaskSearchBar';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -52,7 +55,27 @@ function CancelledPageContent() {
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
-  const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
+  // Every item on this page is already cancelled, so the shared status filters
+  // (which hide cancelled items by default) must not be applied here.
+  const taskQuery = useTaskQuery(bookId, { defaultStatusFilters: SHOW_ALL_STATUS_FILTERS });
+  const { query } = taskQuery;
+
+  const visibleItems = useMemo(
+    () => filterTasks(cancelledItems, query, { applyStatusFilters: false }),
+    [cancelledItems, query],
+  );
+
+  // Keep selection limited to what is on screen so "Delete (N)" can never
+  // remove an item the current search has filtered out.
+  useEffect(() => {
+    setSelectedIds(previous => {
+      if (previous.size === 0) return previous;
+      const next = retainExistingIds(previous, visibleItems.map(item => item.id));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [visibleItems]);
+
+  const allSelected = visibleItems.length > 0 && visibleItems.every(t => selectedIds.has(t.id));
 
   const fetchEvents = useCallback(async ({
     preserveError = false,
@@ -234,7 +257,7 @@ function CancelledPageContent() {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(cancelledItems.map(t => t.id)));
+      setSelectedIds(new Set(visibleItems.map(t => t.id)));
     }
   };
 
@@ -321,11 +344,31 @@ function CancelledPageContent() {
               </div>
             ) : (
               <>
-                <div className={styles.toolbar}>
-                  <span className={styles.selectionInfo}>
-                    {cancelledItems.length} cancelled {cancelledItems.length === 1 ? 'task' : 'tasks'}
-                  </span>
-                </div>
+                <TaskSearchBar
+                  query={query}
+                  queryActive={taskQuery.queryActive}
+                  resultCount={visibleItems.length}
+                  totalCount={cancelledItems.length}
+                  onTextChange={taskQuery.setText}
+                  onClearAll={taskQuery.clearAll}
+                  presets={taskQuery.presets}
+                  activePresetId={taskQuery.activePresetId}
+                  presetError={taskQuery.presetError}
+                  onApplyPreset={taskQuery.applyPreset}
+                  onSavePreset={taskQuery.savePreset}
+                  onRenamePreset={taskQuery.renamePreset}
+                  onDeletePreset={taskQuery.deletePreset}
+                  onDismissPresetError={taskQuery.dismissPresetError}
+                  disabled={deleting}
+                />
+                {visibleItems.length === 0 ? (
+                  <div className={styles.empty}>
+                    <p className={styles.emptyTitle}>No matching cancelled tasks</p>
+                    <p className={styles.emptyHint}>
+                      No cancelled task matches the current search. Clear the search to see all {cancelledItems.length}.
+                    </p>
+                  </div>
+                ) : (
                 <div className={styles.taskList}>
                   <div className={styles.selectAllRow}>
                     <input
@@ -337,7 +380,7 @@ function CancelledPageContent() {
                     />
                     <span>Select all</span>
                   </div>
-                  {cancelledItems.map(todo => {
+                  {visibleItems.map(todo => {
                     const isSelected = !!todo.id && selectedIds.has(todo.id);
                     return (
                       <div
@@ -386,6 +429,7 @@ function CancelledPageContent() {
                     );
                   })}
                 </div>
+                )}
               </>
             )}
           </div>
