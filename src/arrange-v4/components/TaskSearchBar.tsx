@@ -98,10 +98,12 @@ export default function TaskSearchBar({
     const target = pendingFocusRef.current;
     if (!target) return;
     pendingFocusRef.current = null;
-    const node = target === 'presets'
-      ? presetSelectRef.current ?? saveButtonRef.current
-      : saveButtonRef.current;
-    (node ?? searchInputRef.current)?.focus();
+    const candidates = target === 'presets'
+      ? [presetSelectRef.current, saveButtonRef.current, searchInputRef.current]
+      : [saveButtonRef.current, searchInputRef.current];
+    // A disabled control cannot take focus — deleting the last preset disables
+    // the select, and an inactive query disables Save — so skip to the next one.
+    candidates.find(node => node && !node.disabled)?.focus();
   });
 
   // Let the result count settle before announcing it, so a screen reader reads
