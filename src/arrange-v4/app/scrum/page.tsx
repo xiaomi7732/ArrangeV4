@@ -22,6 +22,7 @@ import {
   isCategoryFilterActive,
   isStatusFilterActive,
 } from '@/lib/search/taskQuery';
+import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
@@ -145,6 +146,7 @@ function ScrumPageContent() {
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
   const filteredItems = filterTasks(laneItems, query);
+  const hiddenByStatus = summarizeHiddenByStatus(laneItems, query);
 
   const visibleLanes = useMemo(() => {
     return LANE_STATUSES.filter(s => query.statusFilters[s] !== 'hide');
@@ -757,6 +759,8 @@ function ScrumPageContent() {
               queryActive={taskQuery.queryActive}
               resultCount={filteredItems.length}
               totalCount={laneItems.length}
+              hiddenSummary={hiddenByStatus.label}
+              onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
               onTextChange={taskQuery.setText}
               onClearAll={taskQuery.clearAll}
               presets={taskQuery.presets}

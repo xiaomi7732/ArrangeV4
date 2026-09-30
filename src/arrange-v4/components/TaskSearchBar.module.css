@@ -73,7 +73,11 @@
 .resultCount {
   font-size: 0.82rem;
   color: #6b7280;
-  white-space: nowrap;
+}
+
+.revealHidden {
+  color: #1d4ed8;
+  border-color: #bfdbfe;
 }
 
 /* Announced by assistive technology only; visually removed without being hidden

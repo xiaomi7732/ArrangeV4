@@ -12,6 +12,10 @@ export interface TaskSearchBarProps {
   queryActive: boolean;
   resultCount: number;
   totalCount: number;
+  /** Explains a gap between result and total caused by the status filters. */
+  hiddenSummary?: string | null;
+  /** Switches the status filters that are hiding items back to "All". */
+  onRevealHidden?: () => void;
   onTextChange: (text: string) => void;
   onClearAll: () => void;
   presets: FilterPreset[];
@@ -36,6 +40,8 @@ export default function TaskSearchBar({
   queryActive,
   resultCount,
   totalCount,
+  hiddenSummary = null,
+  onRevealHidden,
   onTextChange,
   onClearAll,
   presets,
@@ -110,11 +116,15 @@ export default function TaskSearchBar({
   // one outcome per search rather than one per keystroke.
   useEffect(() => {
     const timer = setTimeout(
-      () => setAnnouncedCount(`Showing ${resultCount} of ${totalCount} items`),
+      () => setAnnouncedCount(
+        hiddenSummary
+          ? `Showing ${resultCount} of ${totalCount} items, ${hiddenSummary}`
+          : `Showing ${resultCount} of ${totalCount} items`,
+      ),
       500,
     );
     return () => clearTimeout(timer);
-  }, [resultCount, totalCount]);
+  }, [resultCount, totalCount, hiddenSummary]);
 
   const openSaveForm = () => {
     // Prefill from the preset being edited so saving updates it in place rather
@@ -209,7 +219,19 @@ export default function TaskSearchBar({
         */}
         <span className={styles.resultCount} aria-hidden="true">
           Showing {resultCount} of {totalCount} items
+          {hiddenSummary ? ` — ${hiddenSummary}` : ''}
         </span>
+        {hiddenSummary && onRevealHidden && (
+          <button
+            type="button"
+            className={`${styles.chip} ${styles.revealHidden}`}
+            onClick={onRevealHidden}
+            disabled={disabled}
+            aria-label={`Show hidden items: ${hiddenSummary}`}
+          >
+            Show hidden
+          </button>
+        )}
         {/*
           Announced separately and on a delay: the visible count changes on every
           keystroke, and a live region tied to it would queue one announcement per

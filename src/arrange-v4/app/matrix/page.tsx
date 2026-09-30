@@ -23,7 +23,9 @@ import {
   filterTasks,
   isCategoryFilterActive,
   isStatusFilterActive,
-} from '@/lib/search/taskQuery';import { useTaskQuery } from '@/lib/search/useTaskQuery';
+} from '@/lib/search/taskQuery';
+import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
+import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -298,6 +300,7 @@ function MatrixPageContent() {
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
   const filteredTodoItems = filterTasks(todoItems, query);
+  const hiddenByStatus = summarizeHiddenByStatus(todoItems, query);
 
   const canonicalQuadrants = useMemo(() => ({
     doFirst: sortByPersistedOrder(
@@ -1043,6 +1046,8 @@ function MatrixPageContent() {
                 queryActive={taskQuery.queryActive}
                 resultCount={filteredTodoItems.length}
                 totalCount={todoItems.length}
+                hiddenSummary={hiddenByStatus.label}
+                onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
                 onTextChange={taskQuery.setText}
                 onClearAll={taskQuery.clearAll}
                 presets={taskQuery.presets}

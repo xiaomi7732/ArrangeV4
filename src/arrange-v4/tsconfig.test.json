@@ -43,6 +43,8 @@
     "lib/search/taskQuery.test.ts",
     "lib/search/filterPresets.ts",
     "lib/search/filterPresets.test.ts",
+    "lib/search/hiddenSummary.ts",
+    "lib/search/hiddenSummary.test.ts",
     "lib/auth/types.ts"
   ]
 }
