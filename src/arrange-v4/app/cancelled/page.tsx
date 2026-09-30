@@ -308,9 +308,12 @@ function CancelledPageContent() {
       // answer, but it cannot run offline, and leaving the list empty would
       // claim a deletion that never happened.
       if (bookIdRef.current === operationBookId) setCancelledItems(snapshot);
-      await fetchEvents();
       const message = err instanceof Error ? err.message : 'Failed to delete items';
       setError(message);
+      // preserveError: a bulk delete can partially succeed, so the refetch is
+      // what reconciles which rows really went away — but it must not overwrite
+      // the reason the delete failed.
+      await fetchEvents({ preserveError: true, preserveSelection: true });
     } finally {
       setDeleting(false);
       setShowConfirm(false);

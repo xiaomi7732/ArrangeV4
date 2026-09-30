@@ -582,11 +582,6 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.todoCard:focus-visible {
-  outline: 2px solid #1d4ed8;
-  outline-offset: 2px;
-}
-
 .todoHeader {
   display: flex;
   align-items: flex-start;
@@ -599,6 +594,24 @@
   font-size: 1.125rem;
   color: #111827;
   flex: 1;
+}
+
+/* Carries the card's open action while staying visually plain text. */
+.todoTitleButton {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.todoTitleButton:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .todoBadges {

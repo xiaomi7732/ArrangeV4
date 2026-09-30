@@ -53,4 +53,18 @@ describe('describeDateBump', () => {
     assert.match(notice.tooltip, /ETA Sep 29, 2026, 10:00 AM/);
     assert.doesNotMatch(notice.tooltip, /ETS/);
   });
+
+  it('says nothing for terminal items, which are never bumped again', () => {
+    for (const status of ['finished', 'cancelled'] as const) {
+      assert.equal(
+        describeDateBump({ originalEtsDateTime: '2026-09-29T17:00:00Z', status }),
+        null,
+        `expected no notice for ${status}`,
+      );
+    }
+  });
+
+  it('still describes a bump for non-terminal items', () => {
+    assert.ok(describeDateBump({ originalEtsDateTime: '2026-09-29T17:00:00Z', status: 'blocked' }));
+  });
 });

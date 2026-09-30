@@ -28,6 +28,10 @@ function joinLabels(labels: string[]): string {
  * filters — not something the user typed — are what removed the items. The
  * default query hides cancelled work and all but today's finished work, so
  * without this the board reports missing items the user never filtered out.
+ *
+ * Scoped to the items the page has loaded, which is the same pool the
+ * "Showing X of Y" count is drawn from: the calendar backend only fetches a
+ * ±30-day window, and work outside it is not counted here either.
  */
 export function summarizeHiddenByStatus(
   items: TodoItem[],

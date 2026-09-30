@@ -148,8 +148,11 @@ function ScrumPageContent() {
 
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
-  const filteredItems = filterTasks(laneItems, query);
-  const hiddenByStatus = summarizeHiddenByStatus(laneItems, query);
+  // One clock for both passes, so the count and the explanation of what is
+  // hidden can never straddle midnight and disagree.
+  const filterClock = new Date();
+  const filteredItems = filterTasks(laneItems, query, { now: filterClock });
+  const hiddenByStatus = summarizeHiddenByStatus(laneItems, query, filterClock);
 
   const visibleLanes = useMemo(() => {
     return LANE_STATUSES.filter(s => query.statusFilters[s] !== 'hide');

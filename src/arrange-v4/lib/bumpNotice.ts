@@ -17,8 +17,13 @@ export interface BumpNotice {
  * plan they came from.
  */
 export function describeDateBump(
-  todo: Pick<TodoItem, 'originalEtsDateTime' | 'originalEtaDateTime'>,
+  todo: Pick<TodoItem, 'originalEtsDateTime' | 'originalEtaDateTime' | 'status'>,
 ): BumpNotice | null {
+  // A terminal item is never bumped again, and a finished or cancelled task is
+  // judged on when it actually happened, so an old pre-bump plan is noise.
+  const status = todo.status || 'new';
+  if (status === 'finished' || status === 'cancelled') return null;
+
   const originalEts = todo.originalEtsDateTime || null;
   const originalEta = todo.originalEtaDateTime || null;
   if (!originalEts && !originalEta) return null;

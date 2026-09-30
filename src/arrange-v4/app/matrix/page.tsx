@@ -85,20 +85,27 @@ function TodoCard({ todo, onClick, onStatusChange }: {
   return (
     <div
       className={styles.todoCard}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${todo.subject}`}
       onClick={() => onClick?.(todo)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick?.(todo);
-        }
-      }}
     >
       <div className={styles.todoHeader}>
-        <h4 className={styles.todoTitle}>{todo.subject}</h4>
+        {/*
+          The card is a plain container: it holds the status buttons, so giving
+          it a widget role would make screen readers present the whole card as
+          one control and hide those buttons. The title carries the open action
+          instead.
+        */}
+        <h4 className={styles.todoTitle}>
+          <button
+            type="button"
+            className={styles.todoTitleButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick?.(todo);
+            }}
+          >
+            {todo.subject}
+          </button>
+        </h4>
       </div>
       
       <div className={styles.statusContainer}>
@@ -299,8 +306,11 @@ function MatrixPageContent() {
 
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
-  const filteredTodoItems = filterTasks(todoItems, query);
-  const hiddenByStatus = summarizeHiddenByStatus(todoItems, query);
+  // One clock for both passes, so the count and the explanation of what is
+  // hidden can never straddle midnight and disagree.
+  const filterClock = new Date();
+  const filteredTodoItems = filterTasks(todoItems, query, { now: filterClock });
+  const hiddenByStatus = summarizeHiddenByStatus(todoItems, query, filterClock);
 
   const canonicalQuadrants = useMemo(() => ({
     doFirst: sortByPersistedOrder(
@@ -797,6 +807,9 @@ function MatrixPageContent() {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
       revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
+      // The overlay closes even though the revert restored its copy: the error
+      // banner lives on the page behind it, so leaving it open would hide the
+      // explanation. The board itself keeps the reverted values.
       setSelectedTodo(null);
       setError(err instanceof Error ? err.message : 'Failed to update TODO');
       pendingFetchRef.current = true;
