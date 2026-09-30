@@ -82,10 +82,21 @@ function sanitizeCategories(value: unknown): string[] {
   return [...unique];
 }
 
-export function sanitizeTaskQuery(value: unknown): TaskQuery {
+export function sanitizeTaskQuery(value: unknown, scope: PresetScope = 'board'): TaskQuery {
   const query = createDefaultTaskQuery();
   if (!value || typeof value !== 'object') return query;
   const source = value as Record<string, unknown>;
+
+  // Cancelled is search-only: it renders no tag or priority controls, so a
+  // preset carrying those criteria (hand-edited storage, or written by an
+  // older release) would filter by something the user cannot see or clear.
+  if (scope === 'cancelled') {
+    return {
+      ...query,
+      text: typeof source.text === 'string' ? source.text : '',
+      statusFilters: sanitizeStatusFilters(source.statusFilters),
+    };
+  }
 
   return {
     text: typeof source.text === 'string' ? source.text : '',
@@ -97,39 +108,65 @@ export function sanitizeTaskQuery(value: unknown): TaskQuery {
   };
 }
 
-function sanitizePreset(value: unknown): FilterPreset | null {
+function sanitizePreset(value: unknown, scope: PresetScope): FilterPreset | null {
   if (!value || typeof value !== 'object') return null;
   const source = value as Record<string, unknown>;
   if (typeof source.id !== 'string' || source.id.length === 0) return null;
   const name = typeof source.name === 'string' ? normalizePresetName(source.name) : '';
   if (!name) return null;
-  return { id: source.id, name, query: sanitizeTaskQuery(source.query) };
+  return { id: source.id, name, query: sanitizeTaskQuery(source.query, scope) };
+}
+
+interface PresetReadResult {
+  presets: FilterPreset[];
+  /** True only when storage itself is unreadable, never for corrupt contents. */
+  failed: boolean;
+}
+
+const READ_FAILURE_MESSAGE = 'Could not read saved filters from browser storage.';
+
+/**
+ * Reads presets, distinguishing "storage is unreadable" from "nothing saved".
+ * Mutations must not report success when they never saw the stored list.
+ * Corrupt or unparseable contents are *not* a failure: overwriting them is the
+ * recovery path.
+ */
+function readPresets(bookId: string, scope: PresetScope): PresetReadResult {
+  if (!isLocalStorageAvailable()) return { presets: [], failed: true };
+  const key = presetStorageKey(bookId, scope);
+  if (!key) return { presets: [], failed: true };
+
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(key);
+  } catch {
+    return { presets: [], failed: true };
+  }
+  if (!raw) return { presets: [], failed: false };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { presets: [], failed: false };
+  }
+  if (!Array.isArray(parsed)) return { presets: [], failed: false };
+
+  const presets: FilterPreset[] = [];
+  const seenIds = new Set<string>();
+  for (const entry of parsed) {
+    const preset = sanitizePreset(entry, scope);
+    if (!preset || seenIds.has(preset.id)) continue;
+    seenIds.add(preset.id);
+    presets.push(preset);
+    if (presets.length >= MAX_PRESETS_PER_BOOK) break;
+  }
+  return { presets, failed: false };
 }
 
 export function listPresets(bookId: string | null | undefined, scope: PresetScope): FilterPreset[] {
-  if (!bookId || !isLocalStorageAvailable()) return [];
-  const key = presetStorageKey(bookId, scope);
-  if (!key) return [];
-
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    const presets: FilterPreset[] = [];
-    const seenIds = new Set<string>();
-    for (const entry of parsed) {
-      const preset = sanitizePreset(entry);
-      if (!preset || seenIds.has(preset.id)) continue;
-      seenIds.add(preset.id);
-      presets.push(preset);
-      if (presets.length >= MAX_PRESETS_PER_BOOK) break;
-    }
-    return presets;
-  } catch {
-    return [];
-  }
+  if (!bookId) return [];
+  return readPresets(bookId, scope).presets;
 }
 
 /** Persists presets. Returns false when storage is unavailable or full. */
@@ -180,11 +217,12 @@ export function savePreset(
   query: TaskQuery,
   activePresetId?: string | null,
 ): PresetMutationResult {
-  const presets = listPresets(bookId, scope);
+  const { presets, failed } = readPresets(bookId, scope);
+  if (failed) return { presets, error: READ_FAILURE_MESSAGE };
   const normalized = normalizePresetName(name);
   if (!normalized) return { presets, error: 'Enter a name for this filter.' };
 
-  const sanitizedQuery = sanitizeTaskQuery(query);
+  const sanitizedQuery = sanitizeTaskQuery(query, scope);
   const existingIndex = presets.findIndex(
     preset => preset.name.toLocaleLowerCase() === normalized.toLocaleLowerCase(),
   );
@@ -218,7 +256,8 @@ export function renamePreset(
   presetId: string,
   name: string,
 ): PresetMutationResult {
-  const presets = listPresets(bookId, scope);
+  const { presets, failed } = readPresets(bookId, scope);
+  if (failed) return { presets, error: READ_FAILURE_MESSAGE };
   const normalized = normalizePresetName(name);
   if (!normalized) return { presets, error: 'Enter a name for this filter.' };
 
@@ -242,7 +281,8 @@ export function renamePreset(
 }
 
 export function deletePreset(bookId: string, scope: PresetScope, presetId: string): PresetMutationResult {
-  const presets = listPresets(bookId, scope);
+  const { presets, failed } = readPresets(bookId, scope);
+  if (failed) return { presets, error: READ_FAILURE_MESSAGE };
   const next = presets.filter(preset => preset.id !== presetId);
   if (next.length === presets.length) return { presets };
 
@@ -263,7 +303,10 @@ export function renameCategoryInPresets(
   from: string,
   to: string | null,
 ): PresetMutationResult {
-  const presets = listPresets(bookId, scope);
+  const { presets, failed } = readPresets(bookId, scope);
+  if (failed) {
+    return { presets, error: 'Saved filters still reference the old tag: browser storage is unavailable.' };
+  }
   let changed = false;
 
   const next = presets.map(preset => {

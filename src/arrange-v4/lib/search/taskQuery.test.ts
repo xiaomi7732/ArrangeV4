@@ -220,8 +220,18 @@ describe('isStatusFilterActive / isQueryActive', () => {
   });
 });
 
-describe('taskQueriesEqual', () => {  it('ignores search text formatting differences', () => {
+describe('taskQueriesEqual', () => {
+  it('ignores search text formatting differences', () => {
     assert.equal(taskQueriesEqual(query({ text: 'Fix  API' }), query({ text: ' fix api ' })), true);
+  });
+
+  it('ignores search term order and duplicates', () => {
+    assert.equal(taskQueriesEqual(query({ text: 'api fix' }), query({ text: 'fix api' })), true);
+    assert.equal(taskQueriesEqual(query({ text: 'fix fix api' }), query({ text: 'fix api' })), true);
+  });
+
+  it('detects a differing search term', () => {
+    assert.equal(taskQueriesEqual(query({ text: 'api fix' }), query({ text: 'api ship' })), false);
   });
 
   it('ignores tag ordering', () => {

@@ -121,6 +121,14 @@ export function taskSearchText(todo: TodoItem): string {
   return parts.join('\n').toLocaleLowerCase();
 }
 
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
 export function matchesSearchTerms(todo: TodoItem, terms: string[]): boolean {
   if (terms.length === 0) return true;
   const haystack = taskSearchText(todo);
@@ -130,10 +138,11 @@ export function matchesSearchTerms(todo: TodoItem, terms: string[]): boolean {
 /**
  * Compares two queries by effective meaning rather than by reference, so a
  * preset stays marked as applied while the user has not actually changed it.
- * Search text is compared by its normalized terms.
+ * Search terms are ANDed, so they are compared as a set: reordering or
+ * repeating them cannot change which tasks match.
  */
 export function taskQueriesEqual(a: TaskQuery, b: TaskQuery): boolean {
-  if (searchTerms(a.text).join(' ') !== searchTerms(b.text).join(' ')) return false;
+  if (!setsEqual(new Set(searchTerms(a.text)), new Set(searchTerms(b.text)))) return false;
   if (a.includeUncategorized !== b.includeUncategorized) return false;
   if (a.urgentOnly !== b.urgentOnly) return false;
   if (a.importantOnly !== b.importantOnly) return false;
@@ -143,10 +152,7 @@ export function taskQueriesEqual(a: TaskQuery, b: TaskQuery): boolean {
 
   const aCategories = new Set(a.categories);
   const bCategories = new Set(b.categories);
-  if (aCategories.size !== bCategories.size) return false;
-  for (const category of aCategories) {
-    if (!bCategories.has(category)) return false;
-  }
+  if (!setsEqual(aCategories, bCategories)) return false;
   return true;
 }
 

@@ -19,8 +19,11 @@ class MemoryStorage {
   private entries = new Map<string, string>();
   /** When set, writes throw to emulate a full or blocked quota. */
   failWrites = false;
+  /** When set, reads throw to emulate storage blocked by browser settings. */
+  failReads = false;
 
   getItem(key: string): string | null {
+    if (this.failReads) throw new Error('SecurityError');
     return this.entries.has(key) ? this.entries.get(key)! : null;
   }
 
@@ -53,6 +56,7 @@ function query(overrides: Partial<TaskQuery> = {}): TaskQuery {
 beforeEach(() => {
   storage.clear();
   storage.failWrites = false;
+  storage.failReads = false;
 });
 
 describe('presetStorageKey', () => {
@@ -308,5 +312,104 @@ describe('preset scopes', () => {
 
     assert.deepEqual(listPresets(calendarBook, 'board'), []);
     assert.equal(listPresets(calendarBook, 'cancelled').length, 1);
+  });
+
+  it('strips criteria the cancelled view cannot display, on save and on read', () => {
+    const saved = savePreset(
+      calendarBook,
+      'cancelled',
+      'Deploy',
+      query({ text: 'deploy', categories: ['ops'], includeUncategorized: true, urgentOnly: true }),
+    );
+
+    assert.deepEqual(saved.preset!.query.categories, []);
+    assert.equal(saved.preset!.query.includeUncategorized, false);
+    assert.equal(saved.preset!.query.urgentOnly, false);
+    assert.equal(saved.preset!.query.text, 'deploy');
+  });
+
+  it('strips hidden criteria from a legacy cancelled preset already in storage', () => {
+    storage.setItem(
+      presetStorageKey(calendarBook, 'cancelled')!,
+      JSON.stringify([
+        {
+          id: 'legacy',
+          name: 'Legacy',
+          query: { text: 'deploy', categories: ['ops'], importantOnly: true },
+        },
+      ]),
+    );
+
+    const [preset] = listPresets(calendarBook, 'cancelled');
+    assert.deepEqual(preset.query.categories, []);
+    assert.equal(preset.query.importantOnly, false);
+    assert.equal(preset.query.text, 'deploy');
+  });
+
+  it('keeps those criteria for board presets', () => {
+    const saved = savePreset(
+      calendarBook,
+      'board',
+      'Deploy',
+      query({ categories: ['ops'], urgentOnly: true }),
+    );
+
+    assert.deepEqual(saved.preset!.query.categories, ['ops']);
+    assert.equal(saved.preset!.query.urgentOnly, true);
+  });
+});
+
+describe('unreadable storage', () => {
+  it('reports an error instead of reporting success on delete', () => {
+    const saved = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    storage.failReads = true;
+
+    const result = deletePreset(calendarBook, 'board', saved.preset!.id);
+
+    assert.ok(result.error);
+    storage.failReads = false;
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
+  });
+
+  it('reports an error instead of silently skipping a tag rename', () => {
+    savePreset(calendarBook, 'board', 'Ops', query({ categories: ['ops'] }));
+    storage.failReads = true;
+
+    const result = renameCategoryInPresets(calendarBook, 'board', 'ops', 'platform');
+
+    assert.ok(result.error);
+    storage.failReads = false;
+    assert.deepEqual(listPresets(calendarBook, 'board')[0].query.categories, ['ops']);
+  });
+
+  it('refuses to save over a list it could not read', () => {
+    savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    storage.failReads = true;
+
+    const result = savePreset(calendarBook, 'board', 'Another', query({ text: 'x' }));
+
+    assert.ok(result.error);
+    storage.failReads = false;
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
+  });
+
+  it('reports an error on rename', () => {
+    const saved = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    storage.failReads = true;
+
+    const result = renamePreset(calendarBook, 'board', saved.preset!.id, 'Hot');
+
+    assert.ok(result.error);
+    storage.failReads = false;
+    assert.equal(listPresets(calendarBook, 'board')[0].name, 'Urgent');
+  });
+
+  it('treats corrupt contents as an empty list rather than a failure', () => {
+    storage.setItem(presetStorageKey(calendarBook, 'board')!, 'not json');
+
+    const result = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+
+    assert.equal(result.error, undefined);
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
   });
 });
