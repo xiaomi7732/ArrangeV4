@@ -35,7 +35,7 @@ MSAL authenticates against the `consumers` authority (personal Microsoft account
 
 ### State management
 
-All state is React hooks (`useState`, `useMemo`) — no global state library. Persistent client-side state (last selected book, sweep tracking) uses `localStorage`/`sessionStorage` via `bookStorage.ts`.
+All state is React hooks (`useState`, `useMemo`) — no global state library. Persistent client-side state (last selected book, sweep tracking) uses `localStorage`/`sessionStorage` via `bookStorage.ts`. Saved search/filter presets are persisted separately by `lib/search/filterPresets.ts` under `arrange_filterPresets_<backend>_<nativeId>_<scope>` keys, so they never leak across books, storage backends, or views; everything read back from storage is sanitized before use.
 
 ### Optimistic UI
 
@@ -50,6 +50,9 @@ User actions immediately update local state, then sync to Graph in the backgroun
 | `msalConfig.ts` | MSAL instance configuration and Graph API scopes (`User.Read`, `Calendars.ReadWrite`) |
 | `bookStorage.ts` | `localStorage`/`sessionStorage` helpers for last-book-id and sweep state |
 | `calendarUtils.ts` | Filtering calendars by the `" by arrange"` suffix and extracting display names |
+| `search/taskQuery.ts` | Backend-neutral search/filter model and `filterTasks()`, shared by Matrix, Scrum, and Cancelled |
+| `search/filterPresets.ts` | `localStorage` CRUD for named filter presets, scoped per backend, book, and view |
+| `search/useTaskQuery.ts` | Hook binding query state to preset storage for a page |
 
 ## Conventions
 
