@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { GoogleSheetsStore } from './GoogleSheetsStore';
-import { TODO_HEADERS, TODO_METADATA_HEADER } from './schema';
+import {
+  serializeSheetRow,
+  TODO_HEADERS,
+  TODO_METADATA_HEADER,
+} from './schema';
 import { isInteractiveAuthenticationRequiredError } from '../../auth/errors';
 import type { AcquireTokenOptions } from '@/lib/auth/types';
 
@@ -375,6 +379,43 @@ describe('GoogleSheetsStore', () => {
       assert.equal(items[0].source?.label, 'Open row in Google Sheets');
       assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
       assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('links to the last physical revision row regardless of operation ID order', async () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '',
+      '',
+      { operationId: 'z-base' },
+    );
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Updated' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'a-patch',
+        parentOperations: { subject: 'z-base' },
+      },
+    );
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [headers, base, patch] }),
+      () => todoSheetResponse(731),
+    ]);
+    try {
+      const [item] = await createStore().listItems(
+        'sheet:sheet-1',
+        { range: 'all' },
+      );
+
+      assert.equal(item.subject, 'Updated');
+      assert.match(item.source?.url || '', /#gid=731&range=A3%3AS3$/);
     } finally {
       mock.restore();
     }
