@@ -59,6 +59,15 @@
   font-weight: 600;
 }
 
+.bumped {
+  font-size: 0.7rem;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: help;
+}
+
 .categories {
   display: flex;
   gap: 4px;

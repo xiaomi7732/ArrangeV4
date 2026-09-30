@@ -6,6 +6,8 @@ import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/stor
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
+import { describeFailure } from '@/lib/failureMessage';
+import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -13,6 +15,7 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
+import ErrorBanner from '@/components/ErrorBanner';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import TaskSearchBar from '@/components/TaskSearchBar';
 import Link from 'next/link';
@@ -34,12 +37,20 @@ function CancelledPageContent() {
     fetchBooks,
     authRecoveryRequired: bookAuthRecoveryRequired,
     error: bookError,
+    setError: setBookError,
   } = useBookId('/cancelled');
 
   const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when a delete failed and its rows were put back: the list is then a
+  // guess until a fetch succeeds, because a rejected bulk delete may still
+  // have removed some of them.
+  const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
+  // Reads already in flight when the user dismissed the banner: their failures
+  // belong to a message that has been closed, so they are not reported.
+  const dismissedFetchSequenceRef = useRef(0);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
@@ -104,7 +115,21 @@ function CancelledPageContent() {
     const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    if (!preserveError) setError(null);
+    // A write that is still unverified outlives a manual refresh: only a
+    // successful read may retract it.
+    // Switching book drops an unverified failure: it belongs to work the user
+    // is no longer looking at, and a read of another book verifies nothing.
+    const strayWrite = unverifiedWriteRef.current?.bookId === requestedBookId
+      ? null
+      : unverifiedWriteRef.current;
+    if (strayWrite) unverifiedWriteRef.current = null;
+    if (!preserveError) {
+      setError(unverifiedWriteRef.current?.message ?? null);
+    } else if (strayWrite) {
+      // Preserved errors are the one case where the dropped failure may still
+      // be on screen, and nothing left can ever retract it.
+      setError(previous => (bannerDerivesFrom(previous, strayWrite.message, 'list') ? null : previous));
+    }
 
     try {
       const items = await store.listItems(requestedBookId, {
@@ -116,6 +141,12 @@ function CancelledPageContent() {
         bookIdRef.current !== requestedBookId
       ) return;
       const nextItems = items.filter(t => t.status === 'cancelled');
+      if (unverifiedWriteRef.current) {
+        // This read is authoritative, so the board is no longer a guess. The
+        // write failure itself stays: the user still needs to know it failed.
+        setError(unverifiedWriteRef.current.message);
+        unverifiedWriteRef.current = null;
+      }
       setCancelledItems(nextItems);
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
@@ -137,8 +168,17 @@ function CancelledPageContent() {
         return;
       }
       console.error('Error fetching events:', err);
-      const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      setError(message);
+      const message = describeFailure('Could not load the list.', err);
+      if (fetchSequence <= dismissedFetchSequenceRef.current) {
+        // This read was already running when the user dismissed the banner.
+        // Reporting it now would reopen something they closed.
+        return;
+      }
+      // Always composed from the write failure, never from the banner, so a
+      // run of failed refreshes replaces its clause instead of stacking, and a
+      // rolled-back delete keeps saying it is unverified until a read proves
+      // otherwise.
+      setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'list'));
     } finally {
       if (
         fetchSequenceRef.current === fetchSequence &&
@@ -287,8 +327,11 @@ function CancelledPageContent() {
   const confirmDelete = async () => {
     if (!bookId || deletableIds.length === 0) return;
 
-    setDeleting(true);    const idsToDelete = [...deletableIds];
+    setDeleting(true);
+    const idsToDelete = [...deletableIds];
     const deleteSet = new Set(idsToDelete);
+    const snapshot = cancelledItems;
+    const operationBookId = bookId;
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
     setCancelledItems(items => items.filter(item => !deleteSet.has(item.id)));
@@ -299,9 +342,19 @@ function CancelledPageContent() {
       setSelectedIds(new Set());
     } catch (err: unknown) {
       console.error('Error during bulk delete:', err);
-      await fetchEvents();
-      const message = err instanceof Error ? err.message : 'Failed to delete items';
+      // Put the rows back before reconciling: the refetch is the authoritative
+      // answer, but it cannot run offline, and leaving the list empty would
+      // claim a deletion that never happened.
+      if (bookIdRef.current === operationBookId) setCancelledItems(snapshot);
+      const message = describeFailure('Could not delete the selected tasks.', err);
+      // Held until a read proves the list: a bulk delete can partly succeed
+      // and still reject, so the restored rows are a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message };
       setError(message);
+      // preserveError: a bulk delete can partially succeed, so the refetch is
+      // what reconciles which rows really went away — but it must not overwrite
+      // the reason the delete failed.
+      await fetchEvents({ preserveError: true, preserveSelection: true });
     } finally {
       setDeleting(false);
       setShowConfirm(false);
@@ -338,10 +391,15 @@ function CancelledPageContent() {
     <div className={styles.container}>
       <div className={styles.inner}>
         {displayError && (
-          <div className={styles.error} role="alert">
-            <span className={styles.errorTitle}>Error: </span>
-            <span>{displayError}</span>
-          </div>
+          <ErrorBanner
+            message={displayError}
+            onDismiss={() => {
+                unverifiedWriteRef.current = null;
+                dismissedFetchSequenceRef.current = fetchSequenceRef.current;
+                setError(null);
+                setBookError(null);
+              }}
+          />
         )}
 
         {loading && (
@@ -420,9 +478,12 @@ function CancelledPageContent() {
                         <div className={styles.taskInfo}>
                           <div className={styles.taskSubject}>{todo.subject}</div>
                           <div className={styles.taskMeta}>
-                            {todo.etsDateTime && (
-                              <span>ETS: {new Date(todo.etsDateTime).toLocaleDateString()}</span>
-                            )}
+                            {todo.etsDateTime && (() => {
+                              const ets = formatRelativeDate(todo.etsDateTime);
+                              return (
+                                <span title={`ETS: ${ets.fullDate}`}>ETS: {ets.text}</span>
+                              );
+                            })()}
                             {todo.etaDateTime && (() => {
                               const eta = formatRelativeDate(todo.etaDateTime);
                               return (

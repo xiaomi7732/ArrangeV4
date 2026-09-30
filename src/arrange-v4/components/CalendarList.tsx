@@ -117,7 +117,7 @@ export default function CalendarList({ books, loading, error, onDeleteBook }: Ca
           >
             <div className={styles.calendarTop}>
               <div>
-                <h3 className={styles.calendarName}>
+                <h3 className={styles.calendarName} title={`Book ID: ${book.id}`}>
                   {book.name}
                 </h3>
                 <span
@@ -158,9 +158,6 @@ export default function CalendarList({ books, loading, error, onDeleteBook }: Ca
                 />
               )}
             </div>
-            <p className={styles.calendarId} title={book.id}>
-              ID: {book.id}
-            </p>
             <div className={styles.calendarFooter}>
               {(() => {
                 const bookName = book.name;

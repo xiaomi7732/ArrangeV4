@@ -12,6 +12,16 @@ export interface TaskSearchBarProps {
   queryActive: boolean;
   resultCount: number;
   totalCount: number;
+  /** Explains a gap between result and total caused by the status filters. */
+  hiddenSummary?: string | null;
+  /**
+   * How far the loaded data reaches, e.g. the board's date window. Shown with
+   * the count and announced with it, so neither the total nor "Show hidden"
+   * implies the view can reach work it never loaded.
+   */
+  scopeNote?: string | null;
+  /** Switches the status filters that are hiding items back to "All". */
+  onRevealHidden?: () => void;
   onTextChange: (text: string) => void;
   onClearAll: () => void;
   presets: FilterPreset[];
@@ -36,6 +46,9 @@ export default function TaskSearchBar({
   queryActive,
   resultCount,
   totalCount,
+  hiddenSummary = null,
+  scopeNote = null,
+  onRevealHidden,
   onTextChange,
   onClearAll,
   presets,
@@ -109,12 +122,12 @@ export default function TaskSearchBar({
   // Let the result count settle before announcing it, so a screen reader reads
   // one outcome per search rather than one per keystroke.
   useEffect(() => {
-    const timer = setTimeout(
-      () => setAnnouncedCount(`Showing ${resultCount} of ${totalCount} items`),
-      500,
-    );
+    const parts = [`Showing ${resultCount} of ${totalCount} items`];
+    if (hiddenSummary) parts.push(hiddenSummary);
+    if (scopeNote) parts.push(scopeNote);
+    const timer = setTimeout(() => setAnnouncedCount(parts.join(', ')), 500);
     return () => clearTimeout(timer);
-  }, [resultCount, totalCount]);
+  }, [resultCount, totalCount, hiddenSummary, scopeNote]);
 
   const openSaveForm = () => {
     // Prefill from the preset being edited so saving updates it in place rather
@@ -203,9 +216,29 @@ export default function TaskSearchBar({
           )}
         </div>
 
-        <span className={styles.resultCount}>
+        {/*
+          Hidden from assistive technology: the same sentence is announced by
+          the live region below, and exposing both reads it twice.
+        */}
+        <span
+          className={styles.resultCount}
+          aria-hidden="true"
+        >
           Showing {resultCount} of {totalCount} items
+          {hiddenSummary ? ` — ${hiddenSummary}` : ''}
+          {scopeNote ? ` (${scopeNote})` : ''}
         </span>
+        {hiddenSummary && onRevealHidden && (
+          <button
+            type="button"
+            className={`${styles.chip} ${styles.revealHidden}`}
+            onClick={onRevealHidden}
+            disabled={disabled}
+            aria-label={`Show hidden items: ${hiddenSummary}`}
+          >
+            Show hidden
+          </button>
+        )}
         {/*
           Announced separately and on a delay: the visible count changes on every
           keystroke, and a live region tied to it would queue one announcement per

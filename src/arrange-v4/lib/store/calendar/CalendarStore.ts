@@ -336,6 +336,17 @@ export class CalendarStore implements TodoStore {
     let nextEts = updates.etsDateTime;
     let nextEta = updates.etaDateTime;
 
+    // A caller-supplied date replaces whatever Arrange bumped for that field, so
+    // the remembered pre-bump value no longer describes anything. Cleared per
+    // field: rescheduling only the ETS leaves the bumped ETA — and therefore its
+    // original — still meaningful.
+    if (updates.etsDateTime !== undefined && updates.originalEtsDateTime === undefined) {
+      merged.originalEtsDateTime = null;
+    }
+    if (updates.etaDateTime !== undefined && updates.originalEtaDateTime === undefined) {
+      merged.originalEtaDateTime = null;
+    }
+
     if (isNonTerminalStatus(effectiveStatus) && !callerSetDates && !orderOnlyUpdate) {
       const currentEts = convertGraphDateTimeToISO(existingEvent.start);
       const currentEta = convertGraphDateTimeToISO(existingEvent.end);

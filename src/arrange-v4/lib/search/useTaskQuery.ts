@@ -36,6 +36,8 @@ export interface UseTaskQueryResult {
   queryActive: boolean;
   setText: (text: string) => void;
   setStatusFilter: (status: TodoStatus, mode: StatusFilterMode) => void;
+  /** Switches the given statuses to "All", used to reveal status-hidden items. */
+  revealStatuses: (statuses: TodoStatus[]) => void;
   resetStatusFilters: () => void;
   toggleCategory: (category: string) => void;
   toggleUncategorized: () => void;
@@ -154,6 +156,15 @@ export function useTaskQuery(
     }));
   }, []);
 
+  const revealStatuses = useCallback((statuses: TodoStatus[]) => {
+    if (statuses.length === 0) return;
+    setQuery(previous => {
+      const statusFilters = { ...previous.statusFilters };
+      statuses.forEach(status => { statusFilters[status] = 'showAll'; });
+      return { ...previous, statusFilters };
+    });
+  }, []);
+
   const resetStatusFilters = useCallback(() => {
     setQuery(previous => ({
       ...previous,
@@ -267,6 +278,7 @@ export function useTaskQuery(
     queryActive,
     setText,
     setStatusFilter,
+    revealStatuses,
     resetStatusFilters,
     toggleCategory,
     toggleUncategorized,

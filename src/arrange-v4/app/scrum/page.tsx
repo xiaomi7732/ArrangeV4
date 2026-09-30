@@ -22,6 +22,7 @@ import {
   isCategoryFilterActive,
   isStatusFilterActive,
 } from '@/lib/search/taskQuery';
+import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
@@ -31,12 +32,17 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
+import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeFailure } from '@/lib/failureMessage';
+import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
+import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
+import ErrorBanner from '@/components/ErrorBanner';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -52,9 +58,14 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+};
 
-const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
+// Workflow order: a task moves New -> In Progress, drops into Blocked as an
+// exception, and ends Finished. Ordering the lanes any other way makes the
+// normal left-to-right progression skip a column and then go backwards.
+const LANE_STATUSES = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
 type LaneStatus = (typeof LANE_STATUSES)[number];
 
 const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {
@@ -86,6 +97,7 @@ function ScrumPageContent() {
     fetchBooks,
     authRecoveryRequired: bookAuthRecoveryRequired,
     error: bookError,
+    setError: setBookError,
   } = useBookId('/scrum');
   const bookIdRef = useRef(bookId);
   const mutationVersionRef = useRef(0);
@@ -93,6 +105,13 @@ function ScrumPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  // Set when a write failed and its optimistic change was rolled back: the view
+  // is then a guess until a fetch succeeds, because a rejected multi-item write
+  // may still have partly landed.
+  const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
+  // Reads already in flight when the user dismissed the banner: their failures
+  // belong to a message that has been closed, so they are not reported.
+  const dismissedFetchSequenceRef = useRef(0);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -140,7 +159,11 @@ function ScrumPageContent() {
 
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
-  const filteredItems = filterTasks(laneItems, query);
+  // One clock for both passes, so the count and the explanation of what is
+  // hidden can never straddle midnight and disagree.
+  const filterClock = new Date();
+  const filteredItems = filterTasks(laneItems, query, { now: filterClock });
+  const hiddenByStatus = summarizeHiddenByStatus(laneItems, query, filterClock);
 
   const visibleLanes = useMemo(() => {
     return LANE_STATUSES.filter(s => query.statusFilters[s] !== 'hide');
@@ -191,7 +214,21 @@ function ScrumPageContent() {
     const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    if (!preserveError) setError(null);
+    // A write that is still unverified outlives a manual refresh: only a
+    // successful read may retract it.
+    // Switching book drops an unverified failure: it belongs to work the user
+    // is no longer looking at, and a read of another book verifies nothing.
+    const strayWrite = unverifiedWriteRef.current?.bookId === requestedBookId
+      ? null
+      : unverifiedWriteRef.current;
+    if (strayWrite) unverifiedWriteRef.current = null;
+    if (!preserveError) {
+      setError(unverifiedWriteRef.current?.message ?? null);
+    } else if (strayWrite) {
+      // Preserved errors are the one case where the dropped failure may still
+      // be on screen, and nothing left can ever retract it.
+      setError(previous => (bannerDerivesFrom(previous, strayWrite.message, 'board') ? null : previous));
+    }
 
     try {
       const today = new Date();
@@ -236,6 +273,12 @@ function ScrumPageContent() {
         return;
       }
       setTodoItems(items);
+      if (unverifiedWriteRef.current) {
+        // This read is authoritative, so the board is no longer a guess. The
+        // write failure itself stays: the user still needs to know it failed.
+        setError(unverifiedWriteRef.current.message);
+        unverifiedWriteRef.current = null;
+      }
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
     } catch (err: unknown) {
@@ -252,8 +295,17 @@ function ScrumPageContent() {
           setError(null);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        setError(message);
+        const message = describeFailure('Could not load the board.', err);
+        if (fetchSequence <= dismissedFetchSequenceRef.current) {
+          // This read was already running when the user dismissed the banner.
+          // Reporting it now would reopen something they closed.
+          return;
+        }
+        // Always composed from the write failure, never from the banner, so a
+        // run of failed refreshes replaces its clause instead of stacking, and
+        // a rolled-back write keeps saying it is unverified until a read
+        // proves otherwise.
+        setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'board'));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
@@ -325,7 +377,7 @@ function ScrumPageContent() {
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
-      const message = err instanceof Error ? err.message : 'Failed to create TODO item';
+      const message = describeFailure('Could not add the task.', err);
       throw new Error(message);
     } finally {
       finishMutation();
@@ -410,30 +462,33 @@ function ScrumPageContent() {
     ],
   );
 
-  const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> => {
-    const currentStatus = todo.status || 'new';
-    const now = new Date().toISOString();
-    const updatedTimestamps: Partial<TodoItem> = {};
-
-    if (newStatus === 'inProgress' && !todo.startDateTime) {
-      updatedTimestamps.startDateTime = now;
-    }
-    if (newStatus === 'new') {
-      updatedTimestamps.startDateTime = undefined;
-    }
-    if (newStatus === 'finished') {
-      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
-      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
-    }
-    if (newStatus !== 'finished' && currentStatus === 'finished') {
-      updatedTimestamps.finishDateTime = undefined;
-    }
-    return updatedTimestamps;
-  };
+  const statusTimestamps = (todo: TodoItemWithId, newStatus: TodoStatus): Partial<TodoItem> =>
+    statusTimestampUpdates(todo, newStatus, new Date().toISOString());
 
   const laneId = (status: TodoStatus) => `scrum:${status}`;
   const parseLaneId = (id: string) => id.slice('scrum:'.length) as LaneStatus;
   const itemsInLane = (status: LaneStatus) => canonicalLanes[status];
+
+  /**
+   * Takes an optimistic update back after the write was rejected.
+   *
+   * Only safe while nothing else has happened since: a newer mutation or a book
+   * switch means the snapshot no longer describes the rows on screen, and the
+   * queued refetch is then the only correct way to reconcile.
+   */
+  const revertOptimisticUpdate = (
+    snapshot: TodoItemWithId[],
+    mutationVersion: number,
+    operationBookId: string,
+  ) => {
+    if (bookIdRef.current !== operationBookId) return;
+    if (mutationVersionRef.current !== mutationVersion) return;
+    setTodoItems(items => restoreSnapshot(items, snapshot));
+    setSelectedTodo(current => {
+      if (!current) return current;
+      return snapshot.find(item => item.id === current.id) ?? current;
+    });
+  };
 
   const mergePersistedSources = (persistedItems: TodoItemWithId[]) => {
     const sources = new Map<string, NonNullable<TodoItemWithId['source']>>();
@@ -526,12 +581,15 @@ function ScrumPageContent() {
       updates.set(activeId, {
         ...updates.get(activeId),
         status: destinationStatus,
+        ...timestamps,
       });
     }
 
+    const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
+    const orderMutationVersion = mutationVersionRef.current;
     isSavingOrderRef.current = true;
     setIsSavingOrder(true);
     beginMutation();
@@ -540,7 +598,12 @@ function ScrumPageContent() {
       await persistUpdates(updates);
     } catch (err: unknown) {
       console.error('Error updating Scrum order:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save Scrum order');
+      revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
+      const writeMessage = describeFailure('Could not save the new order.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
     } finally {
@@ -554,6 +617,8 @@ function ScrumPageContent() {
     if (!selectedTodo?.id || !bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const updateMutationVersion = mutationVersionRef.current;
+    const updateSnapshot = snapshotItems(todoItems, [selectedTodo.id]);
     beginMutation();
 
     const persistedFields: Partial<TodoItem> = { ...updatedFields };
@@ -575,14 +640,26 @@ function ScrumPageContent() {
         todoItems.filter(item => item.id !== selectedTodo.id && (item.status || 'new') === nextStatus),
         'scrumOrder',
       );
+      // The stores derive these from the transition too, but only the caller
+      // can keep the item on screen in step with them.
+      Object.assign(
+        persistedFields,
+        statusTimestampUpdates(selectedTodo, nextStatus, new Date().toISOString()),
+      );
     }
+
+    // The stores drop the pre-bump original for a date the caller sets, so the
+    // "moved" notice has to go with the same edit rather than wait for a read.
+    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
+    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
+    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
 
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
+        item.id === selectedTodo.id ? { ...item, ...optimisticFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...optimisticFields } : prev);
 
     try {
       const updated = await store.updateItem(
@@ -594,8 +671,13 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
+      revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
       setSelectedTodo(null);
-      setError(err instanceof Error ? err.message : 'Failed to update TODO');
+      const writeMessage = describeFailure('Could not save your changes.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
       throw err;
@@ -616,6 +698,8 @@ function ScrumPageContent() {
     if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const tagsMutationVersion = mutationVersionRef.current;
+    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
     beginMutation();
 
     const affectedIds = new Set(affectedItems.map(a => a.id));
@@ -646,8 +730,13 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return false;
+      revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
-      setError(err instanceof Error ? err.message : 'Failed to update tags');
+      const writeMessage = describeFailure('Could not update the tags.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
       throw err;
@@ -721,10 +810,15 @@ function ScrumPageContent() {
     <div className={styles.container}>
       <div className={styles.inner}>
         {displayError && (
-          <div className={styles.error} role="alert">
-            <span className={styles.errorTitle}>Error: </span>
-            <span>{displayError}</span>
-          </div>
+          <ErrorBanner
+            message={displayError}
+            onDismiss={() => {
+                unverifiedWriteRef.current = null;
+                dismissedFetchSequenceRef.current = fetchSequenceRef.current;
+                setError(null);
+                setBookError(null);
+              }}
+          />
         )}
 
         {loading && (
@@ -740,6 +834,9 @@ function ScrumPageContent() {
               queryActive={taskQuery.queryActive}
               resultCount={filteredItems.length}
               totalCount={laneItems.length}
+              hiddenSummary={hiddenByStatus.label}
+              scopeNote="loads 30 days either side of today"
+              onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
               onTextChange={taskQuery.setText}
               onClearAll={taskQuery.clearAll}
               presets={taskQuery.presets}

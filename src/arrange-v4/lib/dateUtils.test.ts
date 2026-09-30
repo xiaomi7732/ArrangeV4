@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import {
   differenceInLocalCalendarDays,
+  formatAbsoluteDateTime,
   formatRelativeDate,
   isDateToday,
 } from './dateUtils';
@@ -49,10 +50,19 @@ describe('local calendar date handling', () => {
 
   it('preserves invalid-date fallbacks', () => {
     assert.equal(isDateToday('not-a-date'), false);
+    assert.equal(formatAbsoluteDateTime('not-a-date'), 'not-a-date');
     assert.deepEqual(formatRelativeDate('not-a-date'), {
       text: 'not-a-date',
       isOverdue: false,
       fullDate: 'not-a-date',
     });
+  });
+
+  it('spells absolute dates the same way everywhere', () => {
+    const absolute = formatAbsoluteDateTime('2026-09-30T18:23:00Z');
+
+    assert.equal(absolute, 'Sep 30, 2026, 11:23 AM');
+    // Tooltips and detail views must not disagree about the same instant.
+    assert.equal(formatRelativeDate('2026-09-30T18:23:00Z').fullDate, absolute);
   });
 });

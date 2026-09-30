@@ -16,13 +16,16 @@ import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
+import { describeDateBump } from '@/lib/bumpNotice';
 import {
   FILTER_MODE_LABELS,
   FILTER_MODES,
   filterTasks,
   isCategoryFilterActive,
   isStatusFilterActive,
-} from '@/lib/search/taskQuery';import { useTaskQuery } from '@/lib/search/useTaskQuery';
+} from '@/lib/search/taskQuery';
+import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
+import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
   moveBetweenContainers,
   nextOrder,
@@ -31,6 +34,10 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
+import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeFailure } from '@/lib/failureMessage';
+import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
+import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -38,6 +45,7 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
+import ErrorBanner from '@/components/ErrorBanner';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -52,7 +60,9 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+};
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
   return (a.etsDateTime || '').localeCompare(b.etsDateTime || '') ||
@@ -67,6 +77,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
   onStatusChange?: (todo: TodoItemWithId, newStatus: TodoStatus) => void
 }) {
   const currentStatus = todo.status || 'new';
+  const bumpedFrom = describeDateBump(todo);
 
   const handleStatusClick = (e: React.MouseEvent<HTMLButtonElement>, status: TodoStatus) => {
     e.stopPropagation(); // Prevent card click when clicking status
@@ -81,7 +92,24 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       onClick={() => onClick?.(todo)}
     >
       <div className={styles.todoHeader}>
-        <h4 className={styles.todoTitle}>{todo.subject}</h4>
+        {/*
+          The card is a plain container: it holds the status buttons, so giving
+          it a widget role would make screen readers present the whole card as
+          one control and hide those buttons. The title carries the open action
+          instead.
+        */}
+        <h4 className={styles.todoTitle}>
+          <button
+            type="button"
+            className={styles.todoTitleButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick?.(todo);
+            }}
+          >
+            {todo.subject}
+          </button>
+        </h4>
       </div>
       
       <div className={styles.statusContainer}>
@@ -99,20 +127,23 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       </div>
       
       {/* Dates section - compact layout */}
-      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime) && (
+      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime || bumpedFrom) && (
         <div className={styles.todoDates}>
           {/* Planned times */}
           {(todo.etsDateTime || todo.etaDateTime) && (
             <div className={styles.todoDateRow}>
               <span className={styles.todoDateLabel}>Planned:</span>
-              {todo.etsDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`ETS: ${new Date(todo.etsDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.etsDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.etsDateTime && (() => {
+                const ets = formatRelativeDate(todo.etsDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`ETS: ${ets.fullDate}`}
+                  >
+                    {ets.text}
+                  </span>
+                );
+              })()}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
               {todo.etaDateTime && (() => {
                 const eta = formatRelativeDate(todo.etaDateTime);
@@ -125,29 +156,52 @@ function TodoCard({ todo, onClick, onStatusChange }: {
                   </span>
                 );
               })()}
+              {bumpedFrom && (
+                <span
+                  className={styles.todoDateBumped}
+                  title={bumpedFrom.tooltip}
+                  aria-label={bumpedFrom.tooltip}
+                >
+                  ↻ moved
+                </span>
+              )}
+            </div>
+          )}
+          {bumpedFrom && (
+            <div className={styles.todoDateRow}>
+              <span className={styles.todoDateLabel}>Originally:</span>
+              <span className={styles.todoDateValue} title={bumpedFrom.tooltip}>
+                {bumpedFrom.text}
+              </span>
             </div>
           )}
           {/* Actual times */}
           {(todo.startDateTime || todo.finishDateTime) && (
             <div className={styles.todoDateRow}>
               <span className={styles.todoDateLabel}>Actual:</span>
-              {todo.startDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`Started: ${new Date(todo.startDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.startDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.startDateTime && (() => {
+                const started = formatRelativeDate(todo.startDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`Started: ${started.fullDate}`}
+                  >
+                    {started.text}
+                  </span>
+                );
+              })()}
               {todo.startDateTime && todo.finishDateTime && <span className={styles.todoDateSep}>→</span>}
-              {todo.finishDateTime && (
-                <span 
-                  className={styles.todoDateValue}
-                  title={`Finished: ${new Date(todo.finishDateTime).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}`}
-                >
-                  {new Date(todo.finishDateTime).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </span>
-              )}
+              {todo.finishDateTime && (() => {
+                const finished = formatRelativeDate(todo.finishDateTime);
+                return (
+                  <span
+                    className={styles.todoDateValue}
+                    title={`Finished: ${finished.fullDate}`}
+                  >
+                    {finished.text}
+                  </span>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -206,6 +260,7 @@ function MatrixPageContent() {
     fetchBooks,
     authRecoveryRequired: bookAuthRecoveryRequired,
     error: bookError,
+    setError: setBookError,
   } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
@@ -214,6 +269,13 @@ function MatrixPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  // Set when a write failed and its optimistic change was rolled back: the view
+  // is then a guess until a fetch succeeds, because a rejected multi-item write
+  // may still have partly landed.
+  const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
+  // Reads already in flight when the user dismissed the banner: their failures
+  // belong to a message that has been closed, so they are not reported.
+  const dismissedFetchSequenceRef = useRef(0);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -255,7 +317,11 @@ function MatrixPageContent() {
 
   // Deliberately not memoized: today-only filtering depends on the current
   // date, so results must refresh on re-render rather than stick across midnight.
-  const filteredTodoItems = filterTasks(todoItems, query);
+  // One clock for both passes, so the count and the explanation of what is
+  // hidden can never straddle midnight and disagree.
+  const filterClock = new Date();
+  const filteredTodoItems = filterTasks(todoItems, query, { now: filterClock });
+  const hiddenByStatus = summarizeHiddenByStatus(todoItems, query, filterClock);
 
   const canonicalQuadrants = useMemo(() => ({
     doFirst: sortByPersistedOrder(
@@ -319,7 +385,21 @@ function MatrixPageContent() {
     const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    if (!preserveError) setError(null);
+    // A write that is still unverified outlives a manual refresh: only a
+    // successful read may retract it.
+    // Switching book drops an unverified failure: it belongs to work the user
+    // is no longer looking at, and a read of another book verifies nothing.
+    const strayWrite = unverifiedWriteRef.current?.bookId === requestedBookId
+      ? null
+      : unverifiedWriteRef.current;
+    if (strayWrite) unverifiedWriteRef.current = null;
+    if (!preserveError) {
+      setError(unverifiedWriteRef.current?.message ?? null);
+    } else if (strayWrite) {
+      // Preserved errors are the one case where the dropped failure may still
+      // be on screen, and nothing left can ever retract it.
+      setError(previous => (bannerDerivesFrom(previous, strayWrite.message, 'board') ? null : previous));
+    }
 
     try {
       // Fetch events from last 30 days to next 30 days
@@ -359,6 +439,12 @@ function MatrixPageContent() {
         return;
       }
       setTodoItems(todos);
+      if (unverifiedWriteRef.current) {
+        // This read is authoritative, so the board is no longer a guess. The
+        // write failure itself stays: the user still needs to know it failed.
+        setError(unverifiedWriteRef.current.message);
+        unverifiedWriteRef.current = null;
+      }
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
 
@@ -448,8 +534,17 @@ function MatrixPageContent() {
           setError(null);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        setError(message);
+        const message = describeFailure('Could not load the board.', err);
+        if (fetchSequence <= dismissedFetchSequenceRef.current) {
+          // This read was already running when the user dismissed the banner.
+          // Reporting it now would reopen something they closed.
+          return;
+        }
+        // Always composed from the write failure, never from the banner, so a
+        // run of failed refreshes replaces its clause instead of stacking, and
+        // a rolled-back write keeps saying it is unverified until a read
+        // proves otherwise.
+        setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'board'));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
@@ -497,7 +592,7 @@ function MatrixPageContent() {
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
-      const message = err instanceof Error ? err.message : 'Failed to create TODO item';
+      const message = describeFailure('Could not add the task.', err);
       throw new Error(message);
     } finally {
       finishMutation();
@@ -520,6 +615,27 @@ function MatrixPageContent() {
     if (!urgent && important) return canonicalQuadrants.schedule;
     if (urgent && !important) return canonicalQuadrants.delegate;
     return canonicalQuadrants.eliminate;
+  };
+
+  /**
+   * Takes an optimistic update back after the write was rejected.
+   *
+   * Only safe while nothing else has happened since: a newer mutation or a book
+   * switch means the snapshot no longer describes the rows on screen, and the
+   * queued refetch is then the only correct way to reconcile.
+   */
+  const revertOptimisticUpdate = (
+    snapshot: TodoItemWithId[],
+    mutationVersion: number,
+    operationBookId: string,
+  ) => {
+    if (bookIdRef.current !== operationBookId) return;
+    if (mutationVersionRef.current !== mutationVersion) return;
+    setTodoItems(items => restoreSnapshot(items, snapshot));
+    setSelectedTodo(current => {
+      if (!current) return current;
+      return snapshot.find(item => item.id === current.id) ?? current;
+    });
   };
 
   const mergePersistedSources = (persistedItems: TodoItemWithId[]) => {
@@ -617,9 +733,11 @@ function MatrixPageContent() {
       });
     }
 
+    const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
+    const orderMutationVersion = mutationVersionRef.current;
     isSavingOrderRef.current = true;
     setIsSavingOrder(true);
     beginMutation();
@@ -628,7 +746,12 @@ function MatrixPageContent() {
       await persistUpdates(updates);
     } catch (err: unknown) {
       console.error('Error updating Matrix order:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save Matrix order');
+      revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
+      const writeMessage = describeFailure('Could not save the new order.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
     } finally {
@@ -642,27 +765,12 @@ function MatrixPageContent() {
     if (!bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const statusMutationVersion = mutationVersionRef.current;
+    const statusSnapshot = snapshotItems(todoItems, [todo.id]);
     beginMutation();
 
-    const currentStatus = todo.status || 'new';
     const now = new Date().toISOString();
-
-    // Calculate timestamp changes based on status transition
-    const updatedTimestamps: Partial<TodoItem> = {};
-
-    if (newStatus === 'inProgress' && !todo.startDateTime) {
-      updatedTimestamps.startDateTime = now;
-    }
-    if (newStatus === 'new') {
-      updatedTimestamps.startDateTime = undefined;
-    }
-    if (newStatus === 'finished') {
-      if (!todo.startDateTime) updatedTimestamps.startDateTime = now;
-      if (!todo.finishDateTime) updatedTimestamps.finishDateTime = now;
-    }
-    if (newStatus !== 'finished' && currentStatus === 'finished') {
-      updatedTimestamps.finishDateTime = undefined;
-    }
+    const updatedTimestamps = statusTimestampUpdates(todo, newStatus, now);
     const scrumOrder = nextOrder(
       todoItems.filter(item => item.id !== todo.id && (item.status || 'new') === newStatus),
       'scrumOrder',
@@ -680,14 +788,19 @@ function MatrixPageContent() {
       const updated = await store.updateItem(
         operationBookId,
         todo.id,
-        { status: newStatus, scrumOrder },
+        { status: newStatus, scrumOrder, ...updatedTimestamps },
       );
       if (bookIdRef.current === operationBookId) mergePersistedSources([updated]);
     } catch (err: unknown) {
       console.error('Error updating TODO status:', err);
       if (bookIdRef.current !== operationBookId) return;
-      const message = err instanceof Error ? err.message : 'Failed to update status';
-      setError(message);
+      revertOptimisticUpdate(statusSnapshot, statusMutationVersion, operationBookId);
+      const message = describeFailure('Could not change the status.', err);
+      const writeMessage = message;
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
     } finally {
@@ -699,6 +812,8 @@ function MatrixPageContent() {
     if (!selectedTodo?.id || !bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const updateMutationVersion = mutationVersionRef.current;
+    const updateSnapshot = snapshotItems(todoItems, [selectedTodo.id]);
     beginMutation();
 
     const persistedFields: Partial<TodoItem> = { ...updatedFields };
@@ -720,14 +835,26 @@ function MatrixPageContent() {
         todoItems.filter(item => item.id !== selectedTodo.id && (item.status || 'new') === nextStatus),
         'scrumOrder',
       );
+      // The stores derive these from the transition too, but only the caller
+      // can keep the item on screen in step with them.
+      Object.assign(
+        persistedFields,
+        statusTimestampUpdates(selectedTodo, nextStatus, new Date().toISOString()),
+      );
     }
+
+    // The stores drop the pre-bump original for a date the caller sets, so the
+    // "moved" notice has to go with the same edit rather than wait for a read.
+    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
+    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
+    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
 
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
+        item.id === selectedTodo.id ? { ...item, ...optimisticFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...optimisticFields } : prev);
 
     try {
       const updated = await store.updateItem(
@@ -739,8 +866,16 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
+      revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
+      // The overlay closes even though the revert restored its copy: the error
+      // banner lives on the page behind it, so leaving it open would hide the
+      // explanation. The board itself keeps the reverted values.
       setSelectedTodo(null);
-      setError(err instanceof Error ? err.message : 'Failed to update TODO');
+      const writeMessage = describeFailure('Could not save your changes.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
       throw err;
@@ -761,6 +896,8 @@ function MatrixPageContent() {
     if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const tagsMutationVersion = mutationVersionRef.current;
+    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
     beginMutation();
 
     const affectedIds = new Set(affectedItems.map(a => a.id));
@@ -791,8 +928,13 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return false;
+      revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
-      setError(err instanceof Error ? err.message : 'Failed to update tags');
+      const writeMessage = describeFailure('Could not update the tags.', err);
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
       throw err;
@@ -966,10 +1108,15 @@ function MatrixPageContent() {
     <div className={styles.container}>
       <div className={styles.inner}>
         {displayError && (
-          <div className={styles.error} role="alert">
-            <span className={styles.errorTitle}>Error: </span>
-            <span>{displayError}</span>
-          </div>
+          <ErrorBanner
+            message={displayError}
+            onDismiss={() => {
+                unverifiedWriteRef.current = null;
+                dismissedFetchSequenceRef.current = fetchSequenceRef.current;
+                setError(null);
+                setBookError(null);
+              }}
+          />
         )}
 
         {loading && (
@@ -985,6 +1132,9 @@ function MatrixPageContent() {
                 queryActive={taskQuery.queryActive}
                 resultCount={filteredTodoItems.length}
                 totalCount={todoItems.length}
+                hiddenSummary={hiddenByStatus.label}
+                scopeNote="loads 30 days either side of today"
+                onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
                 onTextChange={taskQuery.setText}
                 onClearAll={taskQuery.clearAll}
                 presets={taskQuery.presets}

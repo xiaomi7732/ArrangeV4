@@ -232,6 +232,39 @@
   background: #fef2f2;
 }
 
+/*
+ * Narrow screens: let the bar wrap instead of pushing the action buttons past
+ * the right edge. The page itself does not scroll horizontally, so anything
+ * that overflows here is simply unreachable.
+ */
+@media (max-width: 640px) {
+  .topBar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .topBarLeft,
+  .topBarRight {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .topBarLeft select,
+  .topBarRight select {
+    max-width: 55vw;
+  }
+
+  /* The spacer would consume the first row and force every action to wrap. */
+  .topBarMiddle {
+    display: none;
+  }
+
+  .topBarRight {
+    margin-left: auto;
+  }
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(-100%);

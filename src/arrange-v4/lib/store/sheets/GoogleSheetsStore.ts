@@ -651,6 +651,17 @@ export class GoogleSheetsStore implements TodoStore {
       changedFields.add('startDateTime');
       changedFields.add('finishDateTime');
     }
+    // A date the caller sets supersedes the pre-bump original, which would
+    // otherwise keep claiming the item had been moved. Kept in step with the
+    // calendar backend so the notice behaves the same on both.
+    if (updates.etsDateTime !== undefined && existing.item.originalEtsDateTime) {
+      updated.originalEtsDateTime = null;
+      changedFields.add('originalEtsDateTime');
+    }
+    if (updates.etaDateTime !== undefined && existing.item.originalEtaDateTime) {
+      updated.originalEtaDateTime = null;
+      changedFields.add('originalEtaDateTime');
+    }
     const row = serializeSheetRow(
       headers,
       updated,
