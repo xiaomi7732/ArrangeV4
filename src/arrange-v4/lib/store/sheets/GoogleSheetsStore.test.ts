@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { GoogleSheetsStore } from './GoogleSheetsStore';
-import { TODO_HEADERS, TODO_METADATA_HEADER } from './schema';
+import {
+  serializeSheetRow,
+  TODO_HEADERS,
+  TODO_METADATA_HEADER,
+} from './schema';
 import { isInteractiveAuthenticationRequiredError } from '../../auth/errors';
 import type { AcquireTokenOptions } from '@/lib/auth/types';
 
@@ -23,6 +27,12 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function todoSheetResponse(sheetId = 42): Response {
+  return jsonResponse({
+    sheets: [{ properties: { sheetId, title: 'TODOs' } }],
   });
 }
 
@@ -120,9 +130,15 @@ describe('GoogleSheetsStore', () => {
     const mock = installFetchMock([
       request => {
         assert.equal(request.init.method, 'POST');
+        const body = JSON.parse(String(request.init.body)) as {
+          sheets: Array<{ properties: { sheetId: number; title: string } }>;
+        };
+        assert.deepEqual(body.sheets, [{
+          properties: { sheetId: 0, title: 'TODOs' },
+        }]);
         return jsonResponse({
           spreadsheetId: 'created-sheet',
-          sheets: [{ properties: { sheetId: 42, title: 'TODOs' } }],
+          sheets: [{ properties: { sheetId: 0, title: 'TODOs' } }],
         });
       },
       request => {
@@ -175,6 +191,7 @@ describe('GoogleSheetsStore', () => {
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), existingRow] }),
+      () => todoSheetResponse(),
       request => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
@@ -204,6 +221,7 @@ describe('GoogleSheetsStore', () => {
     row[headers.indexOf('customNotes')] = 'displayed formula result';
     const mock = installFetchMock([
       () => jsonResponse({ values: [headers, row] }),
+      () => todoSheetResponse(),
       request => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
@@ -237,6 +255,7 @@ describe('GoogleSheetsStore', () => {
         ]);
         return jsonResponse({ updatedRows: 1 });
       },
+      () => todoSheetResponse(),
       () => jsonResponse({ updates: { updatedRows: 1 } }),
     ]);
     try {
@@ -253,6 +272,7 @@ describe('GoogleSheetsStore', () => {
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), row] }),
+      () => todoSheetResponse(),
       request => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);
@@ -289,13 +309,16 @@ describe('GoogleSheetsStore', () => {
     ];
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS), first, second] }),
+      () => todoSheetResponse(731),
       request => {
         assert.equal(request.init.method, 'POST');
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.equal(body.values.length, 2);
         assert.equal(body.values[0][TODO_HEADERS.indexOf('matrixOrder')], 2);
         assert.equal(body.values[1][TODO_HEADERS.indexOf('matrixOrder')], 1);
-        return jsonResponse({ updates: { updatedRows: 2 } });
+        return jsonResponse({
+          updates: { updatedRows: 2, updatedRange: "'TODOs'!A4:S5" },
+        });
       },
     ]);
     try {
@@ -304,7 +327,9 @@ describe('GoogleSheetsStore', () => {
         { itemId: 'todo-2', updates: { matrixOrder: 1 } },
       ]);
       assert.deepEqual(updated.map(item => item.matrixOrder), [2, 1]);
-      assert.equal(mock.requests.length, 2);
+      assert.match(updated[0].source?.url || '', /#gid=731&range=A4%3AS4$/);
+      assert.match(updated[1].source?.url || '', /#gid=731&range=A5%3AS5$/);
+      assert.equal(mock.requests.length, 3);
     } finally {
       mock.restore();
     }
@@ -338,6 +363,7 @@ describe('GoogleSheetsStore', () => {
           recentlyFinished,
         ],
       }),
+      () => todoSheetResponse(731),
     ]);
     try {
       const items = await createStore().listItems('sheet:sheet-1', {
@@ -346,8 +372,50 @@ describe('GoogleSheetsStore', () => {
         toDate: '2026-02-01T00:00:00.000Z',
       });
       assert.deepEqual(items.map(item => item.id), ['todo-1', 'todo-3', 'todo-4']);
+      assert.match(
+        items[0].source?.url || '',
+        /^https:\/\/docs\.google\.com\/spreadsheets\/d\/sheet-1\/edit#gid=731&range=A2%3AS2$/,
+      );
+      assert.equal(items[0].source?.label, 'Open row in Google Sheets');
       assert.match(mock.requests[0].url, /\/values\/TODOs\?/);
       assert.doesNotMatch(mock.requests[0].url, /A%3AZ/);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it('links to the last physical revision row regardless of operation ID order', async () => {
+    const headers = Array.from(TODO_HEADERS);
+    const base = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Original' },
+      '',
+      '',
+      { operationId: 'z-base' },
+    );
+    const patch = serializeSheetRow(
+      headers,
+      { id: 'todo-1', subject: 'Updated' },
+      '',
+      '',
+      {
+        changedFields: ['subject'],
+        operationId: 'a-patch',
+        parentOperations: { subject: 'z-base' },
+      },
+    );
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [headers, base, patch] }),
+      () => todoSheetResponse(731),
+    ]);
+    try {
+      const [item] = await createStore().listItems(
+        'sheet:sheet-1',
+        { range: 'all' },
+      );
+
+      assert.equal(item.subject, 'Updated');
+      assert.match(item.source?.url || '', /#gid=731&range=A3%3AS3$/);
     } finally {
       mock.restore();
     }
@@ -357,9 +425,12 @@ describe('GoogleSheetsStore', () => {
     let tokenCalls = 0;
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS)] }),
+      () => todoSheetResponse(731),
       request => {
         assert.equal(request.init.method, 'POST');
-        return jsonResponse({ updates: { updatedRows: 1 } });
+        return jsonResponse({
+          updates: { updatedRows: 1, updatedRange: "'TODOs'!A2:S2" },
+        });
       },
     ]);
     try {
@@ -380,6 +451,7 @@ describe('GoogleSheetsStore', () => {
       assert.ok(created.etsDateTime);
       assert.ok(created.etaDateTime);
       assert.ok(created.startDateTime);
+      assert.match(created.source?.url || '', /#gid=731&range=A2%3AS2$/);
       assert.equal(tokenCalls, 1);
     } finally {
       mock.restore();
@@ -389,6 +461,7 @@ describe('GoogleSheetsStore', () => {
   it('initializes lifecycle timestamps when creating a finished item', async () => {
     const mock = installFetchMock([
       () => jsonResponse({ values: [Array.from(TODO_HEADERS)] }),
+      () => todoSheetResponse(),
       request => {
         const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
         assert.ok(body.values[0][TODO_HEADERS.indexOf('startDateTime')]);

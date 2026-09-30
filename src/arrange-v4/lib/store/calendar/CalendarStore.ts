@@ -130,7 +130,7 @@ export class CalendarStore implements TodoStore {
         .api(`/me/calendars/${calendarId}/calendarView`)
         .query({ startDateTime: opts.fromDate, endDateTime: opts.toDate })
         .top(100)
-        .select('id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
+        .select('id,webLink,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
         .get();
       events.push(...(response.value || []));
       while (response['@odata.nextLink']) {
@@ -142,7 +142,7 @@ export class CalendarStore implements TodoStore {
       let response = await client
         .api(`/me/calendars/${calendarId}/events`)
         .top(100)
-        .select('id,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
+        .select('id,webLink,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
         .get();
       events.push(...(response.value || []));
       while (response['@odata.nextLink']) {
@@ -508,6 +508,9 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
   if (!event.id) return null;
   const item: TodoItemWithId = {
     id: event.id,
+    ...(event.webLink
+      ? { source: { url: event.webLink, label: 'Open in Outlook Calendar' } }
+      : {}),
     subject: event.subject || '',
     categories: event.categories || [],
     etsDateTime: convertGraphDateTimeToISO(event.start),

@@ -51,7 +51,13 @@ export interface TodoItem {
   } | null;
 }
 
-export type TodoItemWithId = TodoItem & { id: string };
+export type TodoItemWithId = TodoItem & {
+  id: string;
+  source?: {
+    url: string;
+    label: string;
+  };
+};
 
 export interface Book {
   /** Prefixed identifier, e.g. `cal:<calendarId>`. Routing is done off the prefix. */

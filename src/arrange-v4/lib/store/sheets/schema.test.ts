@@ -707,6 +707,7 @@ describe('Google Sheets TODO schema', () => {
     const [record] = parseSheetRows([headers, second, base, first]);
 
     assert.equal(record.item.subject, 'Second');
+    assert.equal(record.rowNumber, 4);
   });
 
   it('keeps legacy revision identity stable when rows move', () => {

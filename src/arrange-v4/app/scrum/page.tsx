@@ -461,12 +461,30 @@ function ScrumPageContent() {
   const parseLaneId = (id: string) => id.slice('scrum:'.length) as LaneStatus;
   const itemsInLane = (status: LaneStatus) => canonicalLanes[status];
 
+  const mergePersistedSources = (persistedItems: TodoItemWithId[]) => {
+    const sources = new Map<string, NonNullable<TodoItemWithId['source']>>();
+    for (const item of persistedItems) {
+      if (item.source) sources.set(item.id, item.source);
+    }
+    if (sources.size === 0) return;
+    setTodoItems(items => items.map(item => {
+      const source = sources.get(item.id);
+      return source ? { ...item, source } : item;
+    }));
+    setSelectedTodo(current => {
+      if (!current) return current;
+      const source = sources.get(current.id);
+      return source ? { ...current, source } : current;
+    });
+  };
+
   const persistUpdates = async (updates: Map<string, Partial<TodoItem>>) => {
     if (!bookId) throw new Error('No book selected');
-    await store.updateItems(
+    const persistedItems = await store.updateItems(
       bookId,
       Array.from(updates, ([itemId, fields]) => ({ itemId, updates: fields })),
     );
+    if (bookIdRef.current === bookId) mergePersistedSources(persistedItems);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -593,7 +611,12 @@ function ScrumPageContent() {
     setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
 
     try {
-      await store.updateItem(operationBookId, selectedTodo.id, persistedFields);
+      const updated = await store.updateItem(
+        operationBookId,
+        selectedTodo.id,
+        persistedFields,
+      );
+      if (bookIdRef.current === operationBookId) mergePersistedSources([updated]);
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
@@ -629,7 +652,7 @@ function ScrumPageContent() {
     updateFilterState();
 
     try {
-      await store.updateItems(
+      const updated = await store.updateItems(
         operationBookId,
         affectedItems.map(item => ({
           itemId: item.id,
@@ -638,6 +661,7 @@ function ScrumPageContent() {
           },
         })),
       );
+      if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return;

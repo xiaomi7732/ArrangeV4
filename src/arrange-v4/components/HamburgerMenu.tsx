@@ -200,14 +200,24 @@ export default function HamburgerMenu() {
                 </Link>
               ))}
             </nav>
-            {isAuthenticated && (
-              <div className={styles.sidebarFooter}>
+            <div className={styles.sidebarFooter}>
+              <a
+                href="https://github.com/xiaomi7732/ArrangeV4/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.feedbackLink}
+                onClick={() => setIsOpen(false)}
+              >
+                <span className={styles.navIcon}>🐛</span>
+                Report an Issue
+              </a>
+              {isAuthenticated && (
                 <button className={styles.signOutButton} onClick={handleSignOut}>
                   <span className={styles.navIcon}>🚪</span>
                   Sign Out
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </aside>
         </>
       )}
