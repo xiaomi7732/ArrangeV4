@@ -180,13 +180,16 @@ describe('filterTasks', () => {
   });
 
   it('respects an injected now for today-only filtering', () => {
-    const now = new Date('2024-03-10T12:00:00Z');
+    // Built from local calendar parts: "today" is a local-day comparison, so
+    // fixed UTC instants would straddle midnight in some time zones.
+    const now = new Date(2024, 2, 10, 12, 0, 0);
+    const earlierSameDay = new Date(2024, 2, 10, 8, 0, 0);
     const items = [
-      task({ subject: 'finished then', status: 'finished', finishDateTime: '2024-03-10T08:00:00Z' }),
+      task({ subject: 'finished then', status: 'finished', finishDateTime: earlierSameDay.toISOString() }),
     ];
     assert.equal(filterTasks(items, query(), { now }).length, 1);
     assert.equal(
-      filterTasks(items, query(), { now: new Date('2024-03-20T12:00:00Z') }).length,
+      filterTasks(items, query(), { now: new Date(2024, 2, 20, 12, 0, 0) }).length,
       0,
     );
   });

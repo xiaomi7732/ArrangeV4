@@ -58,7 +58,14 @@ export default function TaskSearchBar({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const presetNameRef = useRef<HTMLInputElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const presetSelectRef = useRef<HTMLSelectElement>(null);
+  // Set by handlers that unmount the element holding focus, so the next render
+  // can hand focus to the control that replaces it instead of dropping it to
+  // <body> and restarting tab order from the top of the page.
+  const pendingFocusRef = useRef<'save' | 'presets' | null>(null);
   const presetSelectId = useId();
+  const [announcedCount, setAnnouncedCount] = useState('');
 
   const activePreset = presets.find(preset => preset.id === activePresetId) ?? null;
 
@@ -87,6 +94,26 @@ export default function TaskSearchBar({
     if (formMode) presetNameRef.current?.focus();
   }, [formMode]);
 
+  useEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    pendingFocusRef.current = null;
+    const node = target === 'presets'
+      ? presetSelectRef.current ?? saveButtonRef.current
+      : saveButtonRef.current;
+    (node ?? searchInputRef.current)?.focus();
+  });
+
+  // Let the result count settle before announcing it, so a screen reader reads
+  // one outcome per search rather than one per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setAnnouncedCount(`Showing ${resultCount} of ${totalCount} items`),
+      500,
+    );
+    return () => clearTimeout(timer);
+  }, [resultCount, totalCount]);
+
   const openSaveForm = () => {
     // Prefill from the preset being edited so saving updates it in place rather
     // than making the user retype its name. After a filter edit the preset is no
@@ -111,6 +138,7 @@ export default function TaskSearchBar({
     setFormTargetId(null);
     setPresetName('');
     onDismissPresetError();
+    pendingFocusRef.current = 'save';
   };
 
   const submitForm = (event: React.FormEvent) => {
@@ -132,6 +160,7 @@ export default function TaskSearchBar({
     }
     onDeletePreset(activePreset.id);
     setConfirmingDeleteId(null);
+    pendingFocusRef.current = 'presets';
   };
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -172,9 +201,15 @@ export default function TaskSearchBar({
           )}
         </div>
 
-        <span className={styles.resultCount} role="status">
+        <span className={styles.resultCount}>
           Showing {resultCount} of {totalCount} items
         </span>
+        {/*
+          Announced separately and on a delay: the visible count changes on every
+          keystroke, and a live region tied to it would queue one announcement per
+          character and lag behind the typing.
+        */}
+        <span className={styles.srOnly} role="status">{announcedCount}</span>
 
         {queryActive && (
           <button
@@ -218,10 +253,14 @@ export default function TaskSearchBar({
           </label>
           <select
             id={presetSelectId}
+            ref={presetSelectRef}
             className={styles.presetSelect}
             value={activePresetId ?? ''}
             onChange={event => {
               closeForm();
+              // The select itself keeps focus here; only an unmounting control
+              // needs focus handed on.
+              pendingFocusRef.current = null;
               setConfirmingDeleteId(null);
               if (event.target.value) onApplyPreset(event.target.value);
             }}
@@ -241,6 +280,7 @@ export default function TaskSearchBar({
             <>
               <button
                 type="button"
+                ref={saveButtonRef}
                 className={styles.chip}
                 onClick={openSaveForm}
                 disabled={disabled || !queryActive}
