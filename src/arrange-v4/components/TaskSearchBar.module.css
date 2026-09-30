@@ -1,0 +1,260 @@
+.searchBar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  margin-bottom: 12px;
+}
+
+.searchRow,
+.controlRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.searchField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 8px 32px 8px 30px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #111827;
+  background: #ffffff;
+}
+
+.searchInput:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+  border-color: #2563eb;
+}
+
+.searchInput::-webkit-search-cancel-button {
+  display: none;
+}
+
+.searchClear {
+  position: absolute;
+  right: 6px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.searchClear:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.resultCount {
+  font-size: 0.82rem;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+/* Announced by assistive technology only; visually removed without being hidden
+   from the accessibility tree. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.priorityGroup,
+.presetGroup,
+.presetForm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presetGroup {
+  margin-left: auto;
+}
+
+.presetLabel {
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.presetSelect,
+.presetInput {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #111827;
+  background: #ffffff;
+  max-width: 180px;
+}
+
+.presetSelect:focus,
+.presetInput:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chipActive {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.chipPrimary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.chipPrimary:hover:not(:disabled) {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.chipDanger {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.clearAll {
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.presetError {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+  .presetGroup {
+    margin-left: 0;
+  }
+
+  .resultCount {
+    order: 3;
+    width: 100%;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .searchBar {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .searchInput,
+  .presetSelect,
+  .presetInput {
+    background: #111827;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .searchClear {
+    color: #9ca3af;
+  }
+
+  .searchClear:hover {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .resultCount,
+  .presetLabel {
+    color: #9ca3af;
+  }
+
+  .chip {
+    background: #111827;
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+
+  .chip:hover:not(:disabled) {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .chipActive {
+    background: #1e3a5f;
+    border-color: #1d4ed8;
+    color: #93bbfd;
+  }
+
+  .chipPrimary {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+
+  .chipDanger {
+    background: #371520;
+    border-color: #b91c1c;
+    color: #fca5a5;
+  }
+
+  .clearAll {
+    color: #fca5a5;
+    border-color: #b91c1c;
+  }
+
+  .presetError {
+    color: #fca5a5;
+  }
+}

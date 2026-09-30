@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsc --project tsconfig.test.json && node --test .test-dist/lib/auth/recoveryState.test.js .test-dist/lib/dateUtils.test.js .test-dist/lib/hooks/useRefreshOnPageActivation.test.js .test-dist/lib/selectionUtils.test.js .test-dist/lib/store/tokenAcquisition.test.js .test-dist/lib/store/sheets/schema.test.js .test-dist/lib/store/sheets/GoogleSheetsStore.test.js"
+    "test": "tsc --project tsconfig.test.json && node --test .test-dist/lib/auth/recoveryState.test.js .test-dist/lib/dateUtils.test.js .test-dist/lib/hooks/useRefreshOnPageActivation.test.js .test-dist/lib/selectionUtils.test.js .test-dist/lib/store/tokenAcquisition.test.js .test-dist/lib/store/sheets/schema.test.js .test-dist/lib/store/sheets/GoogleSheetsStore.test.js .test-dist/lib/search/taskQuery.test.js .test-dist/lib/search/filterPresets.test.js"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.27.0",

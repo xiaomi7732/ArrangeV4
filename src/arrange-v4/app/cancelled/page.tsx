@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useStore } from '@/lib/store/useStore';
 import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
+import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
+import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -12,6 +14,7 @@ import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivati
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ViewTodoItem from '@/components/ViewTodoItem';
+import TaskSearchBar from '@/components/TaskSearchBar';
 import Link from 'next/link';
 import styles from './page.module.css';
 
@@ -52,7 +55,44 @@ function CancelledPageContent() {
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
-  const allSelected = cancelledItems.length > 0 && cancelledItems.every(t => selectedIds.has(t.id));
+  // Every item on this page is already cancelled, so the shared status filters
+  // (which hide cancelled items by default) must not be applied here. This view
+  // also offers search only, so it keeps its own preset scope: board presets
+  // carry tag/priority/status criteria it cannot display or edit.
+  const taskQuery = useTaskQuery(bookId, {
+    defaultStatusFilters: SHOW_ALL_STATUS_FILTERS,
+    presetScope: 'cancelled',
+  });
+  const { query } = taskQuery;
+
+  const visibleItems = useMemo(
+    () => filterTasks(cancelledItems, query, { applyStatusFilters: false }),
+    [cancelledItems, query],
+  );
+
+  // Bulk delete acts only on what is on screen, so a task hidden by the current
+  // search can never be removed.
+  const deletableIds = useMemo(
+    () => visibleItems.filter(item => selectedIds.has(item.id)).map(item => item.id),
+    [visibleItems, selectedIds],
+  );
+
+  // Drop selections that the current search hides, so the checkbox state the
+  // user returns to after clearing a search is not silently stale.
+  useEffect(() => {
+    setSelectedIds(previous => {
+      if (previous.size === 0) return previous;
+      const next = retainExistingIds(previous, visibleItems.map(item => item.id));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [visibleItems]);
+
+  const allSelected = visibleItems.length > 0 && visibleItems.every(t => selectedIds.has(t.id));
+
+  // Deletion removes items optimistically, which empties `deletableIds` while
+  // the request is still running. The dialog keeps showing the count it started
+  // with so it never reads "Delete 0 tasks?" mid-flight.
+  const confirmCount = deleting ? deleteProgress.total : deletableIds.length;
 
   const fetchEvents = useCallback(async ({
     preserveError = false,
@@ -141,7 +181,7 @@ function CancelledPageContent() {
   );
 
   const handleDeleteSelected = () => {
-    if (selectedIds.size === 0) return;
+    if (deletableIds.length === 0) return;
     setShowConfirm(true);
   };
 
@@ -196,10 +236,10 @@ function CancelledPageContent() {
       <>
         <button
           onClick={handleDeleteSelected}
-          disabled={loading || selectedIds.size === 0 || deleting}
+          disabled={loading || deletableIds.length === 0 || deleting}
           className={`${styles.button} ${styles.buttonDanger}`}
         >
-          Delete ({selectedIds.size})
+          Delete ({deletableIds.length})
         </button>
         <button
           onClick={() => void fetchEvents()}
@@ -218,7 +258,7 @@ function CancelledPageContent() {
       deleting,
       bookId,
       books,
-      selectedIds.size,
+      deletableIds.length,
     ],
   );
 
@@ -234,7 +274,7 @@ function CancelledPageContent() {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(cancelledItems.map(t => t.id)));
+      setSelectedIds(new Set(visibleItems.map(t => t.id)));
     }
   };
 
@@ -245,13 +285,13 @@ function CancelledPageContent() {
   }, [showConfirm]);
 
   const confirmDelete = async () => {
-    if (!bookId || selectedIds.size === 0) return;
+    if (!bookId || deletableIds.length === 0) return;
 
-    setDeleting(true);
-    const idsToDelete = Array.from(selectedIds);
+    setDeleting(true);    const idsToDelete = [...deletableIds];
+    const deleteSet = new Set(idsToDelete);
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
-    setCancelledItems(items => items.filter(item => !selectedIds.has(item.id)));
+    setCancelledItems(items => items.filter(item => !deleteSet.has(item.id)));
 
     try {
       await store.deleteItems(bookId, idsToDelete);
@@ -321,11 +361,32 @@ function CancelledPageContent() {
               </div>
             ) : (
               <>
-                <div className={styles.toolbar}>
-                  <span className={styles.selectionInfo}>
-                    {cancelledItems.length} cancelled {cancelledItems.length === 1 ? 'task' : 'tasks'}
-                  </span>
-                </div>
+                <TaskSearchBar
+                  query={query}
+                  queryActive={taskQuery.queryActive}
+                  resultCount={visibleItems.length}
+                  totalCount={cancelledItems.length}
+                  onTextChange={taskQuery.setText}
+                  onClearAll={taskQuery.clearAll}
+                  presets={taskQuery.presets}
+                  activePresetId={taskQuery.activePresetId}
+                  selectedPresetId={taskQuery.selectedPresetId}
+                  presetError={taskQuery.presetError}
+                  onApplyPreset={taskQuery.applyPreset}
+                  onSavePreset={taskQuery.savePreset}
+                  onRenamePreset={taskQuery.renamePreset}
+                  onDeletePreset={taskQuery.deletePreset}
+                  onDismissPresetError={taskQuery.dismissPresetError}
+                  disabled={deleting}
+                />
+                {visibleItems.length === 0 ? (
+                  <div className={styles.empty}>
+                    <p className={styles.emptyTitle}>No matching cancelled tasks</p>
+                    <p className={styles.emptyHint}>
+                      No cancelled task matches the current search. Clear the search to see all {cancelledItems.length}.
+                    </p>
+                  </div>
+                ) : (
                 <div className={styles.taskList}>
                   <div className={styles.selectAllRow}>
                     <input
@@ -337,7 +398,7 @@ function CancelledPageContent() {
                     />
                     <span>Select all</span>
                   </div>
-                  {cancelledItems.map(todo => {
+                  {visibleItems.map(todo => {
                     const isSelected = !!todo.id && selectedIds.has(todo.id);
                     return (
                       <div
@@ -386,6 +447,7 @@ function CancelledPageContent() {
                     );
                   })}
                 </div>
+                )}
               </>
             )}
           </div>
@@ -410,7 +472,7 @@ function CancelledPageContent() {
               aria-describedby="cancelled-delete-confirm-message"
               onClick={e => e.stopPropagation()}
             >
-              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {selectedIds.size} {selectedIds.size === 1 ? 'task' : 'tasks'}?</h2>
+              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {confirmCount} {confirmCount === 1 ? 'task' : 'tasks'}?</h2>
               <p id="cancelled-delete-confirm-message" className={styles.confirmMessage}>
                 This action cannot be undone. The selected cancelled tasks will be permanently removed from your calendar.
               </p>
