@@ -40,6 +40,7 @@ export default function TaskSearchBar({
   onClearAll,
   presets,
   activePresetId,
+  selectedPresetId,
   presetError,
   onApplyPreset,
   onSavePreset,
@@ -87,7 +88,11 @@ export default function TaskSearchBar({
   }, [formMode]);
 
   const openSaveForm = () => {
-    setPresetName(activePreset?.name ?? '');
+    // Prefill from the preset being edited so saving updates it in place rather
+    // than making the user retype its name. After a filter edit the preset is no
+    // longer "active" by value, but it is still the one being worked on.
+    const editing = presets.find(preset => preset.id === selectedPresetId) ?? null;
+    setPresetName((activePreset ?? editing)?.name ?? '');
     setConfirmingDeleteId(null);
     setFormTargetId(null);
     setFormMode('save');
