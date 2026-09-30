@@ -6,7 +6,7 @@ import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/stor
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
-import { composeReconcileFailure } from '@/lib/reconcileMessage';
+import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -124,7 +124,7 @@ function CancelledPageContent() {
     } else if (strayWrite) {
       // Preserved errors are the one case where the dropped failure may still
       // be on screen, and nothing left can ever retract it.
-      setError(previous => (previous?.startsWith(strayWrite.message) ? null : previous));
+      setError(previous => (bannerDerivesFrom(previous, strayWrite.message, 'list') ? null : previous));
     }
 
     try {

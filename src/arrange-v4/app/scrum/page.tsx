@@ -33,7 +33,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
-import { composeReconcileFailure } from '@/lib/reconcileMessage';
+import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -223,7 +223,7 @@ function ScrumPageContent() {
     } else if (strayWrite) {
       // Preserved errors are the one case where the dropped failure may still
       // be on screen, and nothing left can ever retract it.
-      setError(previous => (previous?.startsWith(strayWrite.message) ? null : previous));
+      setError(previous => (bannerDerivesFrom(previous, strayWrite.message, 'board') ? null : previous));
     }
 
     try {

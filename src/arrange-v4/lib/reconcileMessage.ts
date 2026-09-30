@@ -19,3 +19,21 @@ export function composeReconcileFailure(
   if (writeFailure === message) return suffix;
   return `${writeFailure} ${suffix}`;
 }
+
+/**
+ * Whether a banner is one this module built from `writeFailure`.
+ *
+ * Used when a failure is abandoned - the user switched book - to retract the
+ * banner it produced without touching a message raised some other way. It has
+ * to recognise every shape `composeReconcileFailure` can return, including the
+ * collapsed one, which drops the write text entirely.
+ */
+export function bannerDerivesFrom(
+  banner: string | null,
+  writeFailure: string,
+  subject: string,
+): boolean {
+  if (!banner) return false;
+  return banner.startsWith(writeFailure)
+    || banner.startsWith(`The ${subject} could not be refreshed either: `);
+}
