@@ -35,7 +35,7 @@ MSAL authenticates against the `consumers` authority (personal Microsoft account
 
 ### State management
 
-All state is React hooks (`useState`, `useMemo`) — no global state library. Persistent client-side state (last selected book, sweep tracking) uses `localStorage`/`sessionStorage` via `bookStorage.ts`. Saved search/filter presets are persisted separately by `lib/search/filterPresets.ts` under `arrange_filterPresets_<backend>_<nativeId>_<scope>` keys, so they never leak across books, storage backends, or views; everything read back from storage is sanitized before use.
+All state is React hooks (`useState`, `useMemo`) — no global state library. Persistent client-side state (last selected book, sweep tracking) uses `localStorage`/`sessionStorage` via `bookStorage.ts`. Saved search/filter presets are persisted separately by `lib/search/filterPresets.ts` under `arrange_filterPresets_<backend>_<nativeId>_<scope>` keys, so they never leak across books or storage backends. The scope is the *view family* that shares filter controls: Matrix and Scrum both use `board` and therefore share presets, while the search-only Cancelled view keeps its own `cancelled` scope. Everything read back from storage is sanitized before use.
 
 ### Optimistic UI
 
