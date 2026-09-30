@@ -58,7 +58,10 @@ import styles from './page.module.css';
 
 type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
 
-const LANE_STATUSES = ['new', 'blocked', 'inProgress', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
+// Workflow order: a task moves New -> In Progress, drops into Blocked as an
+// exception, and ends Finished. Ordering the lanes any other way makes the
+// normal left-to-right progression skip a column and then go backwards.
+const LANE_STATUSES = ['new', 'inProgress', 'blocked', 'finished', 'cancelled'] as const satisfies readonly TodoStatus[];
 type LaneStatus = (typeof LANE_STATUSES)[number];
 
 const LANE_STYLES: Record<LaneStatus, { lane: string; title: string }> = {

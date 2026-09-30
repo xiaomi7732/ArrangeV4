@@ -68,7 +68,9 @@ export default function HamburgerMenu() {
 
   const isOnMatrix = pathname.startsWith('/matrix');
   const isOnScrum = pathname.startsWith('/scrum');
-  const showViewSwitcher = isOnMatrix || isOnScrum;
+  // Cancelled is a task view too, so it keeps the switcher: returning to a
+  // board should take one interaction, not a trip through the sidebar.
+  const showViewSwitcher = isOnMatrix || isOnScrum || pathname.startsWith('/cancelled');
   const navItems = useMemo(() => {
     void isOpen;
     const savedBookId = getLastBookId(backendForAuthProvider(auth.provider));
