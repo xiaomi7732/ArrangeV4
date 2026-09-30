@@ -253,10 +253,9 @@ function MatrixPageContent() {
 
   const categoryFilterActive = isCategoryFilterActive(query);
 
-  const filteredTodoItems = useMemo(
-    () => filterTasks(todoItems, query),
-    [todoItems, query],
-  );
+  // Deliberately not memoized: today-only filtering depends on the current
+  // date, so results must refresh on re-render rather than stick across midnight.
+  const filteredTodoItems = filterTasks(todoItems, query);
 
   const canonicalQuadrants = useMemo(() => ({
     doFirst: sortByPersistedOrder(
@@ -802,6 +801,8 @@ function MatrixPageContent() {
       (item) => (item.categories || []).filter(c => c !== tag),
       () => taskQuery.renameCategoryFilter(tag, null),
     );
+    // Only rewrite persisted presets once the backend update has succeeded.
+    taskQuery.commitCategoryRenameToPresets(tag, null);
   };
 
   const handleRenameTag = async (oldTag: string, newTag: string) => {
@@ -811,6 +812,7 @@ function MatrixPageContent() {
       (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
       () => taskQuery.renameCategoryFilter(oldTag, newTag),
     );
+    taskQuery.commitCategoryRenameToPresets(oldTag, newTag);
   };
 
   const handleMergeTag = async (sourceTag: string, targetTag: string) => {
@@ -824,6 +826,7 @@ function MatrixPageContent() {
       },
       () => taskQuery.renameCategoryFilter(sourceTag, targetTag),
     );
+    taskQuery.commitCategoryRenameToPresets(sourceTag, targetTag);
   };
 
   const handleLogin = async () => {

@@ -156,8 +156,39 @@ export function passesTodayFilter(todo: TodoItem, now: Date = new Date()): boole
   return isDateToday(todo.etsDateTime, now);
 }
 
-export interface FilterTasksOptions {
-  /**
+/** Which query dimensions a view exposes controls in for. */
+export interface QueryDimensions {
+  status: boolean;
+  categories: boolean;
+  priority: boolean;
+}
+
+export const ALL_QUERY_DIMENSIONS: QueryDimensions = {
+  status: true,
+  categories: true,
+  priority: true,
+};
+/**
+ * Drops criteria a view cannot display. Presets are shared across views within
+ * a book, so a preset saved on the Matrix board must not silently hide items on
+ * a view that renders no tag or priority controls to explain the filtering.
+ */
+export function projectTaskQuery(
+  query: TaskQuery,
+  dimensions: QueryDimensions,
+  statusDefaults: Record<TodoStatus, StatusFilterMode> = DEFAULT_STATUS_FILTERS,
+): TaskQuery {
+  return {
+    text: query.text,
+    statusFilters: dimensions.status ? { ...query.statusFilters } : { ...statusDefaults },
+    categories: dimensions.categories ? [...query.categories] : [],
+    includeUncategorized: dimensions.categories && query.includeUncategorized,
+    urgentOnly: dimensions.priority && query.urgentOnly,
+    importantOnly: dimensions.priority && query.importantOnly,
+  };
+}
+
+export interface FilterTasksOptions {  /**
    * Views that already scope items to one status (Cancelled) opt out, so the
    * shared defaults — which hide cancelled items — cannot empty the page.
    */

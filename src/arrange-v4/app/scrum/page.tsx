@@ -657,6 +657,8 @@ function ScrumPageContent() {
       (item) => (item.categories || []).filter(c => c !== tag),
       () => taskQuery.renameCategoryFilter(tag, null),
     );
+    // Only rewrite persisted presets once the backend update has succeeded.
+    taskQuery.commitCategoryRenameToPresets(tag, null);
   };
 
   const handleRenameTag = async (oldTag: string, newTag: string) => {
@@ -666,6 +668,7 @@ function ScrumPageContent() {
       (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
       () => taskQuery.renameCategoryFilter(oldTag, newTag),
     );
+    taskQuery.commitCategoryRenameToPresets(oldTag, newTag);
   };
 
   const handleMergeTag = async (sourceTag: string, targetTag: string) => {
@@ -679,6 +682,7 @@ function ScrumPageContent() {
       },
       () => taskQuery.renameCategoryFilter(sourceTag, targetTag),
     );
+    taskQuery.commitCategoryRenameToPresets(sourceTag, targetTag);
   };
 
   if (!bookId && isAuthenticated && !requiresAuthRecovery) {

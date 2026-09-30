@@ -6,7 +6,9 @@ import {
   createDefaultTaskQuery,
   DEFAULT_STATUS_FILTERS,
   isQueryActive,
+  projectTaskQuery,
   taskQueriesEqual,
+  type QueryDimensions,
   type StatusFilterMode,
   type TaskQuery,
 } from './taskQuery';
@@ -22,6 +24,12 @@ import {
 export interface UseTaskQueryOptions {
   /** View-specific defaults, e.g. Cancelled shows every status. */
   defaultStatusFilters?: Record<TodoStatus, StatusFilterMode>;
+  /**
+   * Which dimensions this view exposes controls for. Presets are shared across
+   * views within a book, so criteria a view cannot display are dropped when a
+   * preset is applied instead of filtering invisibly.
+   */
+  dimensions?: Partial<QueryDimensions>;
 }
 
 export interface UseTaskQueryResult {
@@ -33,8 +41,14 @@ export interface UseTaskQueryResult {
   toggleCategory: (category: string) => void;
   toggleUncategorized: () => void;
   clearCategoryFilters: () => void;
-  /** Mirrors a tag rename (or deletion, when `to` is null) into filters and presets. */
+  /** Mirrors a tag rename (or deletion, when `to` is null) into the live filters. */
   renameCategoryFilter: (from: string, to: string | null) => void;
+  /**
+   * Mirrors a committed tag rename (or deletion) into saved presets. Kept
+   * separate from `renameCategoryFilter` so the persistent rewrite only happens
+   * once the backend update has actually succeeded.
+   */
+  commitCategoryRenameToPresets: (from: string, to: string | null) => void;
   toggleUrgentOnly: () => void;
   toggleImportantOnly: () => void;
   clearAll: () => void;
@@ -74,6 +88,17 @@ export function useTaskQuery(
   );
   const [presets, setPresets] = useState<FilterPreset[]>([]);
   const [presetError, setPresetError] = useState<string | null>(null);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+
+  const dimensionsKey = [
+    options.dimensions?.status !== false,
+    options.dimensions?.categories !== false,
+    options.dimensions?.priority !== false,
+  ].join('|');
+  const dimensions = useMemo<QueryDimensions>(() => {
+    const [status, categories, priority] = dimensionsKey.split('|').map(flag => flag === 'true');
+    return { status, categories, priority };
+  }, [dimensionsKey]);
 
   // Reset the query when the selected book (or the view's defaults) changes, so
   // filters can never leak across books or storage backends. Adjusting state
@@ -84,6 +109,7 @@ export function useTaskQuery(
     setLastResetKey(resetKey);
     setQuery(createDefaultTaskQuery(defaultStatusFilters));
     setPresetError(null);
+    setSelectedPresetId(null);
   }
 
   // Presets live in localStorage, which is unavailable during static prerender,
@@ -92,10 +118,15 @@ export function useTaskQuery(
     setPresets(bookId ? listPresets(bookId) : []); // eslint-disable-line react-hooks/set-state-in-effect -- reading localStorage is only safe after mount
   }, [bookId]);
 
+  // Prefer the preset the user actually chose. Two presets can hold identical
+  // queries, so matching purely by value would let rename/delete act on the
+  // wrong one.
   const activePresetId = useMemo(() => {
+    const selected = presets.find(preset => preset.id === selectedPresetId);
+    if (selected && taskQueriesEqual(selected.query, query)) return selected.id;
     const match = presets.find(preset => taskQueriesEqual(preset.query, query));
     return match ? match.id : null;
-  }, [presets, query]);
+  }, [presets, query, selectedPresetId]);
 
   const queryActive = useMemo(
     () => isQueryActive(query, defaultStatusFilters),
@@ -149,6 +180,9 @@ export function useTaskQuery(
         categories: to && !remaining.includes(to) ? [...remaining, to] : remaining,
       };
     });
+  }, []);
+
+  const commitCategoryRenameToPresets = useCallback((from: string, to: string | null) => {
     if (bookId) setPresets(renameCategoryInPresets(bookId, from, to));
   }, [bookId]);
 
@@ -163,6 +197,7 @@ export function useTaskQuery(
   const clearAll = useCallback(() => {
     setQuery(createDefaultTaskQuery(defaultStatusFilters));
     setPresetError(null);
+    setSelectedPresetId(null);
   }, [defaultStatusFilters]);
 
   const dismissPresetError = useCallback(() => setPresetError(null), []);
@@ -171,18 +206,16 @@ export function useTaskQuery(
     const preset = presets.find(entry => entry.id === presetId);
     if (!preset) return;
     setPresetError(null);
-    setQuery({
-      ...preset.query,
-      statusFilters: { ...preset.query.statusFilters },
-      categories: [...preset.query.categories],
-    });
-  }, [presets]);
+    setSelectedPresetId(presetId);
+    setQuery(projectTaskQuery(preset.query, dimensions, defaultStatusFilters));
+  }, [presets, dimensions, defaultStatusFilters]);
 
   const savePreset = useCallback((name: string) => {
     if (!bookId) return false;
     const result = saveStoredPreset(bookId, name, query);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
+    if (result.preset) setSelectedPresetId(result.preset.id);
     return !result.error;
   }, [bookId, query]);
 
@@ -199,6 +232,7 @@ export function useTaskQuery(
     const result = deleteStoredPreset(bookId, presetId);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
+    setSelectedPresetId(previous => (previous === presetId ? null : previous));
   }, [bookId]);
 
   return {
@@ -211,6 +245,7 @@ export function useTaskQuery(
     toggleUncategorized,
     clearCategoryFilters,
     renameCategoryFilter,
+    commitCategoryRenameToPresets,
     toggleUrgentOnly,
     toggleImportantOnly,
     clearAll,

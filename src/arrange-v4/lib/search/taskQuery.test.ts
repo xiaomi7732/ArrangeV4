@@ -7,6 +7,7 @@ import {
   filterTasks,
   isQueryActive,
   isStatusFilterActive,
+  projectTaskQuery,
   checklistText,
   matchesSearchTerms,
   searchTerms,
@@ -217,8 +218,7 @@ describe('isStatusFilterActive / isQueryActive', () => {
   });
 });
 
-describe('taskQueriesEqual', () => {
-  it('ignores search text formatting differences', () => {
+describe('taskQueriesEqual', () => {  it('ignores search text formatting differences', () => {
     assert.equal(taskQueriesEqual(query({ text: 'Fix  API' }), query({ text: ' fix api ' })), true);
   });
 
@@ -240,5 +240,55 @@ describe('taskQueriesEqual', () => {
     );
     assert.equal(taskQueriesEqual(query(), query({ urgentOnly: true })), false);
     assert.equal(taskQueriesEqual(query(), query({ includeUncategorized: true })), false);
+  });
+});
+
+describe('projectTaskQuery', () => {
+  const full = query({
+    text: 'deploy',
+    statusFilters: { ...DEFAULT_STATUS_FILTERS, cancelled: 'showAll' },
+    categories: ['infra'],
+    includeUncategorized: true,
+    urgentOnly: true,
+    importantOnly: true,
+  });
+
+  it('keeps everything when all dimensions are supported', () => {
+    assert.deepEqual(
+      projectTaskQuery(full, { status: true, categories: true, priority: true }),
+      full,
+    );
+  });
+
+  it('drops criteria a view cannot display', () => {
+    const projected = projectTaskQuery(
+      full,
+      { status: false, categories: false, priority: false },
+      SHOW_ALL_STATUS_FILTERS,
+    );
+
+    assert.equal(projected.text, 'deploy');
+    assert.deepEqual(projected.statusFilters, SHOW_ALL_STATUS_FILTERS);
+    assert.deepEqual(projected.categories, []);
+    assert.equal(projected.includeUncategorized, false);
+    assert.equal(projected.urgentOnly, false);
+    assert.equal(projected.importantOnly, false);
+  });
+
+  it('projects a preset into an inactive query for a search-only view', () => {
+    const projected = projectTaskQuery(
+      query({ categories: ['infra'], urgentOnly: true }),
+      { status: false, categories: false, priority: false },
+      SHOW_ALL_STATUS_FILTERS,
+    );
+    assert.equal(isQueryActive(projected, SHOW_ALL_STATUS_FILTERS), false);
+  });
+
+  it('copies collections so the source query is not aliased', () => {
+    const projected = projectTaskQuery(full, { status: true, categories: true, priority: true });
+    projected.categories.push('extra');
+    projected.statusFilters.new = 'hide';
+    assert.deepEqual(full.categories, ['infra']);
+    assert.equal(full.statusFilters.new, 'showAll');
   });
 });

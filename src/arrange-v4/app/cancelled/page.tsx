@@ -56,8 +56,13 @@ function CancelledPageContent() {
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   // Every item on this page is already cancelled, so the shared status filters
-  // (which hide cancelled items by default) must not be applied here.
-  const taskQuery = useTaskQuery(bookId, { defaultStatusFilters: SHOW_ALL_STATUS_FILTERS });
+  // (which hide cancelled items by default) must not be applied here. Tag and
+  // priority criteria are dropped too, since this view renders no controls for
+  // them and would otherwise filter invisibly when a board preset is applied.
+  const taskQuery = useTaskQuery(bookId, {
+    defaultStatusFilters: SHOW_ALL_STATUS_FILTERS,
+    dimensions: { status: false, categories: false, priority: false },
+  });
   const { query } = taskQuery;
 
   const visibleItems = useMemo(
@@ -65,8 +70,15 @@ function CancelledPageContent() {
     [cancelledItems, query],
   );
 
-  // Keep selection limited to what is on screen so "Delete (N)" can never
-  // remove an item the current search has filtered out.
+  // Bulk delete acts only on what is on screen, so a task hidden by the current
+  // search can never be removed.
+  const deletableIds = useMemo(
+    () => visibleItems.filter(item => selectedIds.has(item.id)).map(item => item.id),
+    [visibleItems, selectedIds],
+  );
+
+  // Drop selections that the current search hides, so the checkbox state the
+  // user returns to after clearing a search is not silently stale.
   useEffect(() => {
     setSelectedIds(previous => {
       if (previous.size === 0) return previous;
@@ -164,7 +176,7 @@ function CancelledPageContent() {
   );
 
   const handleDeleteSelected = () => {
-    if (selectedIds.size === 0) return;
+    if (deletableIds.length === 0) return;
     setShowConfirm(true);
   };
 
@@ -219,10 +231,10 @@ function CancelledPageContent() {
       <>
         <button
           onClick={handleDeleteSelected}
-          disabled={loading || selectedIds.size === 0 || deleting}
+          disabled={loading || deletableIds.length === 0 || deleting}
           className={`${styles.button} ${styles.buttonDanger}`}
         >
-          Delete ({selectedIds.size})
+          Delete ({deletableIds.length})
         </button>
         <button
           onClick={() => void fetchEvents()}
@@ -241,7 +253,7 @@ function CancelledPageContent() {
       deleting,
       bookId,
       books,
-      selectedIds.size,
+      deletableIds.length,
     ],
   );
 
@@ -268,13 +280,14 @@ function CancelledPageContent() {
   }, [showConfirm]);
 
   const confirmDelete = async () => {
-    if (!bookId || selectedIds.size === 0) return;
+    if (!bookId || deletableIds.length === 0) return;
 
     setDeleting(true);
-    const idsToDelete = Array.from(selectedIds);
+    const idsToDelete = [...deletableIds];
+    const deleteSet = new Set(idsToDelete);
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
-    setCancelledItems(items => items.filter(item => !selectedIds.has(item.id)));
+    setCancelledItems(items => items.filter(item => !deleteSet.has(item.id)));
 
     try {
       await store.deleteItems(bookId, idsToDelete);
@@ -454,7 +467,7 @@ function CancelledPageContent() {
               aria-describedby="cancelled-delete-confirm-message"
               onClick={e => e.stopPropagation()}
             >
-              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {selectedIds.size} {selectedIds.size === 1 ? 'task' : 'tasks'}?</h2>
+              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {deletableIds.length} {deletableIds.length === 1 ? 'task' : 'tasks'}?</h2>
               <p id="cancelled-delete-confirm-message" className={styles.confirmMessage}>
                 This action cannot be undone. The selected cancelled tasks will be permanently removed from your calendar.
               </p>
