@@ -140,7 +140,12 @@ function CancelledPageContent() {
       }
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      setError(message);
+      // A refresh that was asked to preserve an earlier error is reconciling
+      // after that failure, so report both: the first message says what did not
+      // happen, this one says the list could not be verified either.
+      setError(previous => (preserveError && previous
+        ? `${previous} The list could not be refreshed either: ${message}`
+        : message));
     } finally {
       if (
         fetchSequenceRef.current === fetchSequence &&

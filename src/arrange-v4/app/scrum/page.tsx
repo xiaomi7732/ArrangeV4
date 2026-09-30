@@ -265,7 +265,12 @@ function ScrumPageContent() {
           return;
         }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        setError(message);
+        // A refresh asked to preserve an earlier error is reconciling after a
+        // failed write, which may have partly succeeded. Report both, so the
+        // board is not presented as verified when it could not be re-read.
+        setError(previous => (preserveError && previous
+          ? `${previous} The board could not be refreshed either: ${message}`
+          : message));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
