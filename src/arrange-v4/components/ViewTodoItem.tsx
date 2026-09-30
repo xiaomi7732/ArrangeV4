@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
+import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -151,6 +152,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     }
   }, [editing, isSubmitting, onClose, handleCancelEdit]);
 
+  const dialogRef = useModalDialog<HTMLDivElement>(true, editing);
+
   useEffect(() => {
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
@@ -159,8 +162,16 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   if (editing) {
     return (
       <div className={styles.overlay} onClick={onClose}>
-        <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-          <h2 className={styles.title}>Edit TODO Item</h2>
+        <div
+          ref={dialogRef}
+          className={styles.modal}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="todo-dialog-title"
+          tabIndex={-1}
+        >
+          <h2 id="todo-dialog-title" className={styles.title}>Edit TODO Item</h2>
 
           {error && (
             <div className={styles.error} role="alert">{error}</div>
@@ -295,8 +306,16 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
   return (
     <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <h2 className={styles.title}>{todo.subject}</h2>
+      <div
+        ref={dialogRef}
+        className={styles.modal}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="todo-dialog-title"
+        tabIndex={-1}
+      >
+        <h2 id="todo-dialog-title" className={styles.title}>{todo.subject}</h2>
 
         {error && (
           <div className={styles.error} role="alert">{error}</div>

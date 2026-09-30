@@ -79,7 +79,17 @@ function TodoCard({ todo, onClick, onStatusChange }: {
   return (
     <div
       className={styles.todoCard}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${todo.subject}`}
       onClick={() => onClick?.(todo)}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.(todo);
+        }
+      }}
     >
       <div className={styles.todoHeader}>
         <h4 className={styles.todoTitle}>{todo.subject}</h4>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/store/types';
+import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import ChecklistEditor from './ChecklistEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -112,6 +113,17 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setIsOpen(false);
   };
 
+  const dialogRef = useModalDialog<HTMLDivElement>(isOpen);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasOpenRef = useRef(false);
+
+  // The trigger unmounts while the dialog is open, so the dialog itself cannot
+  // restore focus to it — put focus back once the button exists again.
+  useEffect(() => {
+    if (!isOpen && wasOpenRef.current) triggerRef.current?.focus();
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -127,6 +139,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   if (!isOpen) {
     return (
       <button
+        ref={triggerRef}
         onClick={() => setIsOpen(true)}
         disabled={disabled}
         className={compact ? styles.addButtonCompact : styles.addButton}
@@ -143,8 +156,15 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal}>
-        <h2 className={styles.title}>Add New TODO Item</h2>
+      <div
+        ref={dialogRef}
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-todo-title"
+        tabIndex={-1}
+      >
+        <h2 id="add-todo-title" className={styles.title}>Add New TODO Item</h2>
         
         {error && (
           <div className={styles.error} role="alert">
