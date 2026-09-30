@@ -234,15 +234,17 @@ export function useTaskQuery(
       setPresetErrorState({ message: 'Set a search or filter before saving it.', query });
       return false;
     }
-    // `selectedPresetId` — not `activePresetId` — is the save target: after the
-    // user edits an applied preset the live query no longer matches it, but
-    // re-saving under its own name must still update it in place.
-    const result = saveStoredPreset(bookId, scope, name, query, selectedPresetId);
+    // The save target is the preset the user is looking at: whichever one the
+    // bar shows as active, falling back to the one they applied and then
+    // edited. Keeping this in step with `activePresetId` stops the prefilled
+    // name from being rejected as belonging to "another" filter.
+    const target = activePresetId ?? selectedPresetId;
+    const result = saveStoredPreset(bookId, scope, name, query, target);
     setPresets(result.presets);
     setPresetErrorState(result.error ? { message: result.error, query } : null);
     if (result.preset) setSelectedPresetId(result.preset.id);
     return !result.error;
-  }, [bookId, scope, query, queryActive, selectedPresetId]);
+  }, [bookId, scope, query, queryActive, activePresetId, selectedPresetId]);
 
   const renamePreset = useCallback((presetId: string, name: string) => {
     if (!bookId) return false;
