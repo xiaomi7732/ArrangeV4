@@ -135,15 +135,38 @@ describe('savePreset', () => {
     assert.deepEqual(listPresets(sheetsBook, 'board'), []);
   });
 
-  it('overwrites a preset with the same name regardless of case', () => {
+  it('updates the selected preset in place, regardless of name case', () => {
     const first = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
-    const second = savePreset(calendarBook, 'board', '  urgent ', query({ importantOnly: true }));
+    const second = savePreset(
+      calendarBook,
+      'board',
+      '  urgent ',
+      query({ importantOnly: true }),
+      first.preset!.id,
+    );
 
     assert.equal(second.presets.length, 1);
     assert.equal(second.presets[0].id, first.preset!.id);
     assert.equal(second.presets[0].name, 'urgent');
     assert.equal(second.presets[0].query.urgentOnly, false);
     assert.equal(second.presets[0].query.importantOnly, true);
+  });
+
+  it('refuses to overwrite a different preset that already uses the name', () => {
+    savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    const other = savePreset(calendarBook, 'board', 'Important', query({ importantOnly: true }));
+
+    const result = savePreset(
+      calendarBook,
+      'board',
+      'urgent',
+      query({ text: 'clobber' }),
+      other.preset!.id,
+    );
+
+    assert.ok(result.error);
+    assert.equal(listPresets(calendarBook, 'board')[0].query.urgentOnly, true);
+    assert.equal(listPresets(calendarBook, 'board').length, 2);
   });
 
   it('rejects a blank name', () => {
@@ -162,7 +185,8 @@ describe('savePreset', () => {
     assert.ok(overflow.error);
     assert.equal(listPresets(calendarBook, 'board').length, MAX_PRESETS_PER_BOOK);
 
-    const overwrite = savePreset(calendarBook, 'board', 'Preset 0', query({ text: 'updated' }));
+    const existingId = listPresets(calendarBook, 'board')[0].id;
+    const overwrite = savePreset(calendarBook, 'board', 'Preset 0', query({ text: 'updated' }), existingId);
     assert.equal(overwrite.error, undefined);
     assert.equal(overwrite.presets[0].query.text, 'updated');
   });

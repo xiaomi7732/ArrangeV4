@@ -218,12 +218,18 @@ export function useTaskQuery(
 
   const savePreset = useCallback((name: string) => {
     if (!bookId) return false;
-    const result = saveStoredPreset(bookId, scope, name, query);
+    // A preset identical to the view defaults would match every unfiltered
+    // page load and show up as "applied" while filtering nothing.
+    if (!queryActive) {
+      setPresetError('Set a search or filter before saving it.');
+      return false;
+    }
+    const result = saveStoredPreset(bookId, scope, name, query, activePresetId);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
     if (result.preset) setSelectedPresetId(result.preset.id);
     return !result.error;
-  }, [bookId, scope, query]);
+  }, [bookId, scope, query, queryActive, activePresetId]);
 
   const renamePreset = useCallback((presetId: string, name: string) => {
     if (!bookId) return false;

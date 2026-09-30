@@ -168,14 +168,17 @@ export interface PresetMutationResult {
 }
 
 /**
- * Creates a preset, or overwrites the existing one with the same name so
- * repeated saves update in place rather than accumulating duplicates.
+ * Creates a preset, or updates the currently-selected one in place when the
+ * name is unchanged. A name that belongs to a *different* preset is rejected
+ * rather than silently overwritten, matching `renamePreset` and keeping a
+ * mistyped name from destroying an unrelated saved filter.
  */
 export function savePreset(
   bookId: string,
   scope: PresetScope,
   name: string,
   query: TaskQuery,
+  activePresetId?: string | null,
 ): PresetMutationResult {
   const presets = listPresets(bookId, scope);
   const normalized = normalizePresetName(name);
@@ -189,6 +192,9 @@ export function savePreset(
   let next: FilterPreset[];
   let preset: FilterPreset;
   if (existingIndex >= 0) {
+    if (presets[existingIndex].id !== activePresetId) {
+      return { presets, error: 'Another filter already uses that name.' };
+    }
     preset = { ...presets[existingIndex], name: normalized, query: sanitizedQuery };
     next = [...presets];
     next[existingIndex] = preset;

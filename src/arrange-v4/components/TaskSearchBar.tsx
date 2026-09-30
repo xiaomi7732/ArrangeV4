@@ -59,17 +59,30 @@ export default function TaskSearchBar({
 
   const activePreset = presets.find(preset => preset.id === activePresetId) ?? null;
 
-  // Pending rename/delete state is derived from the active preset instead of
-  // being reset in an effect, so changing the selection (or editing filters,
-  // which clears the active preset) implicitly abandons the pending action.
-  const visibleFormMode: PresetFormMode | null = formMode === 'rename'
-    ? (activePreset && formTargetId === activePreset.id ? 'rename' : null)
-    : formMode;
+  // A pending rename or delete belongs to one specific preset. When that preset
+  // stops being the active one — the user edited the filters, picked another
+  // preset, or deleted it — the pending action is abandoned. Clearing the state
+  // here (rather than merely hiding the form) stops an abandoned rename from
+  // reappearing, and stealing focus, if the query later matches that preset again.
+  if (formMode === 'rename' && formTargetId !== activePresetId) {
+    setFormMode(null);
+    setFormTargetId(null);
+    setPresetName('');
+  }
+  // Likewise, an open save form is meaningless once there is nothing to save.
+  if (formMode === 'save' && !queryActive) {
+    setFormMode(null);
+    setPresetName('');
+  }
+  if (confirmingDeleteId !== null && confirmingDeleteId !== activePresetId) {
+    setConfirmingDeleteId(null);
+  }
+
   const confirmingDelete = !!activePreset && confirmingDeleteId === activePreset.id;
 
   useEffect(() => {
-    if (visibleFormMode) presetNameRef.current?.focus();
-  }, [visibleFormMode]);
+    if (formMode) presetNameRef.current?.focus();
+  }, [formMode]);
 
   const openSaveForm = () => {
     setPresetName(activePreset?.name ?? '');
@@ -95,9 +108,9 @@ export default function TaskSearchBar({
 
   const submitForm = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!visibleFormMode) return;
+    if (!formMode) return;
 
-    const succeeded = visibleFormMode === 'rename' && activePreset
+    const succeeded = formMode === 'rename' && activePreset
       ? onRenamePreset(activePreset.id, presetName)
       : onSavePreset(presetName);
 
@@ -217,7 +230,7 @@ export default function TaskSearchBar({
             ))}
           </select>
 
-          {visibleFormMode === null && (
+          {formMode === null && (
             <>
               <button
                 type="button"
@@ -253,7 +266,7 @@ export default function TaskSearchBar({
             </>
           )}
 
-          {visibleFormMode !== null && (
+          {formMode !== null && (
             <form className={styles.presetForm} onSubmit={submitForm}>
               <input
                 ref={presetNameRef}
@@ -268,11 +281,11 @@ export default function TaskSearchBar({
                   }
                 }}
                 placeholder="Filter name"
-                aria-label={visibleFormMode === 'rename' ? 'New filter name' : 'Name for this filter'}
+                aria-label={formMode === 'rename' ? 'New filter name' : 'Name for this filter'}
                 maxLength={MAX_PRESET_NAME_LENGTH}
               />
               <button type="submit" className={`${styles.chip} ${styles.chipPrimary}`}>
-                {visibleFormMode === 'rename' ? 'Rename' : 'Save'}
+                {formMode === 'rename' ? 'Rename' : 'Save'}
               </button>
               <button type="button" className={styles.chip} onClick={closeForm}>
                 Cancel

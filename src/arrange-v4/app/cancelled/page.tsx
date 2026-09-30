@@ -89,6 +89,11 @@ function CancelledPageContent() {
 
   const allSelected = visibleItems.length > 0 && visibleItems.every(t => selectedIds.has(t.id));
 
+  // Deletion removes items optimistically, which empties `deletableIds` while
+  // the request is still running. The dialog keeps showing the count it started
+  // with so it never reads "Delete 0 tasks?" mid-flight.
+  const confirmCount = deleting ? deleteProgress.total : deletableIds.length;
+
   const fetchEvents = useCallback(async ({
     preserveError = false,
     preserveSelection = false,
@@ -282,8 +287,7 @@ function CancelledPageContent() {
   const confirmDelete = async () => {
     if (!bookId || deletableIds.length === 0) return;
 
-    setDeleting(true);
-    const idsToDelete = [...deletableIds];
+    setDeleting(true);    const idsToDelete = [...deletableIds];
     const deleteSet = new Set(idsToDelete);
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
@@ -467,7 +471,7 @@ function CancelledPageContent() {
               aria-describedby="cancelled-delete-confirm-message"
               onClick={e => e.stopPropagation()}
             >
-              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {deletableIds.length} {deletableIds.length === 1 ? 'task' : 'tasks'}?</h2>
+              <h2 id="cancelled-delete-confirm-title" className={styles.confirmTitle}>Delete {confirmCount} {confirmCount === 1 ? 'task' : 'tasks'}?</h2>
               <p id="cancelled-delete-confirm-message" className={styles.confirmMessage}>
                 This action cannot be undone. The selected cancelled tasks will be permanently removed from your calendar.
               </p>

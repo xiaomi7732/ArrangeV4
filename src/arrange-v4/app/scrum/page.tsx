@@ -609,8 +609,9 @@ function ScrumPageContent() {
     computeNewCategories: (item: TodoItemWithId) => string[],
     updateFilterState: () => void,
   ): Promise<boolean> => {
-    // Resolves to whether the change is safely applied to the book still on
-    // screen; callers gate the saved-preset rewrite on that.
+    // Resolves to whether the backend accepted the change, so callers can gate
+    // the saved-preset rewrite on it. Switching books mid-flight does not make
+    // the rewrite wrong: it targets the book the operation started on.
     if (!bookId) return false;
     if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
@@ -638,8 +639,9 @@ function ScrumPageContent() {
           },
         })),
       );
-      if (bookIdRef.current !== operationBookId) return false;
-      mergePersistedSources(updated);
+      // The backend change landed, so saved filters for that book must be
+      // rewritten either way; only the on-screen merge is book-specific.
+      if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
       return true;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
