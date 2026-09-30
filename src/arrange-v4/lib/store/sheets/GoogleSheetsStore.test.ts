@@ -298,6 +298,38 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
+  it('drops the pre-bump original when the caller sets that date', async () => {
+    const row = [
+      'todo-1', 'Rescheduled', '2026-01-10T09:00:00.000Z', '2026-01-10T10:00:00.000Z',
+      'new', false, false, '', '', '', '', '',
+      '2025-12-01T09:00:00.000Z', '2025-12-01T10:00:00.000Z', '', '', '', '',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS), row] }),
+      () => todoSheetResponse(),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('originalEtsDateTime')], '');
+        // Only the submitted date's original is marked changed, so the ETA's
+        // original is left standing rather than patched away.
+        const changedFields = rowMetadata(body.values[0]).changedFields || [];
+        assert.deepEqual(new Set(changedFields), new Set(['etsDateTime', 'originalEtsDateTime']));
+        return jsonResponse({ updatedRows: 1 });
+      },
+    ]);
+    try {
+      const updated = await createStore().updateItem(
+        'sheet:sheet-1',
+        'todo-1',
+        { etsDateTime: '2026-02-01T09:00:00.000Z' },
+      );
+      assert.equal(updated.originalEtsDateTime, null);
+      assert.equal(updated.originalEtaDateTime, '2025-12-01T10:00:00.000Z');
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('persists bulk reorder patches with one read and one append', async () => {
     const first = [
       'todo-1', 'First', '', '', 'new', false, false,
