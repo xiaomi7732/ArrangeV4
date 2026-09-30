@@ -13,6 +13,7 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
+import ErrorBanner from '@/components/ErrorBanner';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import TaskSearchBar from '@/components/TaskSearchBar';
 import Link from 'next/link';
@@ -34,6 +35,7 @@ function CancelledPageContent() {
     fetchBooks,
     authRecoveryRequired: bookAuthRecoveryRequired,
     error: bookError,
+    setError: setBookError,
   } = useBookId('/cancelled');
 
   const [cancelledItems, setCancelledItems] = useState<TodoItemWithId[]>([]);
@@ -345,10 +347,10 @@ function CancelledPageContent() {
     <div className={styles.container}>
       <div className={styles.inner}>
         {displayError && (
-          <div className={styles.error} role="alert">
-            <span className={styles.errorTitle}>Error: </span>
-            <span>{displayError}</span>
-          </div>
+          <ErrorBanner
+            message={displayError}
+            onDismiss={() => { setError(null); setBookError(null); }}
+          />
         )}
 
         {loading && (

@@ -1,0 +1,45 @@
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-weight: bold;
+}
+
+.detail {
+  word-break: break-word;
+}
+
+.dismiss {
+  background: none;
+  border: none;
+  color: #991b1b;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dismiss:hover {
+  background: #fee2e2;
+}
+
+.dismiss:focus-visible {
+  outline: 2px solid #991b1b;
+  outline-offset: 1px;
+}

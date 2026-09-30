@@ -41,6 +41,7 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
+import ErrorBanner from '@/components/ErrorBanner';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -246,6 +247,7 @@ function MatrixPageContent() {
     fetchBooks,
     authRecoveryRequired: bookAuthRecoveryRequired,
     error: bookError,
+    setError: setBookError,
   } = useBookId('/matrix');
   const bookIdRef = useRef(bookId);
   const sweepAttemptedRef = useRef(false);
@@ -1022,10 +1024,10 @@ function MatrixPageContent() {
     <div className={styles.container}>
       <div className={styles.inner}>
         {displayError && (
-          <div className={styles.error} role="alert">
-            <span className={styles.errorTitle}>Error: </span>
-            <span>{displayError}</span>
-          </div>
+          <ErrorBanner
+            message={displayError}
+            onDismiss={() => { setError(null); setBookError(null); }}
+          />
         )}
 
         {loading && (
