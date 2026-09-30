@@ -44,6 +44,12 @@ interface DriveFileList {
 interface SpreadsheetResponse {
   spreadsheetId?: string;
   properties?: { title?: string };
+  sheets?: Array<{
+    properties?: {
+      sheetId?: number;
+      title?: string;
+    };
+  }>;
 }
 
 interface ValuesResponse {
@@ -130,12 +136,13 @@ function dateFallsInWindow(dateTime: string | null | undefined, fromDate: string
 
 function sheetRowSource(
   spreadsheetId: string,
+  sheetId: number,
   rowNumber: number,
   columnCount: number,
 ): NonNullable<TodoItemWithId['source']> {
   const range = `A${rowNumber}:${columnName(columnCount)}${rowNumber}`;
   return {
-    url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit#gid=0&range=${encodeURIComponent(range)}`,
+    url: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit#gid=${sheetId}&range=${encodeURIComponent(range)}`,
     label: 'Open row in Google Sheets',
   };
 }
@@ -172,6 +179,7 @@ async function isRetryableGoogleQuotaResponse(response: Response): Promise<boole
 export class GoogleSheetsStore implements TodoStore {
   private readonly tokenAcquisition: TokenAcquisitionCoordinator;
   private readonly invalidateToken: () => void;
+  private readonly todoSheetIds = new Map<string, number>();
 
   constructor(opts: StoreOptions) {
     this.tokenAcquisition = new TokenAcquisitionCoordinator(opts.acquireToken);
@@ -277,6 +285,10 @@ export class GoogleSheetsStore implements TodoStore {
     );
     const spreadsheetId = spreadsheet.spreadsheetId;
     if (!spreadsheetId) throw new Error('Google Sheets creation returned no spreadsheet ID.');
+    const todoSheetId = spreadsheet.sheets?.find(
+      sheet => sheet.properties?.title === TODO_SHEET_NAME,
+    )?.properties?.sheetId;
+    this.todoSheetIds.set(spreadsheetId, todoSheetId ?? 0);
 
     try {
       await this.writeValues(
@@ -335,10 +347,12 @@ export class GoogleSheetsStore implements TodoStore {
     const spreadsheetId = nativeSheetId(bookId);
     const token = await this.tokenAcquisition.getToken(opts);
     const loaded = await this.loadSheet(spreadsheetId, opts, token);
+    const sheetId = await this.getTodoSheetId(spreadsheetId, opts, token);
     const items = loaded.records.map(record => ({
       ...record.item,
       source: sheetRowSource(
         spreadsheetId,
+        sheetId,
         record.rowNumber,
         loaded.headers.length,
       ),
@@ -364,6 +378,7 @@ export class GoogleSheetsStore implements TodoStore {
     return this.enqueueMutation(spreadsheetId, async () => {
       const token = await this.tokenAcquisition.getToken();
       const loaded = await this.loadSheet(spreadsheetId, undefined, token, true);
+      const sheetId = await this.getTodoSheetId(spreadsheetId, undefined, token);
       const now = new Date().toISOString();
       const etsDateTime = item.etsDateTime
         || new Date(Date.now() + 60 * 60 * 1000).toISOString();
@@ -398,7 +413,12 @@ export class GoogleSheetsStore implements TodoStore {
       );
       const rowNumber = appendedStartRow(response);
       if (rowNumber) {
-        created.source = sheetRowSource(spreadsheetId, rowNumber, loaded.headers.length);
+        created.source = sheetRowSource(
+          spreadsheetId,
+          sheetId,
+          rowNumber,
+          loaded.headers.length,
+        );
       }
       return created;
     });
@@ -428,6 +448,7 @@ export class GoogleSheetsStore implements TodoStore {
     return this.enqueueMutation(spreadsheetId, async () => {
       const token = await this.tokenAcquisition.getToken(options);
       const loaded = await this.loadSheet(spreadsheetId, options, token, true);
+      const sheetId = await this.getTodoSheetId(spreadsheetId, options, token);
       const updatedAt = new Date().toISOString();
       const recordsById = new Map(
         loaded.records.map(record => [record.item.id, record]),
@@ -457,6 +478,7 @@ export class GoogleSheetsStore implements TodoStore {
           ? {
             source: sheetRowSource(
               spreadsheetId,
+              sheetId,
               startRow + index,
               loaded.headers.length,
             ),
@@ -530,6 +552,29 @@ export class GoogleSheetsStore implements TodoStore {
       ? [headers, ...values.slice(1)]
       : [headers];
     return { headers, records: parseSheetRows(normalizedValues) };
+  }
+
+  private async getTodoSheetId(
+    spreadsheetId: string,
+    options?: StoreOperationOptions,
+    accessToken?: string,
+  ): Promise<number> {
+    const cached = this.todoSheetIds.get(spreadsheetId);
+    if (cached !== undefined) return cached;
+    const response = await this.request<SpreadsheetResponse>(
+      `${SHEETS_API}/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties(sheetId%2Ctitle)`,
+      {},
+      options,
+      accessToken,
+    );
+    const sheetId = response.sheets?.find(
+      sheet => sheet.properties?.title === TODO_SHEET_NAME,
+    )?.properties?.sheetId;
+    if (sheetId === undefined) {
+      throw new Error(`Spreadsheet "${spreadsheetId}" has no "${TODO_SHEET_NAME}" worksheet.`);
+    }
+    this.todoSheetIds.set(spreadsheetId, sheetId);
+    return sheetId;
   }
 
   private async writeValues(
