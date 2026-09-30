@@ -31,6 +31,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
+import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
@@ -435,6 +436,27 @@ function ScrumPageContent() {
   const parseLaneId = (id: string) => id.slice('scrum:'.length) as LaneStatus;
   const itemsInLane = (status: LaneStatus) => canonicalLanes[status];
 
+  /**
+   * Takes an optimistic update back after the write was rejected.
+   *
+   * Only safe while nothing else has happened since: a newer mutation or a book
+   * switch means the snapshot no longer describes the rows on screen, and the
+   * queued refetch is then the only correct way to reconcile.
+   */
+  const revertOptimisticUpdate = (
+    snapshot: TodoItemWithId[],
+    mutationVersion: number,
+    operationBookId: string,
+  ) => {
+    if (bookIdRef.current !== operationBookId) return;
+    if (mutationVersionRef.current !== mutationVersion) return;
+    setTodoItems(items => restoreSnapshot(items, snapshot));
+    setSelectedTodo(current => {
+      if (!current) return current;
+      return snapshot.find(item => item.id === current.id) ?? current;
+    });
+  };
+
   const mergePersistedSources = (persistedItems: TodoItemWithId[]) => {
     const sources = new Map<string, NonNullable<TodoItemWithId['source']>>();
     for (const item of persistedItems) {
@@ -529,9 +551,11 @@ function ScrumPageContent() {
       });
     }
 
+    const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
+    const orderMutationVersion = mutationVersionRef.current;
     isSavingOrderRef.current = true;
     setIsSavingOrder(true);
     beginMutation();
@@ -540,6 +564,7 @@ function ScrumPageContent() {
       await persistUpdates(updates);
     } catch (err: unknown) {
       console.error('Error updating Scrum order:', err);
+      revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
       setError(err instanceof Error ? err.message : 'Failed to save Scrum order');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -554,6 +579,8 @@ function ScrumPageContent() {
     if (!selectedTodo?.id || !bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const updateMutationVersion = mutationVersionRef.current;
+    const updateSnapshot = snapshotItems(todoItems, [selectedTodo.id]);
     beginMutation();
 
     const persistedFields: Partial<TodoItem> = { ...updatedFields };
@@ -594,6 +621,7 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
+      revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
       setSelectedTodo(null);
       setError(err instanceof Error ? err.message : 'Failed to update TODO');
       pendingFetchRef.current = true;
@@ -616,6 +644,8 @@ function ScrumPageContent() {
     if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const tagsMutationVersion = mutationVersionRef.current;
+    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
     beginMutation();
 
     const affectedIds = new Set(affectedItems.map(a => a.id));
@@ -646,6 +676,7 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return false;
+      revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;

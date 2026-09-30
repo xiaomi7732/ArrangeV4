@@ -31,6 +31,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
+import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -522,6 +523,27 @@ function MatrixPageContent() {
     return canonicalQuadrants.eliminate;
   };
 
+  /**
+   * Takes an optimistic update back after the write was rejected.
+   *
+   * Only safe while nothing else has happened since: a newer mutation or a book
+   * switch means the snapshot no longer describes the rows on screen, and the
+   * queued refetch is then the only correct way to reconcile.
+   */
+  const revertOptimisticUpdate = (
+    snapshot: TodoItemWithId[],
+    mutationVersion: number,
+    operationBookId: string,
+  ) => {
+    if (bookIdRef.current !== operationBookId) return;
+    if (mutationVersionRef.current !== mutationVersion) return;
+    setTodoItems(items => restoreSnapshot(items, snapshot));
+    setSelectedTodo(current => {
+      if (!current) return current;
+      return snapshot.find(item => item.id === current.id) ?? current;
+    });
+  };
+
   const mergePersistedSources = (persistedItems: TodoItemWithId[]) => {
     const sources = new Map<string, NonNullable<TodoItemWithId['source']>>();
     for (const item of persistedItems) {
@@ -617,9 +639,11 @@ function MatrixPageContent() {
       });
     }
 
+    const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
+    const orderMutationVersion = mutationVersionRef.current;
     isSavingOrderRef.current = true;
     setIsSavingOrder(true);
     beginMutation();
@@ -628,6 +652,7 @@ function MatrixPageContent() {
       await persistUpdates(updates);
     } catch (err: unknown) {
       console.error('Error updating Matrix order:', err);
+      revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
       setError(err instanceof Error ? err.message : 'Failed to save Matrix order');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -642,6 +667,8 @@ function MatrixPageContent() {
     if (!bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const statusMutationVersion = mutationVersionRef.current;
+    const statusSnapshot = snapshotItems(todoItems, [todo.id]);
     beginMutation();
 
     const currentStatus = todo.status || 'new';
@@ -686,6 +713,7 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating TODO status:', err);
       if (bookIdRef.current !== operationBookId) return;
+      revertOptimisticUpdate(statusSnapshot, statusMutationVersion, operationBookId);
       const message = err instanceof Error ? err.message : 'Failed to update status';
       setError(message);
       pendingFetchRef.current = true;
@@ -699,6 +727,8 @@ function MatrixPageContent() {
     if (!selectedTodo?.id || !bookId) return;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const updateMutationVersion = mutationVersionRef.current;
+    const updateSnapshot = snapshotItems(todoItems, [selectedTodo.id]);
     beginMutation();
 
     const persistedFields: Partial<TodoItem> = { ...updatedFields };
@@ -739,6 +769,7 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
+      revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
       setSelectedTodo(null);
       setError(err instanceof Error ? err.message : 'Failed to update TODO');
       pendingFetchRef.current = true;
@@ -761,6 +792,8 @@ function MatrixPageContent() {
     if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
+    const tagsMutationVersion = mutationVersionRef.current;
+    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
     beginMutation();
 
     const affectedIds = new Set(affectedItems.map(a => a.id));
@@ -791,6 +824,7 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
       if (bookIdRef.current !== operationBookId) return false;
+      revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;

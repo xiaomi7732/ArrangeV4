@@ -24,6 +24,8 @@
     "lib/hooks/useRefreshOnPageActivation.test.ts",
     "lib/selectionUtils.ts",
     "lib/selectionUtils.test.ts",
+    "lib/optimisticUpdate.ts",
+    "lib/optimisticUpdate.test.ts",
     "lib/store/tokenAcquisition.ts",
     "lib/store/tokenAcquisition.test.ts",
     "lib/store/types.ts",

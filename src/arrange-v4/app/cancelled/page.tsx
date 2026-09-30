@@ -287,8 +287,11 @@ function CancelledPageContent() {
   const confirmDelete = async () => {
     if (!bookId || deletableIds.length === 0) return;
 
-    setDeleting(true);    const idsToDelete = [...deletableIds];
+    setDeleting(true);
+    const idsToDelete = [...deletableIds];
     const deleteSet = new Set(idsToDelete);
+    const snapshot = cancelledItems;
+    const operationBookId = bookId;
     setDeleteProgress({ done: 0, total: idsToDelete.length });
 
     setCancelledItems(items => items.filter(item => !deleteSet.has(item.id)));
@@ -299,6 +302,10 @@ function CancelledPageContent() {
       setSelectedIds(new Set());
     } catch (err: unknown) {
       console.error('Error during bulk delete:', err);
+      // Put the rows back before reconciling: the refetch is the authoritative
+      // answer, but it cannot run offline, and leaving the list empty would
+      // claim a deletion that never happened.
+      if (bookIdRef.current === operationBookId) setCancelledItems(snapshot);
       await fetchEvents();
       const message = err instanceof Error ? err.message : 'Failed to delete items';
       setError(message);
