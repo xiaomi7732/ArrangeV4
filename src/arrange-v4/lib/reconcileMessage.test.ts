@@ -16,10 +16,19 @@ describe('composeReconcileFailure', () => {
 
   it('does not repeat itself when the same refresh keeps failing', () => {
     const once = composeReconcileFailure('Failed to save order.', 'Offline', 'board');
-    const twice = composeReconcileFailure(once, 'Offline', 'board');
-    const thrice = composeReconcileFailure(twice, 'Offline', 'board');
+    const twice = composeReconcileFailure('Failed to save order.', 'Offline', 'board');
     assert.equal(twice, once);
-    assert.equal(thrice, once);
+  });
+
+  it('replaces the refresh sentence instead of stacking when the reason changes', () => {
+    const first = composeReconcileFailure('Failed to save order.', 'Offline', 'board');
+    const second = composeReconcileFailure('Failed to save order.', 'Request timed out', 'board');
+    assert.equal(
+      second,
+      'Failed to save order. The board could not be refreshed either: Request timed out',
+    );
+    assert.equal(first.includes('Offline'), true);
+    assert.equal(second.includes('Offline'), false);
   });
 
   it('does not read as two failures when both messages are the same', () => {

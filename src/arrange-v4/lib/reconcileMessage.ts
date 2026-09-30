@@ -4,17 +4,18 @@
  * A write that rejects may still have partly succeeded, so the rolled-back view
  * is only a guess until a refresh confirms it. When that refresh fails too, the
  * user has to be told, or an unverified board looks authoritative.
+ *
+ * Callers pass the failure of the *write*, never the banner they are showing:
+ * recomposing from the same fixed text means a run of failed refreshes replaces
+ * its sentence instead of stacking one per attempt.
  */
 export function composeReconcileFailure(
-  previous: string | null,
+  writeFailure: string | null,
   message: string,
   subject: string,
 ): string {
-  if (!previous) return message;
+  if (!writeFailure) return message;
   const suffix = `The ${subject} could not be refreshed either: ${message}`;
-  // Repeated failures must not stack: the same sentence is no more informative
-  // the third time, and an unbounded string would grow the banner off-screen.
-  if (previous.includes(suffix)) return previous;
-  if (previous === message) return suffix;
-  return `${previous} ${suffix}`;
+  if (writeFailure === message) return suffix;
+  return `${writeFailure} ${suffix}`;
 }

@@ -107,7 +107,7 @@ function ScrumPageContent() {
   // Set when a write failed and its optimistic change was rolled back: the view
   // is then a guess until a fetch succeeds, because a rejected multi-item write
   // may still have partly landed.
-  const unverifiedWriteRef = useRef(false);
+  const unverifiedWriteRef = useRef<string | null>(null);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -210,7 +210,9 @@ function ScrumPageContent() {
     const fetchSequence = ++fetchSequenceRef.current;
 
     setLoading(true);
-    if (!preserveError) setError(null);
+    // A write that is still unverified outlives a manual refresh: only a
+    // successful read may retract it.
+    if (!preserveError) setError(unverifiedWriteRef.current);
 
     try {
       const today = new Date();
@@ -256,10 +258,10 @@ function ScrumPageContent() {
       }
       setTodoItems(items);
       if (unverifiedWriteRef.current) {
-        // This read is authoritative, so a message about a write that could
-        // not be verified is now stale whatever it said.
-        unverifiedWriteRef.current = false;
-        setError(null);
+        // This read is authoritative, so the board is no longer a guess. The
+        // write failure itself stays: the user still needs to know it failed.
+        setError(unverifiedWriteRef.current);
+        unverifiedWriteRef.current = null;
       }
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
@@ -280,9 +282,9 @@ function ScrumPageContent() {
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
         // While a rolled-back write is still unverified, every failed refresh
         // has to keep saying so - not just the first one after the failure.
-        setError(previous => (unverifiedWriteRef.current
-          ? composeReconcileFailure(previous, message, 'board')
-          : message));
+        // Always composed from the write failure, never from the banner, so a
+      // run of failed refreshes replaces its clause instead of stacking.
+      setError(composeReconcileFailure(unverifiedWriteRef.current, message, 'board'));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
@@ -576,10 +578,13 @@ function ScrumPageContent() {
     } catch (err: unknown) {
       console.error('Error updating Scrum order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
-      setError(err instanceof Error ? err.message : 'Failed to save Scrum order');
+      const writeMessage = err instanceof Error ? err.message : 'Failed to save Scrum order';
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = writeMessage;
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
-      unverifiedWriteRef.current = true;
     } finally {
       isSavingOrderRef.current = false;
       setIsSavingOrder(false);
@@ -635,10 +640,13 @@ function ScrumPageContent() {
       if (bookIdRef.current !== operationBookId) return;
       revertOptimisticUpdate(updateSnapshot, updateMutationVersion, operationBookId);
       setSelectedTodo(null);
-      setError(err instanceof Error ? err.message : 'Failed to update TODO');
+      const writeMessage = err instanceof Error ? err.message : 'Failed to update TODO';
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = writeMessage;
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
-      unverifiedWriteRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -691,10 +699,13 @@ function ScrumPageContent() {
       if (bookIdRef.current !== operationBookId) return false;
       revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
-      setError(err instanceof Error ? err.message : 'Failed to update tags');
+      const writeMessage = err instanceof Error ? err.message : 'Failed to update tags';
+      // Held until a read proves the board: a bulk write can partly succeed
+      // and still reject, so the restored list is a guess until then.
+      unverifiedWriteRef.current = writeMessage;
+      setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
-      unverifiedWriteRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -768,7 +779,7 @@ function ScrumPageContent() {
         {displayError && (
           <ErrorBanner
             message={displayError}
-            onDismiss={() => { setError(null); setBookError(null); }}
+            onDismiss={() => { unverifiedWriteRef.current = null; setError(null); setBookError(null); }}
           />
         )}
 
