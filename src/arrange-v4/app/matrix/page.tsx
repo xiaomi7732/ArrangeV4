@@ -35,6 +35,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
@@ -272,6 +273,9 @@ function MatrixPageContent() {
   // is then a guess until a fetch succeeds, because a rejected multi-item write
   // may still have partly landed.
   const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
+  // Reads already in flight when the user dismissed the banner: their failures
+  // belong to a message that has been closed, so they are not reported.
+  const dismissedFetchSequenceRef = useRef(0);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -530,12 +534,17 @@ function MatrixPageContent() {
           setError(null);
           return;
         }
-        const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        // While a rolled-back write is still unverified, every failed refresh
-        // has to keep saying so - not just the first one after the failure.
+        const message = describeFailure('Could not load the board.', err);
+        if (fetchSequence <= dismissedFetchSequenceRef.current) {
+          // This read was already running when the user dismissed the banner.
+          // Reporting it now would reopen something they closed.
+          return;
+        }
         // Always composed from the write failure, never from the banner, so a
-      // run of failed refreshes replaces its clause instead of stacking.
-      setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'board'));
+        // run of failed refreshes replaces its clause instead of stacking, and
+        // a rolled-back write keeps saying it is unverified until a read
+        // proves otherwise.
+        setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'board'));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
@@ -583,7 +592,7 @@ function MatrixPageContent() {
       setTodoItems(prev => [...prev, newTodo]);
     } catch (err: unknown) {
       console.error('Error creating TODO item:', err);
-      const message = err instanceof Error ? err.message : 'Failed to create TODO item';
+      const message = describeFailure('Could not add the task.', err);
       throw new Error(message);
     } finally {
       finishMutation();
@@ -738,7 +747,7 @@ function MatrixPageContent() {
     } catch (err: unknown) {
       console.error('Error updating Matrix order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
-      const writeMessage = err instanceof Error ? err.message : 'Failed to save Matrix order';
+      const writeMessage = describeFailure('Could not save the new order.', err);
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
       unverifiedWriteRef.current = { bookId, message: writeMessage };
@@ -786,7 +795,7 @@ function MatrixPageContent() {
       console.error('Error updating TODO status:', err);
       if (bookIdRef.current !== operationBookId) return;
       revertOptimisticUpdate(statusSnapshot, statusMutationVersion, operationBookId);
-      const message = err instanceof Error ? err.message : 'Failed to update status';
+      const message = describeFailure('Could not change the status.', err);
       const writeMessage = message;
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
@@ -826,14 +835,26 @@ function MatrixPageContent() {
         todoItems.filter(item => item.id !== selectedTodo.id && (item.status || 'new') === nextStatus),
         'scrumOrder',
       );
+      // The stores derive these from the transition too, but only the caller
+      // can keep the item on screen in step with them.
+      Object.assign(
+        persistedFields,
+        statusTimestampUpdates(selectedTodo, nextStatus, new Date().toISOString()),
+      );
     }
+
+    // The stores drop the pre-bump original for a date the caller sets, so the
+    // "moved" notice has to go with the same edit rather than wait for a read.
+    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
+    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
+    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
 
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
+        item.id === selectedTodo.id ? { ...item, ...optimisticFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...optimisticFields } : prev);
 
     try {
       const updated = await store.updateItem(
@@ -850,7 +871,7 @@ function MatrixPageContent() {
       // banner lives on the page behind it, so leaving it open would hide the
       // explanation. The board itself keeps the reverted values.
       setSelectedTodo(null);
-      const writeMessage = err instanceof Error ? err.message : 'Failed to update TODO';
+      const writeMessage = describeFailure('Could not save your changes.', err);
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
       unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
@@ -909,7 +930,7 @@ function MatrixPageContent() {
       if (bookIdRef.current !== operationBookId) return false;
       revertOptimisticUpdate(tagsSnapshot, tagsMutationVersion, operationBookId);
       taskQuery.clearCategoryFilters();
-      const writeMessage = err instanceof Error ? err.message : 'Failed to update tags';
+      const writeMessage = describeFailure('Could not update the tags.', err);
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
       unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
@@ -1089,7 +1110,12 @@ function MatrixPageContent() {
         {displayError && (
           <ErrorBanner
             message={displayError}
-            onDismiss={() => { unverifiedWriteRef.current = null; setError(null); setBookError(null); }}
+            onDismiss={() => {
+                unverifiedWriteRef.current = null;
+                dismissedFetchSequenceRef.current = fetchSequenceRef.current;
+                setError(null);
+                setBookError(null);
+              }}
           />
         )}
 

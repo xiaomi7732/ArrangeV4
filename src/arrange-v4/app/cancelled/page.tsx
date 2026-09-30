@@ -6,6 +6,7 @@ import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/stor
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
+import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -47,6 +48,9 @@ function CancelledPageContent() {
   // guess until a fetch succeeds, because a rejected bulk delete may still
   // have removed some of them.
   const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
+  // Reads already in flight when the user dismissed the banner: their failures
+  // belong to a message that has been closed, so they are not reported.
+  const dismissedFetchSequenceRef = useRef(0);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
@@ -164,11 +168,16 @@ function CancelledPageContent() {
         return;
       }
       console.error('Error fetching events:', err);
-      const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      // While a rolled-back delete is still unverified, every failed refresh
-      // has to keep saying so - not just the first one after the failure.
+      const message = describeFailure('Could not load the list.', err);
+      if (fetchSequence <= dismissedFetchSequenceRef.current) {
+        // This read was already running when the user dismissed the banner.
+        // Reporting it now would reopen something they closed.
+        return;
+      }
       // Always composed from the write failure, never from the banner, so a
-      // run of failed refreshes replaces its clause instead of stacking.
+      // run of failed refreshes replaces its clause instead of stacking, and a
+      // rolled-back delete keeps saying it is unverified until a read proves
+      // otherwise.
       setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'list'));
     } finally {
       if (
@@ -337,7 +346,7 @@ function CancelledPageContent() {
       // answer, but it cannot run offline, and leaving the list empty would
       // claim a deletion that never happened.
       if (bookIdRef.current === operationBookId) setCancelledItems(snapshot);
-      const message = err instanceof Error ? err.message : 'Failed to delete items';
+      const message = describeFailure('Could not delete the selected tasks.', err);
       // Held until a read proves the list: a bulk delete can partly succeed
       // and still reject, so the restored rows are a guess until then.
       unverifiedWriteRef.current = { bookId: operationBookId, message };
@@ -384,7 +393,12 @@ function CancelledPageContent() {
         {displayError && (
           <ErrorBanner
             message={displayError}
-            onDismiss={() => { unverifiedWriteRef.current = null; setError(null); setBookError(null); }}
+            onDismiss={() => {
+                unverifiedWriteRef.current = null;
+                dismissedFetchSequenceRef.current = fetchSequenceRef.current;
+                setError(null);
+                setBookError(null);
+              }}
           />
         )}
 
