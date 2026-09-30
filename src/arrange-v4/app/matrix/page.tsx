@@ -271,7 +271,7 @@ function MatrixPageContent() {
   // Set when a write failed and its optimistic change was rolled back: the view
   // is then a guess until a fetch succeeds, because a rejected multi-item write
   // may still have partly landed.
-  const unverifiedWriteRef = useRef<string | null>(null);
+  const unverifiedWriteRef = useRef<{ bookId: string; message: string } | null>(null);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -383,7 +383,12 @@ function MatrixPageContent() {
     setLoading(true);
     // A write that is still unverified outlives a manual refresh: only a
     // successful read may retract it.
-    if (!preserveError) setError(unverifiedWriteRef.current);
+    if (unverifiedWriteRef.current?.bookId !== requestedBookId) {
+      // Switching book drops it: the message belongs to work the user is no
+      // longer looking at, and a read of another book verifies nothing.
+      unverifiedWriteRef.current = null;
+    }
+    if (!preserveError) setError(unverifiedWriteRef.current?.message ?? null);
 
     try {
       // Fetch events from last 30 days to next 30 days
@@ -426,7 +431,7 @@ function MatrixPageContent() {
       if (unverifiedWriteRef.current) {
         // This read is authoritative, so the board is no longer a guess. The
         // write failure itself stays: the user still needs to know it failed.
-        setError(unverifiedWriteRef.current);
+        setError(unverifiedWriteRef.current.message);
         unverifiedWriteRef.current = null;
       }
       setItemsBookId(requestedBookId);
@@ -523,7 +528,7 @@ function MatrixPageContent() {
         // has to keep saying so - not just the first one after the failure.
         // Always composed from the write failure, never from the banner, so a
       // run of failed refreshes replaces its clause instead of stacking.
-      setError(composeReconcileFailure(unverifiedWriteRef.current, message, 'board'));
+      setError(composeReconcileFailure(unverifiedWriteRef.current?.message ?? null, message, 'board'));
       }
     } finally {
       if (fetchSequenceRef.current === fetchSequence && bookIdRef.current === requestedBookId) {
@@ -729,7 +734,7 @@ function MatrixPageContent() {
       const writeMessage = err instanceof Error ? err.message : 'Failed to save Matrix order';
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
-      unverifiedWriteRef.current = writeMessage;
+      unverifiedWriteRef.current = { bookId, message: writeMessage };
       setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -778,7 +783,7 @@ function MatrixPageContent() {
       const writeMessage = message;
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
-      unverifiedWriteRef.current = writeMessage;
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
       setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -841,7 +846,7 @@ function MatrixPageContent() {
       const writeMessage = err instanceof Error ? err.message : 'Failed to update TODO';
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
-      unverifiedWriteRef.current = writeMessage;
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
       setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
@@ -900,7 +905,7 @@ function MatrixPageContent() {
       const writeMessage = err instanceof Error ? err.message : 'Failed to update tags';
       // Held until a read proves the board: a bulk write can partly succeed
       // and still reject, so the restored list is a guess until then.
-      unverifiedWriteRef.current = writeMessage;
+      unverifiedWriteRef.current = { bookId: operationBookId, message: writeMessage };
       setError(writeMessage);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
