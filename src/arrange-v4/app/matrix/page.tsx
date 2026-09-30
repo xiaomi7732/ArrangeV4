@@ -383,12 +383,19 @@ function MatrixPageContent() {
     setLoading(true);
     // A write that is still unverified outlives a manual refresh: only a
     // successful read may retract it.
-    if (unverifiedWriteRef.current?.bookId !== requestedBookId) {
-      // Switching book drops it: the message belongs to work the user is no
-      // longer looking at, and a read of another book verifies nothing.
-      unverifiedWriteRef.current = null;
+    // Switching book drops an unverified failure: it belongs to work the user
+    // is no longer looking at, and a read of another book verifies nothing.
+    const strayWrite = unverifiedWriteRef.current?.bookId === requestedBookId
+      ? null
+      : unverifiedWriteRef.current;
+    if (strayWrite) unverifiedWriteRef.current = null;
+    if (!preserveError) {
+      setError(unverifiedWriteRef.current?.message ?? null);
+    } else if (strayWrite) {
+      // Preserved errors are the one case where the dropped failure may still
+      // be on screen, and nothing left can ever retract it.
+      setError(previous => (previous?.startsWith(strayWrite.message) ? null : previous));
     }
-    if (!preserveError) setError(unverifiedWriteRef.current?.message ?? null);
 
     try {
       // Fetch events from last 30 days to next 30 days
