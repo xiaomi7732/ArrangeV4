@@ -14,6 +14,12 @@ export interface TaskSearchBarProps {
   totalCount: number;
   /** Explains a gap between result and total caused by the status filters. */
   hiddenSummary?: string | null;
+  /**
+   * How far the loaded data reaches, e.g. the board's date window. Shown and
+   * announced with the hidden-item notice so "Show hidden" does not imply it
+   * can reveal work the view never loaded.
+   */
+  scopeNote?: string | null;
   /** Switches the status filters that are hiding items back to "All". */
   onRevealHidden?: () => void;
   onTextChange: (text: string) => void;
@@ -41,6 +47,7 @@ export default function TaskSearchBar({
   resultCount,
   totalCount,
   hiddenSummary = null,
+  scopeNote = null,
   onRevealHidden,
   onTextChange,
   onClearAll,
@@ -115,16 +122,15 @@ export default function TaskSearchBar({
   // Let the result count settle before announcing it, so a screen reader reads
   // one outcome per search rather than one per keystroke.
   useEffect(() => {
-    const timer = setTimeout(
-      () => setAnnouncedCount(
-        hiddenSummary
-          ? `Showing ${resultCount} of ${totalCount} items, ${hiddenSummary}`
-          : `Showing ${resultCount} of ${totalCount} items`,
-      ),
-      500,
-    );
+    const parts = [`Showing ${resultCount} of ${totalCount} items`];
+    if (hiddenSummary) parts.push(hiddenSummary);
+    // Only worth announcing alongside a hidden-item notice: that is when the
+    // user is being told something is missing and needs to know how far the
+    // view actually reaches.
+    if (hiddenSummary && scopeNote) parts.push(scopeNote);
+    const timer = setTimeout(() => setAnnouncedCount(parts.join(', ')), 500);
     return () => clearTimeout(timer);
-  }, [resultCount, totalCount, hiddenSummary]);
+  }, [resultCount, totalCount, hiddenSummary, scopeNote]);
 
   const openSaveForm = () => {
     // Prefill from the preset being edited so saving updates it in place rather
@@ -220,10 +226,10 @@ export default function TaskSearchBar({
         <span
           className={styles.resultCount}
           aria-hidden="true"
-          title="Counts the tasks loaded for this view. Calendar books load a 30-day window around today."
         >
           Showing {resultCount} of {totalCount} items
           {hiddenSummary ? ` — ${hiddenSummary}` : ''}
+          {hiddenSummary && scopeNote ? ` (${scopeNote})` : ''}
         </span>
         {hiddenSummary && onRevealHidden && (
           <button

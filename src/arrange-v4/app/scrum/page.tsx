@@ -33,6 +33,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -56,7 +57,11 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+  /** This refresh follows a failed write, so a failure here leaves state unverified. */
+  reconciling?: boolean;
+};
 
 // Workflow order: a task moves New -> In Progress, drops into Blocked as an
 // exception, and ends Finished. Ordering the lanes any other way makes the
@@ -101,6 +106,7 @@ function ScrumPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchReconcilingRef = useRef(false);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -185,6 +191,7 @@ function ScrumPageContent() {
 
   const fetchEvents = useCallback(async ({
     preserveError = false,
+    reconciling = false,
     interaction = 'allow-interactive',
   }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
@@ -197,6 +204,7 @@ function ScrumPageContent() {
       }
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current ||= preserveError;
+      pendingFetchReconcilingRef.current ||= reconciling;
       return;
     }
     const requestedMutationVersion = mutationVersionRef.current;
@@ -230,15 +238,19 @@ function ScrumPageContent() {
           }
           pendingFetchRef.current = true;
           pendingFetchPreserveErrorRef.current ||= preserveError;
+      pendingFetchReconcilingRef.current ||= reconciling;
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayReconciling = pendingFetchReconcilingRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
+                pendingFetchReconcilingRef.current = false;
                 pendingFetchInteractionRef.current = 'allow-interactive';
                 void fetchEvents({
                   preserveError: replayPreserveError,
+                  reconciling: replayReconciling,
                   interaction: 'silent-only',
                 });
               }
@@ -265,11 +277,10 @@ function ScrumPageContent() {
           return;
         }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        // A refresh asked to preserve an earlier error is reconciling after a
-        // failed write, which may have partly succeeded. Report both, so the
-        // board is not presented as verified when it could not be re-read.
-        setError(previous => (preserveError && previous
-          ? `${previous} The board could not be refreshed either: ${message}`
+        // Only a refresh that follows a failed write can leave the board
+        // unverified; a routine activation refresh just replaces the message.
+        setError(previous => (reconciling
+          ? composeReconcileFailure(previous, message, 'board')
           : message));
       }
     } finally {
@@ -287,10 +298,12 @@ function ScrumPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const reconciling = pendingFetchReconcilingRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
+      pendingFetchReconcilingRef.current = false;
       pendingFetchInteractionRef.current = 'allow-interactive';
-      void fetchEvents({ preserveError, interaction: 'silent-only' });
+      void fetchEvents({ preserveError, reconciling, interaction: 'silent-only' });
     }
   };
 
@@ -567,6 +580,7 @@ function ScrumPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to save Scrum order');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
     } finally {
       isSavingOrderRef.current = false;
       setIsSavingOrder(false);
@@ -625,6 +639,7 @@ function ScrumPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to update TODO');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -680,6 +695,7 @@ function ScrumPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -771,6 +787,7 @@ function ScrumPageContent() {
               resultCount={filteredItems.length}
               totalCount={laneItems.length}
               hiddenSummary={hiddenByStatus.label}
+              scopeNote="this board covers the 30 days around today"
               onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
               onTextChange={taskQuery.setText}
               onClearAll={taskQuery.clearAll}

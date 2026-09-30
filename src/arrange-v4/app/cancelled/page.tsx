@@ -6,6 +6,7 @@ import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/stor
 import { formatRelativeDate } from '@/lib/dateUtils';
 import { retainExistingIds } from '@/lib/selectionUtils';
 import { filterTasks, SHOW_ALL_STATUS_FILTERS } from '@/lib/search/taskQuery';
+import { composeReconcileFailure } from '@/lib/reconcileMessage';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
@@ -21,6 +22,8 @@ import styles from './page.module.css';
 
 type FetchEventsOptions = StoreOperationOptions & {
   preserveError?: boolean;
+  /** This refresh follows a failed write, so a failure here leaves state unverified. */
+  reconciling?: boolean;
   preserveSelection?: boolean;
 };
 
@@ -98,6 +101,7 @@ function CancelledPageContent() {
 
   const fetchEvents = useCallback(async ({
     preserveError = false,
+    reconciling = false,
     preserveSelection = false,
     interaction = 'allow-interactive',
   }: FetchEventsOptions = {}) => {
@@ -140,11 +144,10 @@ function CancelledPageContent() {
       }
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      // A refresh that was asked to preserve an earlier error is reconciling
-      // after that failure, so report both: the first message says what did not
-      // happen, this one says the list could not be verified either.
-      setError(previous => (preserveError && previous
-        ? `${previous} The list could not be refreshed either: ${message}`
+      // Only a refresh that follows a failed write can leave the list
+      // unverified; a routine activation refresh just replaces the message.
+      setError(previous => (reconciling
+        ? composeReconcileFailure(previous, message, 'list')
         : message));
     } finally {
       if (
@@ -318,7 +321,7 @@ function CancelledPageContent() {
       // preserveError: a bulk delete can partially succeed, so the refetch is
       // what reconciles which rows really went away — but it must not overwrite
       // the reason the delete failed.
-      await fetchEvents({ preserveError: true, preserveSelection: true });
+      await fetchEvents({ preserveError: true, reconciling: true, preserveSelection: true });
     } finally {
       setDeleting(false);
       setShowConfirm(false);

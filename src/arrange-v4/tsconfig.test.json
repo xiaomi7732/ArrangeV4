@@ -21,6 +21,8 @@
     "lib/dateUtils.ts",
     "lib/dateUtils.test.ts",
     "lib/bumpNotice.ts",
+    "lib/reconcileMessage.ts",
+    "lib/reconcileMessage.test.ts",
     "lib/bumpNotice.test.ts",
     "lib/statusTimestamps.ts",
     "lib/statusTimestamps.test.ts",

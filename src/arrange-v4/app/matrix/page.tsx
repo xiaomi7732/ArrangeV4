@@ -35,6 +35,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -58,7 +59,11 @@ import {
 import Link from 'next/link';
 import styles from './page.module.css';
 
-type FetchEventsOptions = StoreOperationOptions & { preserveError?: boolean };
+type FetchEventsOptions = StoreOperationOptions & {
+  preserveError?: boolean;
+  /** This refresh follows a failed write, so a failure here leaves state unverified. */
+  reconciling?: boolean;
+};
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
   return (a.etsDateTime || '').localeCompare(b.etsDateTime || '') ||
@@ -265,6 +270,7 @@ function MatrixPageContent() {
   const pendingMutationCountRef = useRef(0);
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
+  const pendingFetchReconcilingRef = useRef(false);
   const pendingFetchInteractionRef = useRef<AuthInteraction>('allow-interactive');
   const fetchSequenceRef = useRef(0);
   bookIdRef.current = bookId;
@@ -349,6 +355,7 @@ function MatrixPageContent() {
 
   const queuePendingFetch = (
     preserveError: boolean,
+    reconciling: boolean,
     interaction: AuthInteraction,
   ) => {
     if (!pendingFetchRef.current) {
@@ -358,16 +365,18 @@ function MatrixPageContent() {
     }
     pendingFetchRef.current = true;
     pendingFetchPreserveErrorRef.current ||= preserveError;
+    pendingFetchReconcilingRef.current ||= reconciling;
   };
 
   const fetchEvents = async ({
     preserveError = false,
+    reconciling = false,
     interaction = 'allow-interactive',
   }: FetchEventsOptions = {}) => {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     if (isSavingOrderRef.current || pendingMutationCountRef.current > 0) {
-      queuePendingFetch(preserveError, interaction);
+      queuePendingFetch(preserveError, reconciling, interaction);
       return;
     }
     const requestedMutationVersion = mutationVersionRef.current;
@@ -395,16 +404,19 @@ function MatrixPageContent() {
         mutationVersionRef.current !== requestedMutationVersion
       ) {
         if (bookIdRef.current === requestedBookId) {
-          queuePendingFetch(preserveError, interaction);
+          queuePendingFetch(preserveError, reconciling, interaction);
           if (pendingMutationCountRef.current === 0) {
             queueMicrotask(() => {
               if (pendingFetchRef.current && pendingMutationCountRef.current === 0) {
                 const replayPreserveError = pendingFetchPreserveErrorRef.current;
+                const replayReconciling = pendingFetchReconcilingRef.current;
                 pendingFetchRef.current = false;
                 pendingFetchPreserveErrorRef.current = false;
+                pendingFetchReconcilingRef.current = false;
                 pendingFetchInteractionRef.current = 'allow-interactive';
                 void fetchEvents({
                   preserveError: replayPreserveError,
+                  reconciling: replayReconciling,
                   interaction: 'silent-only',
                 });
               }
@@ -504,11 +516,10 @@ function MatrixPageContent() {
           return;
         }
         const message = err instanceof Error ? err.message : 'Failed to fetch events';
-        // A refresh asked to preserve an earlier error is reconciling after a
-        // failed write, which may have partly succeeded. Report both, so the
-        // board is not presented as verified when it could not be re-read.
-        setError(previous => (preserveError && previous
-          ? `${previous} The board could not be refreshed either: ${message}`
+        // Only a refresh that follows a failed write can leave the board
+        // unverified; a routine activation refresh just replaces the message.
+        setError(previous => (reconciling
+          ? composeReconcileFailure(previous, message, 'board')
           : message));
       }
     } finally {
@@ -526,10 +537,12 @@ function MatrixPageContent() {
     pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
+      const reconciling = pendingFetchReconcilingRef.current;
       pendingFetchRef.current = false;
       pendingFetchPreserveErrorRef.current = false;
+      pendingFetchReconcilingRef.current = false;
       pendingFetchInteractionRef.current = 'allow-interactive';
-      void fetchEvents({ preserveError, interaction: 'silent-only' });
+      void fetchEvents({ preserveError, reconciling, interaction: 'silent-only' });
     }
   };
 
@@ -715,6 +728,7 @@ function MatrixPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to save Matrix order');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
     } finally {
       isSavingOrderRef.current = false;
       setIsSavingOrder(false);
@@ -760,6 +774,7 @@ function MatrixPageContent() {
       setError(message);
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
     } finally {
       finishMutation();
     }
@@ -819,6 +834,7 @@ function MatrixPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to update TODO');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -874,6 +890,7 @@ function MatrixPageContent() {
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;
       pendingFetchPreserveErrorRef.current = true;
+      pendingFetchReconcilingRef.current = true;
       throw err;
     } finally {
       finishMutation();
@@ -1065,6 +1082,7 @@ function MatrixPageContent() {
                 resultCount={filteredTodoItems.length}
                 totalCount={todoItems.length}
                 hiddenSummary={hiddenByStatus.label}
+                scopeNote="this board covers the 30 days around today"
                 onRevealHidden={() => taskQuery.revealStatuses(hiddenByStatus.statuses)}
                 onTextChange={taskQuery.setText}
                 onClearAll={taskQuery.clearAll}
