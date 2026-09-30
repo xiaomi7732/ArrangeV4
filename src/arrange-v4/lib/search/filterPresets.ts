@@ -1,5 +1,5 @@
 /**
- * Named filter presets, scoped per storage backend and book.
+ * Named filter presets, scoped per storage backend, book, and view scope.
  *
  * Presets are a client-side convenience only: they live in localStorage and
  * never touch Calendar or Sheets persistence schemas. Stored values are
@@ -17,6 +17,14 @@ import {
 } from './taskQuery';
 
 const PRESET_KEY_PREFIX = 'arrange_filterPresets';
+
+/**
+ * Views that expose the same filter controls share presets. The boards
+ * (Matrix and Scrum) offer status, tag, and priority filters; Cancelled is
+ * search-only, so its presets are kept apart — otherwise a preset saved there
+ * would silently strip criteria from a board preset of the same name.
+ */
+export type PresetScope = 'board' | 'cancelled';
 
 export const MAX_PRESET_NAME_LENGTH = 60;
 export const MAX_PRESETS_PER_BOOK = 50;
@@ -36,13 +44,13 @@ function isLocalStorageAvailable(): boolean {
 }
 
 /**
- * Storage key for a book. Includes the backend so a Calendar book and a
- * Sheets book can never read each other's presets.
+ * Storage key for a book within a view scope. Includes the backend so a
+ * Calendar book and a Sheets book can never read each other's presets.
  */
-export function presetStorageKey(bookId: string): string | null {
+export function presetStorageKey(bookId: string, scope: PresetScope): string | null {
   const parsed = parseBookId(bookId);
   if (!parsed) return null;
-  return `${PRESET_KEY_PREFIX}_${parsed.backend}_${parsed.nativeId}`;
+  return `${PRESET_KEY_PREFIX}_${parsed.backend}_${parsed.nativeId}_${scope}`;
 }
 
 export function normalizePresetName(name: string): string {
@@ -98,9 +106,9 @@ function sanitizePreset(value: unknown): FilterPreset | null {
   return { id: source.id, name, query: sanitizeTaskQuery(source.query) };
 }
 
-export function listPresets(bookId: string | null | undefined): FilterPreset[] {
+export function listPresets(bookId: string | null | undefined, scope: PresetScope): FilterPreset[] {
   if (!bookId || !isLocalStorageAvailable()) return [];
-  const key = presetStorageKey(bookId);
+  const key = presetStorageKey(bookId, scope);
   if (!key) return [];
 
   try {
@@ -125,9 +133,9 @@ export function listPresets(bookId: string | null | undefined): FilterPreset[] {
 }
 
 /** Persists presets. Returns false when storage is unavailable or full. */
-function writePresets(bookId: string, presets: FilterPreset[]): boolean {
+function writePresets(bookId: string, scope: PresetScope, presets: FilterPreset[]): boolean {
   if (!isLocalStorageAvailable()) return false;
-  const key = presetStorageKey(bookId);
+  const key = presetStorageKey(bookId, scope);
   if (!key) return false;
 
   try {
@@ -165,10 +173,11 @@ export interface PresetMutationResult {
  */
 export function savePreset(
   bookId: string,
+  scope: PresetScope,
   name: string,
   query: TaskQuery,
 ): PresetMutationResult {
-  const presets = listPresets(bookId);
+  const presets = listPresets(bookId, scope);
   const normalized = normalizePresetName(name);
   if (!normalized) return { presets, error: 'Enter a name for this filter.' };
 
@@ -191,7 +200,7 @@ export function savePreset(
     next = [...presets, preset];
   }
 
-  if (!writePresets(bookId, next)) {
+  if (!writePresets(bookId, scope, next)) {
     return { presets, error: 'Could not save this filter in browser storage.' };
   }
   return { presets: next, preset };
@@ -199,10 +208,11 @@ export function savePreset(
 
 export function renamePreset(
   bookId: string,
+  scope: PresetScope,
   presetId: string,
   name: string,
 ): PresetMutationResult {
-  const presets = listPresets(bookId);
+  const presets = listPresets(bookId, scope);
   const normalized = normalizePresetName(name);
   if (!normalized) return { presets, error: 'Enter a name for this filter.' };
 
@@ -219,18 +229,18 @@ export function renamePreset(
   const next = [...presets];
   next[index] = preset;
 
-  if (!writePresets(bookId, next)) {
+  if (!writePresets(bookId, scope, next)) {
     return { presets, error: 'Could not rename this filter in browser storage.' };
   }
   return { presets: next, preset };
 }
 
-export function deletePreset(bookId: string, presetId: string): PresetMutationResult {
-  const presets = listPresets(bookId);
+export function deletePreset(bookId: string, scope: PresetScope, presetId: string): PresetMutationResult {
+  const presets = listPresets(bookId, scope);
   const next = presets.filter(preset => preset.id !== presetId);
   if (next.length === presets.length) return { presets };
 
-  if (!writePresets(bookId, next)) {
+  if (!writePresets(bookId, scope, next)) {
     return { presets, error: 'Could not delete this filter from browser storage.' };
   }
   return { presets: next };
@@ -243,10 +253,11 @@ export function deletePreset(bookId: string, presetId: string): PresetMutationRe
  */
 export function renameCategoryInPresets(
   bookId: string,
+  scope: PresetScope,
   from: string,
   to: string | null,
-): FilterPreset[] {
-  const presets = listPresets(bookId);
+): PresetMutationResult {
+  const presets = listPresets(bookId, scope);
   let changed = false;
 
   const next = presets.map(preset => {
@@ -257,6 +268,9 @@ export function renameCategoryInPresets(
     return { ...preset, query: { ...preset.query, categories } };
   });
 
-  if (!changed || !writePresets(bookId, next)) return presets;
-  return next;
+  if (!changed) return { presets };
+  if (!writePresets(bookId, scope, next)) {
+    return { presets, error: 'Saved filters still reference the old tag: browser storage is unavailable.' };
+  }
+  return { presets: next };
 }

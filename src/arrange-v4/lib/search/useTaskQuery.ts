@@ -1,14 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_STATUSES, type TodoStatus } from '../store/types';
 import {
   createDefaultTaskQuery,
   DEFAULT_STATUS_FILTERS,
   isQueryActive,
-  projectTaskQuery,
   taskQueriesEqual,
-  type QueryDimensions,
   type StatusFilterMode,
   type TaskQuery,
 } from './taskQuery';
@@ -19,17 +17,18 @@ import {
   renamePreset as renameStoredPreset,
   savePreset as saveStoredPreset,
   type FilterPreset,
+  type PresetScope,
 } from './filterPresets';
 
 export interface UseTaskQueryOptions {
   /** View-specific defaults, e.g. Cancelled shows every status. */
   defaultStatusFilters?: Record<TodoStatus, StatusFilterMode>;
   /**
-   * Which dimensions this view exposes controls for. Presets are shared across
-   * views within a book, so criteria a view cannot display are dropped when a
-   * preset is applied instead of filtering invisibly.
+   * Which pool of saved presets this view reads and writes. Views that expose
+   * the same controls share a scope; a view with different controls needs its
+   * own so presets can never carry criteria it cannot display or edit.
    */
-  dimensions?: Partial<QueryDimensions>;
+  presetScope?: PresetScope;
 }
 
 export interface UseTaskQueryResult {
@@ -90,15 +89,7 @@ export function useTaskQuery(
   const [presetError, setPresetError] = useState<string | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
-  const dimensionsKey = [
-    options.dimensions?.status !== false,
-    options.dimensions?.categories !== false,
-    options.dimensions?.priority !== false,
-  ].join('|');
-  const dimensions = useMemo<QueryDimensions>(() => {
-    const [status, categories, priority] = dimensionsKey.split('|').map(flag => flag === 'true');
-    return { status, categories, priority };
-  }, [dimensionsKey]);
+  const scope: PresetScope = options.presetScope ?? 'board';
 
   // Reset the query when the selected book (or the view's defaults) changes, so
   // filters can never leak across books or storage backends. Adjusting state
@@ -115,7 +106,16 @@ export function useTaskQuery(
   // Presets live in localStorage, which is unavailable during static prerender,
   // so they are loaded after mount rather than during render.
   useEffect(() => {
-    setPresets(bookId ? listPresets(bookId) : []); // eslint-disable-line react-hooks/set-state-in-effect -- reading localStorage is only safe after mount
+    setPresets(bookId ? listPresets(bookId, scope) : []); // eslint-disable-line react-hooks/set-state-in-effect -- reading localStorage is only safe after mount
+  }, [bookId, scope]);
+
+  // Tag updates resolve asynchronously; the handler that started one closes
+  // over the book selected at that time. This ref tells the commit callback
+  // which book is on screen now so a late completion cannot publish another
+  // book's presets.
+  const currentBookRef = useRef<string | null>(bookId ?? null);
+  useEffect(() => {
+    currentBookRef.current = bookId ?? null;
   }, [bookId]);
 
   // Prefer the preset the user actually chose. Two presets can hold identical
@@ -183,8 +183,14 @@ export function useTaskQuery(
   }, []);
 
   const commitCategoryRenameToPresets = useCallback((from: string, to: string | null) => {
-    if (bookId) setPresets(renameCategoryInPresets(bookId, from, to));
-  }, [bookId]);
+    if (!bookId) return;
+    const result = renameCategoryInPresets(bookId, scope, from, to);
+    // The rewrite is persisted for `bookId` either way, but only publish it to
+    // the UI while that book is still the one being shown.
+    if (currentBookRef.current !== bookId) return;
+    setPresets(result.presets);
+    if (result.error) setPresetError(result.error);
+  }, [bookId, scope]);
 
   const toggleUrgentOnly = useCallback(() => {
     setQuery(previous => ({ ...previous, urgentOnly: !previous.urgentOnly }));
@@ -207,33 +213,33 @@ export function useTaskQuery(
     if (!preset) return;
     setPresetError(null);
     setSelectedPresetId(presetId);
-    setQuery(projectTaskQuery(preset.query, dimensions, defaultStatusFilters));
-  }, [presets, dimensions, defaultStatusFilters]);
+    setQuery(preset.query);
+  }, [presets]);
 
   const savePreset = useCallback((name: string) => {
     if (!bookId) return false;
-    const result = saveStoredPreset(bookId, name, query);
+    const result = saveStoredPreset(bookId, scope, name, query);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
     if (result.preset) setSelectedPresetId(result.preset.id);
     return !result.error;
-  }, [bookId, query]);
+  }, [bookId, scope, query]);
 
   const renamePreset = useCallback((presetId: string, name: string) => {
     if (!bookId) return false;
-    const result = renameStoredPreset(bookId, presetId, name);
+    const result = renameStoredPreset(bookId, scope, presetId, name);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
     return !result.error;
-  }, [bookId]);
+  }, [bookId, scope]);
 
   const deletePreset = useCallback((presetId: string) => {
     if (!bookId) return;
-    const result = deleteStoredPreset(bookId, presetId);
+    const result = deleteStoredPreset(bookId, scope, presetId);
     setPresets(result.presets);
     setPresetError(result.error ?? null);
     setSelectedPresetId(previous => (previous === presetId ? null : previous));
-  }, [bookId]);
+  }, [bookId, scope]);
 
   return {
     query,

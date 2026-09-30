@@ -56,12 +56,12 @@ function CancelledPageContent() {
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
 
   // Every item on this page is already cancelled, so the shared status filters
-  // (which hide cancelled items by default) must not be applied here. Tag and
-  // priority criteria are dropped too, since this view renders no controls for
-  // them and would otherwise filter invisibly when a board preset is applied.
+  // (which hide cancelled items by default) must not be applied here. This view
+  // also offers search only, so it keeps its own preset scope: board presets
+  // carry tag/priority/status criteria it cannot display or edit.
   const taskQuery = useTaskQuery(bookId, {
     defaultStatusFilters: SHOW_ALL_STATUS_FILTERS,
-    dimensions: { status: false, categories: false, priority: false },
+    presetScope: 'cancelled',
   });
   const { query } = taskQuery;
 

@@ -138,10 +138,9 @@ function ScrumPageContent() {
     [todoItems],
   );
 
-  const filteredItems = useMemo(
-    () => filterTasks(laneItems, query),
-    [laneItems, query],
-  );
+  // Deliberately not memoized: today-only filtering depends on the current
+  // date, so results must refresh on re-render rather than stick across midnight.
+  const filteredItems = filterTasks(laneItems, query);
 
   const visibleLanes = useMemo(() => {
     return LANE_STATUSES.filter(s => query.statusFilters[s] !== 'hide');
@@ -609,8 +608,11 @@ function ScrumPageContent() {
     affectedItems: TodoItemWithId[],
     computeNewCategories: (item: TodoItemWithId) => string[],
     updateFilterState: () => void,
-  ) => {
-    if (!bookId || affectedItems.length === 0) return;
+  ): Promise<boolean> => {
+    // Resolves to whether the change is safely applied to the book still on
+    // screen; callers gate the saved-preset rewrite on that.
+    if (!bookId) return false;
+    if (affectedItems.length === 0) return true;
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     beginMutation();
@@ -636,10 +638,12 @@ function ScrumPageContent() {
           },
         })),
       );
-      if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
+      if (bookIdRef.current !== operationBookId) return false;
+      mergePersistedSources(updated);
+      return true;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
-      if (bookIdRef.current !== operationBookId) return;
+      if (bookIdRef.current !== operationBookId) return false;
       taskQuery.clearCategoryFilters();
       setError(err instanceof Error ? err.message : 'Failed to update tags');
       pendingFetchRef.current = true;
@@ -652,28 +656,28 @@ function ScrumPageContent() {
 
   const handleDeleteTag = async (tag: string) => {
     const affected = todoItems.filter(item => item.categories?.includes(tag));
-    await bulkUpdateCategories(
+    const applied = await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).filter(c => c !== tag),
       () => taskQuery.renameCategoryFilter(tag, null),
     );
     // Only rewrite persisted presets once the backend update has succeeded.
-    taskQuery.commitCategoryRenameToPresets(tag, null);
+    if (applied) taskQuery.commitCategoryRenameToPresets(tag, null);
   };
 
   const handleRenameTag = async (oldTag: string, newTag: string) => {
     const affected = todoItems.filter(item => item.categories?.includes(oldTag));
-    await bulkUpdateCategories(
+    const applied = await bulkUpdateCategories(
       affected,
       (item) => (item.categories || []).map(c => c === oldTag ? newTag : c),
       () => taskQuery.renameCategoryFilter(oldTag, newTag),
     );
-    taskQuery.commitCategoryRenameToPresets(oldTag, newTag);
+    if (applied) taskQuery.commitCategoryRenameToPresets(oldTag, newTag);
   };
 
   const handleMergeTag = async (sourceTag: string, targetTag: string) => {
     const affected = todoItems.filter(item => item.categories?.includes(sourceTag));
-    await bulkUpdateCategories(
+    const applied = await bulkUpdateCategories(
       affected,
       (item) => {
         const cats = item.categories || [];
@@ -682,7 +686,7 @@ function ScrumPageContent() {
       },
       () => taskQuery.renameCategoryFilter(sourceTag, targetTag),
     );
-    taskQuery.commitCategoryRenameToPresets(sourceTag, targetTag);
+    if (applied) taskQuery.commitCategoryRenameToPresets(sourceTag, targetTag);
   };
 
   if (!bookId && isAuthenticated && !requiresAuthRecovery) {

@@ -57,16 +57,16 @@ beforeEach(() => {
 
 describe('presetStorageKey', () => {
   it('separates backends that share a native ID', () => {
-    assert.notEqual(presetStorageKey(calendarBook), presetStorageKey(sheetsBook));
+    assert.notEqual(presetStorageKey(calendarBook, 'board'), presetStorageKey(sheetsBook, 'board'));
   });
 
   it('treats an unprefixed ID as a legacy calendar book', () => {
-    assert.equal(presetStorageKey('book-1'), presetStorageKey(calendarBook));
+    assert.equal(presetStorageKey('book-1', 'board'), presetStorageKey(calendarBook, 'board'));
   });
 
   it('rejects an unknown prefix', () => {
-    assert.equal(presetStorageKey('nope:book-1'), null);
-    assert.equal(presetStorageKey(''), null);
+    assert.equal(presetStorageKey('nope:book-1', 'board'), null);
+    assert.equal(presetStorageKey('', 'board'), null);
   });
 });
 
@@ -103,22 +103,22 @@ describe('sanitizeTaskQuery', () => {
 
 describe('listPresets', () => {
   it('returns nothing for a missing book or corrupt payload', () => {
-    assert.deepEqual(listPresets(null), []);
-    storage.setItem(presetStorageKey(calendarBook)!, 'not json');
-    assert.deepEqual(listPresets(calendarBook), []);
-    storage.setItem(presetStorageKey(calendarBook)!, '{"not":"an array"}');
-    assert.deepEqual(listPresets(calendarBook), []);
+    assert.deepEqual(listPresets(null, 'board'), []);
+    storage.setItem(presetStorageKey(calendarBook, 'board')!, 'not json');
+    assert.deepEqual(listPresets(calendarBook, 'board'), []);
+    storage.setItem(presetStorageKey(calendarBook, 'board')!, '{"not":"an array"}');
+    assert.deepEqual(listPresets(calendarBook, 'board'), []);
   });
 
   it('skips entries without a usable id or name, and duplicate ids', () => {
-    storage.setItem(presetStorageKey(calendarBook)!, JSON.stringify([
+    storage.setItem(presetStorageKey(calendarBook, 'board')!, JSON.stringify([
       { id: '', name: 'no id' },
       { id: 'a', name: '   ' },
       { id: 'b', name: 'Good' },
       { id: 'b', name: 'Duplicate' },
     ]));
 
-    const presets = listPresets(calendarBook);
+    const presets = listPresets(calendarBook, 'board');
     assert.equal(presets.length, 1);
     assert.equal(presets[0].name, 'Good');
   });
@@ -126,18 +126,18 @@ describe('listPresets', () => {
 
 describe('savePreset', () => {
   it('persists a preset and keeps books isolated', () => {
-    savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
+    savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
 
-    const saved = listPresets(calendarBook);
+    const saved = listPresets(calendarBook, 'board');
     assert.equal(saved.length, 1);
     assert.equal(saved[0].name, 'Urgent');
     assert.equal(saved[0].query.urgentOnly, true);
-    assert.deepEqual(listPresets(sheetsBook), []);
+    assert.deepEqual(listPresets(sheetsBook, 'board'), []);
   });
 
   it('overwrites a preset with the same name regardless of case', () => {
-    const first = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
-    const second = savePreset(calendarBook, '  urgent ', query({ importantOnly: true }));
+    const first = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    const second = savePreset(calendarBook, 'board', '  urgent ', query({ importantOnly: true }));
 
     assert.equal(second.presets.length, 1);
     assert.equal(second.presets[0].id, first.preset!.id);
@@ -147,29 +147,29 @@ describe('savePreset', () => {
   });
 
   it('rejects a blank name', () => {
-    const result = savePreset(calendarBook, '   ', query());
+    const result = savePreset(calendarBook, 'board', '   ', query());
     assert.ok(result.error);
-    assert.deepEqual(listPresets(calendarBook), []);
+    assert.deepEqual(listPresets(calendarBook, 'board'), []);
   });
 
   it('enforces the per-book limit for new names only', () => {
     for (let i = 0; i < MAX_PRESETS_PER_BOOK; i++) {
-      savePreset(calendarBook, `Preset ${i}`, query({ text: `${i}` }));
+      savePreset(calendarBook, 'board', `Preset ${i}`, query({ text: `${i}` }));
     }
-    assert.equal(listPresets(calendarBook).length, MAX_PRESETS_PER_BOOK);
+    assert.equal(listPresets(calendarBook, 'board').length, MAX_PRESETS_PER_BOOK);
 
-    const overflow = savePreset(calendarBook, 'One more', query());
+    const overflow = savePreset(calendarBook, 'board', 'One more', query());
     assert.ok(overflow.error);
-    assert.equal(listPresets(calendarBook).length, MAX_PRESETS_PER_BOOK);
+    assert.equal(listPresets(calendarBook, 'board').length, MAX_PRESETS_PER_BOOK);
 
-    const overwrite = savePreset(calendarBook, 'Preset 0', query({ text: 'updated' }));
+    const overwrite = savePreset(calendarBook, 'board', 'Preset 0', query({ text: 'updated' }));
     assert.equal(overwrite.error, undefined);
     assert.equal(overwrite.presets[0].query.text, 'updated');
   });
 
   it('reports an error and leaves state unchanged when storage rejects writes', () => {
     storage.failWrites = true;
-    const result = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
+    const result = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
     assert.ok(result.error);
     assert.deepEqual(result.presets, []);
   });
@@ -177,66 +177,112 @@ describe('savePreset', () => {
 
 describe('renamePreset', () => {
   it('renames an existing preset', () => {
-    const saved = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
-    const result = renamePreset(calendarBook, saved.preset!.id, 'Hot list');
+    const saved = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    const result = renamePreset(calendarBook, 'board', saved.preset!.id, 'Hot list');
 
     assert.equal(result.error, undefined);
-    assert.equal(listPresets(calendarBook)[0].name, 'Hot list');
+    assert.equal(listPresets(calendarBook, 'board')[0].name, 'Hot list');
   });
 
   it('rejects a duplicate name, a blank name, and an unknown id', () => {
-    const first = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
-    savePreset(calendarBook, 'Important', query({ importantOnly: true }));
+    const first = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    savePreset(calendarBook, 'board', 'Important', query({ importantOnly: true }));
 
-    assert.ok(renamePreset(calendarBook, first.preset!.id, 'important').error);
-    assert.ok(renamePreset(calendarBook, first.preset!.id, ' ').error);
-    assert.ok(renamePreset(calendarBook, 'missing-id', 'Anything').error);
-    assert.equal(listPresets(calendarBook)[0].name, 'Urgent');
+    assert.ok(renamePreset(calendarBook, 'board', first.preset!.id, 'important').error);
+    assert.ok(renamePreset(calendarBook, 'board', first.preset!.id, ' ').error);
+    assert.ok(renamePreset(calendarBook, 'board', 'missing-id', 'Anything').error);
+    assert.equal(listPresets(calendarBook, 'board')[0].name, 'Urgent');
   });
 
   it('allows renaming a preset to its own name', () => {
-    const saved = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
-    assert.equal(renamePreset(calendarBook, saved.preset!.id, 'Urgent').error, undefined);
+    const saved = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    assert.equal(renamePreset(calendarBook, 'board', saved.preset!.id, 'Urgent').error, undefined);
   });
 });
 
 describe('deletePreset', () => {
   it('removes a preset and is a no-op for unknown ids', () => {
-    const saved = savePreset(calendarBook, 'Urgent', query({ urgentOnly: true }));
+    const saved = savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
 
-    assert.deepEqual(deletePreset(calendarBook, 'missing-id').presets.length, 1);
-    assert.deepEqual(deletePreset(calendarBook, saved.preset!.id).presets, []);
-    assert.deepEqual(listPresets(calendarBook), []);
+    assert.deepEqual(deletePreset(calendarBook, 'board', 'missing-id').presets.length, 1);
+    assert.deepEqual(deletePreset(calendarBook, 'board', saved.preset!.id).presets, []);
+    assert.deepEqual(listPresets(calendarBook, 'board'), []);
   });
 });
 
 describe('renameCategoryInPresets', () => {
   it('rewrites a renamed tag across presets', () => {
-    savePreset(calendarBook, 'Infra', query({ categories: ['infra', 'ops'] }));
-    savePreset(calendarBook, 'Writing', query({ categories: ['writing'] }));
+    savePreset(calendarBook, 'board', 'Infra', query({ categories: ['infra', 'ops'] }));
+    savePreset(calendarBook, 'board', 'Writing', query({ categories: ['writing'] }));
 
-    const updated = renameCategoryInPresets(calendarBook, 'infra', 'platform');
+    const { presets: updated } = renameCategoryInPresets(calendarBook, 'board', 'infra', 'platform');
 
     assert.deepEqual(updated[0].query.categories, ['ops', 'platform']);
     assert.deepEqual(updated[1].query.categories, ['writing']);
-    assert.deepEqual(listPresets(calendarBook)[0].query.categories, ['ops', 'platform']);
+    assert.deepEqual(listPresets(calendarBook, 'board')[0].query.categories, ['ops', 'platform']);
   });
 
   it('drops a deleted tag', () => {
-    savePreset(calendarBook, 'Infra', query({ categories: ['infra', 'ops'] }));
-    const updated = renameCategoryInPresets(calendarBook, 'infra', null);
+    savePreset(calendarBook, 'board', 'Infra', query({ categories: ['infra', 'ops'] }));
+    const { presets: updated } = renameCategoryInPresets(calendarBook, 'board', 'infra', null);
     assert.deepEqual(updated[0].query.categories, ['ops']);
   });
 
   it('does not duplicate the target when merging into an existing tag', () => {
-    savePreset(calendarBook, 'Infra', query({ categories: ['infra', 'ops'] }));
-    const updated = renameCategoryInPresets(calendarBook, 'infra', 'ops');
+    savePreset(calendarBook, 'board', 'Infra', query({ categories: ['infra', 'ops'] }));
+    const { presets: updated } = renameCategoryInPresets(calendarBook, 'board', 'infra', 'ops');
     assert.deepEqual(updated[0].query.categories, ['ops']);
   });
 
   it('leaves presets untouched when the tag is unused', () => {
-    savePreset(calendarBook, 'Writing', query({ categories: ['writing'] }));
-    const updated = renameCategoryInPresets(calendarBook, 'infra', 'platform');
+    savePreset(calendarBook, 'board', 'Writing', query({ categories: ['writing'] }));
+    const { presets: updated } = renameCategoryInPresets(calendarBook, 'board', 'infra', 'platform');
     assert.deepEqual(updated[0].query.categories, ['writing']);
+  });
+
+  it('reports an error when the rewrite cannot be persisted', () => {
+    savePreset(calendarBook, 'board', 'Infra', query({ categories: ['infra'] }));
+    storage.failWrites = true;
+
+    const result = renameCategoryInPresets(calendarBook, 'board', 'infra', 'platform');
+
+    assert.ok(result.error);
+    assert.deepEqual(result.presets[0].query.categories, ['infra']);
+  });
+});
+
+describe('preset scopes', () => {
+  it('keeps each scope in its own storage key', () => {
+    assert.notEqual(
+      presetStorageKey(calendarBook, 'board'),
+      presetStorageKey(calendarBook, 'cancelled'),
+    );
+  });
+
+  it('never exposes a preset saved in another scope', () => {
+    savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+
+    assert.deepEqual(listPresets(calendarBook, 'cancelled'), []);
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
+  });
+
+  it('lets the same name exist independently in both scopes', () => {
+    const board = savePreset(calendarBook, 'board', 'Deploy', query({ urgentOnly: true }));
+    const cancelled = savePreset(calendarBook, 'cancelled', 'Deploy', query({ text: 'deploy' }));
+
+    assert.notEqual(board.preset!.id, cancelled.preset!.id);
+    assert.equal(listPresets(calendarBook, 'board')[0].query.urgentOnly, true);
+    assert.equal(listPresets(calendarBook, 'cancelled')[0].query.urgentOnly, false);
+    assert.equal(listPresets(calendarBook, 'cancelled')[0].query.text, 'deploy');
+  });
+
+  it('deletes only within the scope it was asked for', () => {
+    const board = savePreset(calendarBook, 'board', 'Deploy', query({ urgentOnly: true }));
+    savePreset(calendarBook, 'cancelled', 'Deploy', query({ text: 'deploy' }));
+
+    deletePreset(calendarBook, 'board', board.preset!.id);
+
+    assert.deepEqual(listPresets(calendarBook, 'board'), []);
+    assert.equal(listPresets(calendarBook, 'cancelled').length, 1);
   });
 });
