@@ -15,9 +15,9 @@ export interface TaskSearchBarProps {
   /** Explains a gap between result and total caused by the status filters. */
   hiddenSummary?: string | null;
   /**
-   * How far the loaded data reaches, e.g. the board's date window. Shown and
-   * announced with the hidden-item notice so "Show hidden" does not imply it
-   * can reveal work the view never loaded.
+   * How far the loaded data reaches, e.g. the board's date window. Shown with
+   * the count and announced with it, so neither the total nor "Show hidden"
+   * implies the view can reach work it never loaded.
    */
   scopeNote?: string | null;
   /** Switches the status filters that are hiding items back to "All". */
@@ -124,10 +124,7 @@ export default function TaskSearchBar({
   useEffect(() => {
     const parts = [`Showing ${resultCount} of ${totalCount} items`];
     if (hiddenSummary) parts.push(hiddenSummary);
-    // Only worth announcing alongside a hidden-item notice: that is when the
-    // user is being told something is missing and needs to know how far the
-    // view actually reaches.
-    if (hiddenSummary && scopeNote) parts.push(scopeNote);
+    if (scopeNote) parts.push(scopeNote);
     const timer = setTimeout(() => setAnnouncedCount(parts.join(', ')), 500);
     return () => clearTimeout(timer);
   }, [resultCount, totalCount, hiddenSummary, scopeNote]);
@@ -229,7 +226,7 @@ export default function TaskSearchBar({
         >
           Showing {resultCount} of {totalCount} items
           {hiddenSummary ? ` — ${hiddenSummary}` : ''}
-          {hiddenSummary && scopeNote ? ` (${scopeNote})` : ''}
+          {scopeNote ? ` (${scopeNote})` : ''}
         </span>
         {hiddenSummary && onRevealHidden && (
           <button

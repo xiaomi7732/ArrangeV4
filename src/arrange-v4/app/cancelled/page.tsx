@@ -22,8 +22,6 @@ import styles from './page.module.css';
 
 type FetchEventsOptions = StoreOperationOptions & {
   preserveError?: boolean;
-  /** This refresh follows a failed write, so a failure here leaves state unverified. */
-  reconciling?: boolean;
   preserveSelection?: boolean;
 };
 
@@ -45,6 +43,10 @@ function CancelledPageContent() {
   const [itemsBookId, setItemsBookId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when a delete failed and its rows were put back: the list is then a
+  // guess until a fetch succeeds, because a rejected bulk delete may still
+  // have removed some of them.
+  const unverifiedWriteRef = useRef(false);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
@@ -101,7 +103,6 @@ function CancelledPageContent() {
 
   const fetchEvents = useCallback(async ({
     preserveError = false,
-    reconciling = false,
     preserveSelection = false,
     interaction = 'allow-interactive',
   }: FetchEventsOptions = {}) => {
@@ -122,6 +123,12 @@ function CancelledPageContent() {
         bookIdRef.current !== requestedBookId
       ) return;
       const nextItems = items.filter(t => t.status === 'cancelled');
+      if (unverifiedWriteRef.current) {
+        // This read is authoritative, so a message about a write that could
+        // not be verified is now stale whatever it said.
+        unverifiedWriteRef.current = false;
+        setError(null);
+      }
       setCancelledItems(nextItems);
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
@@ -144,9 +151,9 @@ function CancelledPageContent() {
       }
       console.error('Error fetching events:', err);
       const message = err instanceof Error ? err.message : 'Failed to fetch events';
-      // Only a refresh that follows a failed write can leave the list
-      // unverified; a routine activation refresh just replaces the message.
-      setError(previous => (reconciling
+      // While a rolled-back delete is still unverified, every failed refresh
+      // has to keep saying so - not just the first one after the failure.
+      setError(previous => (unverifiedWriteRef.current
         ? composeReconcileFailure(previous, message, 'list')
         : message));
     } finally {
@@ -316,12 +323,13 @@ function CancelledPageContent() {
       // answer, but it cannot run offline, and leaving the list empty would
       // claim a deletion that never happened.
       if (bookIdRef.current === operationBookId) setCancelledItems(snapshot);
+      unverifiedWriteRef.current = true;
       const message = err instanceof Error ? err.message : 'Failed to delete items';
       setError(message);
       // preserveError: a bulk delete can partially succeed, so the refetch is
       // what reconciles which rows really went away — but it must not overwrite
       // the reason the delete failed.
-      await fetchEvents({ preserveError: true, reconciling: true, preserveSelection: true });
+      await fetchEvents({ preserveError: true, preserveSelection: true });
     } finally {
       setDeleting(false);
       setShowConfirm(false);
