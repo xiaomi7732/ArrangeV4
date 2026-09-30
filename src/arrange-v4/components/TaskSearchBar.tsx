@@ -203,7 +203,11 @@ export default function TaskSearchBar({
           )}
         </div>
 
-        <span className={styles.resultCount}>
+        {/*
+          Hidden from assistive technology: the same sentence is announced by
+          the live region below, and exposing both reads it twice.
+        */}
+        <span className={styles.resultCount} aria-hidden="true">
           Showing {resultCount} of {totalCount} items
         </span>
         {/*
