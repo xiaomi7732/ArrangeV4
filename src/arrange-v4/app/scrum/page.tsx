@@ -744,6 +744,7 @@ function ScrumPageContent() {
               onClearAll={taskQuery.clearAll}
               presets={taskQuery.presets}
               activePresetId={taskQuery.activePresetId}
+              selectedPresetId={taskQuery.selectedPresetId}
               presetError={taskQuery.presetError}
               onApplyPreset={taskQuery.applyPreset}
               onSavePreset={taskQuery.savePreset}

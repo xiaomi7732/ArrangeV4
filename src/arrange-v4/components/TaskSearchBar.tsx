@@ -16,6 +16,8 @@ export interface TaskSearchBarProps {
   onClearAll: () => void;
   presets: FilterPreset[];
   activePresetId: string | null;
+  /** Preset the user last applied or saved; kept even after editing its filters. */
+  selectedPresetId: string | null;
   presetError: string | null;
   onApplyPreset: (presetId: string) => void;
   onSavePreset: (name: string) => boolean;

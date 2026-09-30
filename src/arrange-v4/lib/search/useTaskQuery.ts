@@ -53,6 +53,8 @@ export interface UseTaskQueryResult {
   clearAll: () => void;
   presets: FilterPreset[];
   activePresetId: string | null;
+  /** The preset the user last applied or saved, even after editing its filters. */
+  selectedPresetId: string | null;
   presetError: string | null;
   dismissPresetError: () => void;
   applyPreset: (presetId: string) => void;
@@ -86,7 +88,11 @@ export function useTaskQuery(
     () => createDefaultTaskQuery(requestedDefaults),
   );
   const [presets, setPresets] = useState<FilterPreset[]>([]);
-  const [presetError, setPresetError] = useState<string | null>(null);
+  // An error is remembered together with the query it was raised for, so that
+  // editing the search or filters clears a message that no longer applies. A
+  // null query marks an error that is not tied to the live query.
+  const [presetErrorState, setPresetErrorState] =
+    useState<{ message: string; query: TaskQuery | null } | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   const scope: PresetScope = options.presetScope ?? 'board';
@@ -99,9 +105,13 @@ export function useTaskQuery(
   if (lastResetKey !== resetKey) {
     setLastResetKey(resetKey);
     setQuery(createDefaultTaskQuery(defaultStatusFilters));
-    setPresetError(null);
+    setPresetErrorState(null);
     setSelectedPresetId(null);
   }
+
+  const presetError = presetErrorState && (presetErrorState.query === null || presetErrorState.query === query)
+    ? presetErrorState.message
+    : null;
 
   // Presets live in localStorage, which is unavailable during static prerender,
   // so they are loaded after mount rather than during render.
@@ -189,7 +199,7 @@ export function useTaskQuery(
     // the UI while that book is still the one being shown.
     if (currentBookRef.current !== bookId) return;
     setPresets(result.presets);
-    if (result.error) setPresetError(result.error);
+    if (result.error) setPresetErrorState({ message: result.error, query: null });
   }, [bookId, scope]);
 
   const toggleUrgentOnly = useCallback(() => {
@@ -202,16 +212,16 @@ export function useTaskQuery(
 
   const clearAll = useCallback(() => {
     setQuery(createDefaultTaskQuery(defaultStatusFilters));
-    setPresetError(null);
+    setPresetErrorState(null);
     setSelectedPresetId(null);
   }, [defaultStatusFilters]);
 
-  const dismissPresetError = useCallback(() => setPresetError(null), []);
+  const dismissPresetError = useCallback(() => setPresetErrorState(null), []);
 
   const applyPreset = useCallback((presetId: string) => {
     const preset = presets.find(entry => entry.id === presetId);
     if (!preset) return;
-    setPresetError(null);
+    setPresetErrorState(null);
     setSelectedPresetId(presetId);
     setQuery(preset.query);
   }, [presets]);
@@ -221,31 +231,34 @@ export function useTaskQuery(
     // A preset identical to the view defaults would match every unfiltered
     // page load and show up as "applied" while filtering nothing.
     if (!queryActive) {
-      setPresetError('Set a search or filter before saving it.');
+      setPresetErrorState({ message: 'Set a search or filter before saving it.', query });
       return false;
     }
-    const result = saveStoredPreset(bookId, scope, name, query, activePresetId);
+    // `selectedPresetId` — not `activePresetId` — is the save target: after the
+    // user edits an applied preset the live query no longer matches it, but
+    // re-saving under its own name must still update it in place.
+    const result = saveStoredPreset(bookId, scope, name, query, selectedPresetId);
     setPresets(result.presets);
-    setPresetError(result.error ?? null);
+    setPresetErrorState(result.error ? { message: result.error, query } : null);
     if (result.preset) setSelectedPresetId(result.preset.id);
     return !result.error;
-  }, [bookId, scope, query, queryActive, activePresetId]);
+  }, [bookId, scope, query, queryActive, selectedPresetId]);
 
   const renamePreset = useCallback((presetId: string, name: string) => {
     if (!bookId) return false;
     const result = renameStoredPreset(bookId, scope, presetId, name);
     setPresets(result.presets);
-    setPresetError(result.error ?? null);
+    setPresetErrorState(result.error ? { message: result.error, query } : null);
     return !result.error;
-  }, [bookId, scope]);
+  }, [bookId, scope, query]);
 
   const deletePreset = useCallback((presetId: string) => {
     if (!bookId) return;
     const result = deleteStoredPreset(bookId, scope, presetId);
     setPresets(result.presets);
-    setPresetError(result.error ?? null);
+    setPresetErrorState(result.error ? { message: result.error, query } : null);
     setSelectedPresetId(previous => (previous === presetId ? null : previous));
-  }, [bookId, scope]);
+  }, [bookId, scope, query]);
 
   return {
     query,
@@ -263,6 +276,7 @@ export function useTaskQuery(
     clearAll,
     presets,
     activePresetId,
+    selectedPresetId,
     presetError,
     dismissPresetError,
     applyPreset,
