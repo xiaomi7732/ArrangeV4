@@ -1,0 +1,78 @@
+import { strict as assert } from 'node:assert';
+import { describe, it } from 'node:test';
+import { markdownToSearchText, safeMarkdownUrl } from './markdown';
+
+describe('safeMarkdownUrl', () => {
+  it('allows the protocols a note legitimately links to', () => {
+    assert.equal(safeMarkdownUrl('https://example.com/a'), 'https://example.com/a');
+    assert.equal(safeMarkdownUrl('http://example.com'), 'http://example.com');
+    assert.equal(safeMarkdownUrl('mailto:someone@example.com'), 'mailto:someone@example.com');
+  });
+
+  it('rejects script-bearing and payload-bearing URLs', () => {
+    assert.equal(safeMarkdownUrl('javascript:alert(1)'), null);
+    assert.equal(safeMarkdownUrl('  javascript:alert(1)  '), null);
+    assert.equal(safeMarkdownUrl('JavaScript:alert(1)'), null);
+    assert.equal(safeMarkdownUrl('data:text/html;base64,PHNjcmlwdD4='), null);
+    assert.equal(safeMarkdownUrl('vbscript:msgbox(1)'), null);
+    assert.equal(safeMarkdownUrl('file:///C:/Windows/System32'), null);
+  });
+
+  it('rejects anything that is not an absolute URL', () => {
+    assert.equal(safeMarkdownUrl('/books'), null);
+    assert.equal(safeMarkdownUrl('#section'), null);
+    assert.equal(safeMarkdownUrl('example.com'), null);
+    assert.equal(safeMarkdownUrl(''), null);
+    assert.equal(safeMarkdownUrl('   '), null);
+    assert.equal(safeMarkdownUrl(null), null);
+    assert.equal(safeMarkdownUrl(undefined), null);
+  });
+
+  it('trims surrounding whitespace from an accepted URL', () => {
+    assert.equal(safeMarkdownUrl('  https://example.com  '), 'https://example.com');
+  });
+});
+
+describe('markdownToSearchText', () => {
+  it('keeps link labels and drops their targets', () => {
+    assert.equal(
+      markdownToSearchText('see [the design doc](https://example.com/spec) first'),
+      'see the design doc first',
+    );
+  });
+
+  it('keeps image alt text and drops the image URL', () => {
+    assert.equal(markdownToSearchText('![burndown chart](https://x/y.png)'), 'burndown chart');
+  });
+
+  it('keeps autolink targets, which are the only text shown', () => {
+    assert.equal(
+      markdownToSearchText('ping <https://example.com/status>'),
+      'ping https://example.com/status',
+    );
+  });
+
+  it('strips heading, quote and list markers', () => {
+    assert.equal(markdownToSearchText('## Plan'), 'Plan');
+    assert.equal(markdownToSearchText('> quoted note'), 'quoted note');
+    assert.equal(markdownToSearchText('- first\n* second\n1. third'), 'first\nsecond\nthird');
+  });
+
+  it('strips emphasis, strikethrough and code markers but keeps the words', () => {
+    assert.equal(markdownToSearchText('**bold** _italic_ ~~gone~~ `code`'), 'bold italic gone code');
+  });
+
+  it('keeps the contents of a fenced code block', () => {
+    const text = markdownToSearchText('```ts\nconst answer = 42;\n```');
+    assert.ok(text.includes('const answer = 42;'), text);
+    assert.ok(!text.includes('```'), text);
+  });
+
+  it('keeps table cell text', () => {
+    assert.equal(markdownToSearchText('| name | owner |'), 'name owner');
+  });
+
+  it('leaves plain prose untouched apart from trimming', () => {
+    assert.equal(markdownToSearchText('  just a normal note  '), 'just a normal note');
+  });
+});

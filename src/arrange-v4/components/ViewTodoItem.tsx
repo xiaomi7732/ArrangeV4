@@ -13,6 +13,8 @@ import {
 } from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
 import DialogTabs from './DialogTabs';
+import MarkdownView from './MarkdownView';
+import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -62,6 +64,11 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [etsDateTime, setEtsDateTime] = useState(formatLocalDateTime(todo.etsDateTime));
   const [etaDateTime, setEtaDateTime] = useState(formatLocalDateTime(todo.etaDateTime));
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
+  // A remark with no stored type predates Markdown support, so it stays plain
+  // until the user opts it in; anything new is authored as Markdown.
+  const [remarksMarkdown, setRemarksMarkdown] = useState(
+    !todo.remarks || todo.remarks.type === 'markdown',
+  );
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
   const [categories, setCategories] = useState<string[]>(todo.categories || []);
 
@@ -98,7 +105,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const nextEts = etsDateTime ? new Date(etsDateTime).toISOString() : undefined;
       const nextEta = etaDateTime ? new Date(etaDateTime).toISOString() : undefined;
       const nextRemarks = remarks.trim()
-        ? { type: todo.remarks?.type || 'text', content: remarks.trim() }
+        ? {
+            type: (remarksMarkdown ? 'markdown' : 'text') as 'markdown' | 'text',
+            content: remarks.trim(),
+          }
         : null;
       const nextChecklist = checklist.length > 0 ? checklist : [];
       const nextCategories = categories.length > 0 ? categories : [];
@@ -115,7 +125,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
         updatedFields.etaDateTime = nextEta;
       }
-      if (remarks !== (todo.remarks?.content || '')) updatedFields.remarks = nextRemarks;
+      const remarksChanged =
+        remarks.trim() !== (todo.remarks?.content || '') ||
+        (nextRemarks !== null && nextRemarks.type !== (todo.remarks?.type || 'text'));
+      if (remarksChanged) updatedFields.remarks = nextRemarks;
       if (!sameValue(nextChecklist, todo.checklist || [])) {
         updatedFields.checklist = nextChecklist;
       }
@@ -144,6 +157,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setEtsDateTime(formatLocalDateTime(todo.etsDateTime));
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
+    setRemarksMarkdown(!todo.remarks || todo.remarks.type === 'markdown');
     setChecklist(todo.checklist || []);
     setCategories(todo.categories || []);
     setError(null);
@@ -285,13 +299,16 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                 id={tabPanelElementId(tabsId, 'remarks')}
                 aria-labelledby={tabElementId(tabsId, 'remarks')}
               >
-                <div className={styles.formGroupFill}>
-                  <label htmlFor="edit-remarks" className={styles.label}>Remarks</label>
-                  <textarea id="edit-remarks" value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Add any notes or remarks..."
-                    disabled={isSubmitting} className={styles.textarea} />
-                </div>
+                <RemarksEditor
+                  textareaId="edit-remarks"
+                  value={remarks}
+                  onChange={setRemarks}
+                  disabled={isSubmitting}
+                  isMarkdown={remarksMarkdown}
+                  onIsMarkdownChange={
+                    todo.remarks && todo.remarks.type !== 'markdown' ? setRemarksMarkdown : undefined
+                  }
+                />
               </div>
             )}
 
@@ -456,7 +473,11 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
               {todo.remarks?.content ? (
                 <div className={styles.formGroupFill}>
                   <span className={styles.label}>Remarks</span>
-                  <div className={styles.remarksBox}>{todo.remarks.content}</div>
+                  {todo.remarks.type === 'markdown' ? (
+                    <MarkdownView content={todo.remarks.content} className={styles.remarksBox} />
+                  ) : (
+                    <div className={styles.remarksBox}>{todo.remarks.content}</div>
+                  )}
                 </div>
               ) : (
                 <p className={styles.tabPlaceholder}>No remarks</p>

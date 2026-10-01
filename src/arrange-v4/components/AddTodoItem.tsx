@@ -11,6 +11,7 @@ import {
 } from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
 import DialogTabs from './DialogTabs';
+import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -102,7 +103,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
         etsDateTime: etsDateTime ? new Date(etsDateTime).toISOString() : undefined,
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? {
-          type: 'text',
+          type: 'markdown',
           content: remarks.trim(),
         } : undefined,
         checklist: checklist.length > 0 ? checklist : undefined,
@@ -290,13 +291,13 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
               id={tabPanelElementId(tabsId, 'remarks')}
               aria-labelledby={tabElementId(tabsId, 'remarks')}
             >
-              <div className={styles.formGroupFill}>
-                <label htmlFor="remarks" className={styles.label}>Remarks</label>
-                <textarea id="remarks" value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Add any notes or remarks..."
-                  disabled={isSubmitting} className={styles.textarea} />
-              </div>
+              <RemarksEditor
+                textareaId="remarks"
+                value={remarks}
+                onChange={setRemarks}
+                disabled={isSubmitting}
+                isMarkdown
+              />
             </div>
           )}
 

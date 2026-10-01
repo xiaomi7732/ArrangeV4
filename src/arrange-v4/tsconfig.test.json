@@ -20,6 +20,8 @@
     "lib/auth/recoveryState.test.ts",
     "lib/dateUtils.ts",
     "lib/dateUtils.test.ts",
+    "lib/markdown.ts",
+    "lib/markdown.test.ts",
     "lib/dialogTabs.ts",
     "lib/dialogTabs.test.ts",
     "lib/bumpNotice.ts",
