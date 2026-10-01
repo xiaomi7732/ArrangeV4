@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { formatAbsoluteDateTime } from '@/lib/dateUtils';
 import { describeDateBump } from '@/lib/bumpNotice';
+import {
+  TODO_DIALOG_TABS,
+  tabElementId,
+  tabPanelElementId,
+  type TodoDialogTab,
+} from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
+import DialogTabs from './DialogTabs';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -22,7 +29,7 @@ interface ViewTodoItemProps {
   availableCategories?: string[];
 }
 
-type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
+type ViewTab = TodoDialogTab;
 
 function formatLocalDateTime(isoString?: string) {
   if (!isoString) return '';
@@ -37,6 +44,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
+  const tabsId = useId();
   // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
   const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
   const displayChecklist = viewChecklist ?? todo.checklist;
@@ -178,19 +186,24 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           <form onSubmit={handleSave} className={styles.form}>
-            <div className={styles.tabBar}>
-              <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('essentials')}>Essentials</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('tags')}>Tags</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('remarks')}>Remarks</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('checklist')}>Checklist</button>
-            </div>
+            <DialogTabs
+               tabs={TODO_DIALOG_TABS}
+               activeTab={activeTab}
+               onChange={setActiveTab}
+               idPrefix={tabsId}
+               ariaLabel="TODO item sections"
+               className={styles.tabBar}
+               tabClassName={styles.tab}
+               activeTabClassName={styles.tabActive}
+            />
 
             {activeTab === 'essentials' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'essentials')}
+                aria-labelledby={tabElementId(tabsId, 'essentials')}
+              >
                 <div className={styles.formGroup}>
                   <label htmlFor="edit-subject" className={styles.label}>Subject *</label>
                   <input type="text" id="edit-subject" value={subject}
@@ -250,7 +263,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             {activeTab === 'tags' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'tags')}
+                aria-labelledby={tabElementId(tabsId, 'tags')}
+              >
                 <TagPicker
                   availableCategories={availableCategories}
                   categories={categories}
@@ -261,7 +279,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             {activeTab === 'remarks' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'remarks')}
+                aria-labelledby={tabElementId(tabsId, 'remarks')}
+              >
                 <div className={styles.formGroupFill}>
                   <label htmlFor="edit-remarks" className={styles.label}>Remarks</label>
                   <textarea id="edit-remarks" value={remarks}
@@ -273,7 +296,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             {activeTab === 'checklist' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'checklist')}
+                aria-labelledby={tabElementId(tabsId, 'checklist')}
+              >
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Checklist</label>
                   <ChecklistEditor
@@ -322,19 +350,24 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
         )}
 
         <div className={styles.form}>
-          <div className={styles.tabBar}>
-            <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('essentials')}>Essentials</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('tags')}>Tags</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('remarks')}>Remarks</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('checklist')}>Checklist</button>
-          </div>
+          <DialogTabs
+             tabs={TODO_DIALOG_TABS}
+             activeTab={activeTab}
+             onChange={setActiveTab}
+             idPrefix={tabsId}
+             ariaLabel="TODO item sections"
+             className={styles.tabBar}
+             tabClassName={styles.tab}
+             activeTabClassName={styles.tabActive}
+          />
 
           {activeTab === 'essentials' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'essentials')}
+              aria-labelledby={tabElementId(tabsId, 'essentials')}
+            >
               <div className={styles.formGroup}>
                 <span className={styles.label}>Status</span>
                 <span className={styles.value}>{STATUS_LABELS[todo.status || 'new']}</span>
@@ -390,7 +423,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'tags' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'tags')}
+              aria-labelledby={tabElementId(tabsId, 'tags')}
+            >
               {todo.categories && todo.categories.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Tags</span>
@@ -409,7 +447,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'remarks' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'remarks')}
+              aria-labelledby={tabElementId(tabsId, 'remarks')}
+            >
               {todo.remarks?.content ? (
                 <div className={styles.formGroupFill}>
                   <span className={styles.label}>Remarks</span>
@@ -422,7 +465,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'checklist' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'checklist')}
+              aria-labelledby={tabElementId(tabsId, 'checklist')}
+            >
               {displayChecklist && displayChecklist.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Checklist</span>

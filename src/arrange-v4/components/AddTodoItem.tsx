@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
+import {
+  TODO_DIALOG_TABS,
+  tabElementId,
+  tabPanelElementId,
+  type TodoDialogTab,
+} from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
+import DialogTabs from './DialogTabs';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -44,8 +51,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
   const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
   const [categories, setCategories] = useState<string[]>([]);
-  type AddTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
-  const [activeTab, setActiveTab] = useState<AddTab>('essentials');
+  const [activeTab, setActiveTab] = useState<TodoDialogTab>('essentials');
+  const tabsId = useId();
 
   const resetForm = useCallback(() => {
     setSubject('');
@@ -173,19 +180,24 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
         )}
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          <div className={styles.tabBar}>
-            <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('essentials')}>Essentials</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('tags')}>Tags</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('remarks')}>Remarks</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('checklist')}>Checklist</button>
-          </div>
+          <DialogTabs
+            tabs={TODO_DIALOG_TABS}
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            idPrefix={tabsId}
+            ariaLabel="TODO item sections"
+            className={styles.tabBar}
+            tabClassName={styles.tab}
+            activeTabClassName={styles.tabActive}
+          />
 
           {activeTab === 'essentials' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'essentials')}
+              aria-labelledby={tabElementId(tabsId, 'essentials')}
+            >
               <div className={styles.formGroup}>
                 <label htmlFor="subject" className={styles.label}>Subject *</label>
                 <input type="text" id="subject" value={subject}
@@ -250,7 +262,12 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           )}
 
           {activeTab === 'tags' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'tags')}
+              aria-labelledby={tabElementId(tabsId, 'tags')}
+            >
               <TagPicker
                 availableCategories={availableCategories}
                 categories={categories}
@@ -261,7 +278,12 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           )}
 
           {activeTab === 'remarks' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'remarks')}
+              aria-labelledby={tabElementId(tabsId, 'remarks')}
+            >
               <div className={styles.formGroupFill}>
                 <label htmlFor="remarks" className={styles.label}>Remarks</label>
                 <textarea id="remarks" value={remarks}
@@ -273,7 +295,12 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           )}
 
           {activeTab === 'checklist' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'checklist')}
+              aria-labelledby={tabElementId(tabsId, 'checklist')}
+            >
               <div className={styles.formGroup}>
                 <label className={styles.label}>Checklist</label>
                 <ChecklistEditor
