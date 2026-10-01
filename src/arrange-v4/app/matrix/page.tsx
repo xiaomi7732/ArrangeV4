@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useId, Suspense } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -43,6 +43,7 @@ import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
@@ -293,6 +294,21 @@ function MatrixPageContent() {
   const { query } = taskQuery;
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
+  const statusPanelId = useId();
+  const tagsPanelId = useId();
+  const closeStatusPanel = useCallback(() => setShowFilters(false), []);
+  const closeTagsPanel = useCallback(() => setShowTags(false), []);
+  const statusPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showFilters,
+    closeStatusPanel,
+  );
+  const tagsPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showTags,
+    closeTagsPanel,
+    // The tag bar is open by default and sits in the page flow, so collapsing
+    // it on every click elsewhere on the board would be hostile.
+    { dismissOnOutsidePress: false },
+  );
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
@@ -1158,9 +1174,12 @@ function MatrixPageContent() {
                   {allCategories.length > 0 && (
                     <div className={styles.comboButton}>
                       <button
+                        ref={tagsPanel.triggerRef}
                         className={styles.comboButtonMain}
                         onClick={() => setShowTags(prev => !prev)}
                         aria-expanded={showTags}
+                        aria-haspopup="true"
+                        aria-controls={tagsPanelId}
                       >
                         {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                       </button>
@@ -1176,16 +1195,19 @@ function MatrixPageContent() {
                     </div>
                   )}
                   <button
+                    ref={statusPanel.triggerRef}
                     className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                     onClick={() => setShowFilters(prev => !prev)}
                     aria-expanded={showFilters}
+                    aria-haspopup="true"
+                    aria-controls={statusPanelId}
                   >
                     {showFilters ? '▲ Status' : '▼ Status'}{isStatusFilterActive(query) ? ' ●' : ''}
                   </button>
                 </div>
               </div>
               {showFilters && (
-                <div className={styles.filterBar}>
+                <div className={styles.filterBar} id={statusPanelId} ref={statusPanel.panelRef}>
                   {ALL_STATUSES.map(status => (
                     <div key={status} className={styles.filterGroup}>
                       <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
@@ -1214,7 +1236,7 @@ function MatrixPageContent() {
                 </div>
               )}
               {showTags && allCategories.length > 0 && (
-                <div className={styles.tagBar}>
+                <div className={styles.tagBar} id={tagsPanelId} ref={tagsPanel.panelRef}>
                   <div className={styles.categoryFilterChips}>
                       <button
                         className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}

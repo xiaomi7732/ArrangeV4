@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useId, Suspense } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -40,6 +40,7 @@ import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
@@ -129,6 +130,21 @@ function ScrumPageContent() {
   const taskQuery = useTaskQuery(bookId);
   const { query } = taskQuery;
   const [showStatusFilters, setShowStatusFilters] = useState(false);
+  const statusPanelId = useId();
+  const tagsPanelId = useId();
+  const closeStatusPanel = useCallback(() => setShowStatusFilters(false), []);
+  const closeTagsPanel = useCallback(() => setShowTags(false), []);
+  const statusPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showStatusFilters,
+    closeStatusPanel,
+  );
+  const tagsPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showTags,
+    closeTagsPanel,
+    // Open by default and in the page flow, so an outside click must not
+    // collapse it out from under the user.
+    { dismissOnOutsidePress: false },
+  );
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -857,18 +873,24 @@ function ScrumPageContent() {
               <span className={styles.filterCount} />
               <div className={styles.boardHeaderActions}>
                 <button
+                  ref={statusPanel.triggerRef}
                   className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                   onClick={() => setShowStatusFilters(prev => !prev)}
                   aria-expanded={showStatusFilters}
+                  aria-haspopup="true"
+                  aria-controls={statusPanelId}
                 >
                   {showStatusFilters ? '▲' : '▼'} Status{statusFilterActive ? ' ●' : ''}
                 </button>
                 {allCategories.length > 0 && (
                   <div className={styles.comboButton}>
                     <button
+                      ref={tagsPanel.triggerRef}
                       className={styles.comboButtonMain}
                       onClick={() => setShowTags(prev => !prev)}
                       aria-expanded={showTags}
+                      aria-haspopup="true"
+                      aria-controls={tagsPanelId}
                     >
                       {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                     </button>
@@ -887,7 +909,7 @@ function ScrumPageContent() {
             </div>
 
             {showStatusFilters && (
-              <div className={styles.filterBar}>
+              <div className={styles.filterBar} id={statusPanelId} ref={statusPanel.panelRef}>
                 {ALL_STATUSES.map(status => (
                   <div key={status} className={styles.filterGroup}>
                     <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
@@ -918,7 +940,7 @@ function ScrumPageContent() {
             )}
 
             {showTags && allCategories.length > 0 && (
-              <div className={styles.tagBar}>
+              <div className={styles.tagBar} id={tagsPanelId} ref={tagsPanel.panelRef}>
                 <div className={styles.categoryFilterChips}>
                   <button
                     className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}
