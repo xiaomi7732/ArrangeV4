@@ -997,7 +997,17 @@ function ScrumPageContent() {
                       <h3 className={`${styles.laneTitle} ${laneStyle.title}`}>
                         {STATUS_LABELS[status]}
                       </h3>
-                      <span className={styles.laneCount}>{items.length}</span>
+                      <div className={styles.laneHeaderActions}>
+                        <span className={styles.laneCount}>{items.length}</span>
+                        <AddTodoItem
+                          onAddTodo={handleAddTodo}
+                          disabled={loading}
+                          defaultStatus={status}
+                          addLabel={`Add item to ${STATUS_LABELS[status]}`}
+                          compact
+                          availableCategories={allCategories}
+                        />
+                      </div>
                     </div>
                     <SortableTodoList
                       id={laneId(status)}

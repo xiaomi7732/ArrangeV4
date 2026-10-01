@@ -19,6 +19,10 @@ interface AddTodoItemProps {
   disabled?: boolean;
   defaultUrgent?: boolean;
   defaultImportant?: boolean;
+  /** Accessible name for the trigger, needed when compact renders only a +. */
+  addLabel?: string;
+  /** Status the new item starts in, e.g. the Scrum lane the add button sits in. */
+  defaultStatus?: TodoStatus;
   buttonText?: string;
   compact?: boolean;
   availableCategories?: string[];
@@ -36,7 +40,7 @@ function getDateTimeString(hoursOffset: number = 0) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
+export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, defaultStatus = 'new', addLabel, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +49,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   const [subject, setSubject] = useState('');
   const [urgent, setUrgent] = useState(defaultUrgent);
   const [important, setImportant] = useState(defaultImportant);
-  const [status, setStatus] = useState<TodoStatus>('new');
+  const [status, setStatus] = useState<TodoStatus>(defaultStatus);
   const [remarks, setRemarks] = useState('');
   const [checklist, setChecklist] = useState<string[]>([]);
   const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
@@ -58,7 +62,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setSubject('');
     setUrgent(defaultUrgent);
     setImportant(defaultImportant);
-    setStatus('new');
+    setStatus(defaultStatus);
     setRemarks('');
     setChecklist([]);
     setEtaDateTime(getDateTimeString(24)); // 24 hours from now
@@ -66,7 +70,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     setCategories([]);
     setActiveTab('essentials');
     setError(null);
-  }, [defaultUrgent, defaultImportant]);
+  }, [defaultUrgent, defaultImportant, defaultStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +154,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
         onClick={() => setIsOpen(true)}
         disabled={disabled}
         className={compact ? styles.addButtonCompact : styles.addButton}
+        title={addLabel}
+        aria-label={addLabel}
       >
         {!compact && (
           <svg xmlns="http://www.w3.org/2000/svg" className={styles.icon} viewBox="0 0 20 20" fill="currentColor">

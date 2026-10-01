@@ -1291,6 +1291,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={true}
                       defaultImportant={true}
+                      addLabel="Add item to Do First"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1333,6 +1334,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={false}
                       defaultImportant={true}
+                      addLabel="Add item to Schedule"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1375,6 +1377,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={true}
                       defaultImportant={false}
+                      addLabel="Add item to Delegate"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1417,6 +1420,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={false}
                       defaultImportant={false}
+                      addLabel="Add item to Eliminate"
                       compact={true}
                       availableCategories={allCategories}
                     />
