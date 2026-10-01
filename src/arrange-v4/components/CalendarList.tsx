@@ -105,20 +105,26 @@ export default function CalendarList({ books, loading, error, onDeleteBook }: Ca
             key={book.id}
             className={styles.calendarCard}
             onClick={() => handleBookClick(book)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if ((e.target as HTMLElement).closest('button')) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleBookClick(book);
-              }
-            }}
           >
             <div className={styles.calendarTop}>
               <div>
-                <h3 className={styles.calendarName} title={`Book ID: ${book.id}`}>
-                  {book.name}
+                {/*
+                  The card is a plain container: it holds the Delete button, so
+                  giving it a widget role would make screen readers present the
+                  whole card as one control and bury that button inside it. The
+                  title carries the open action instead.
+                */}
+                <h3 className={styles.calendarName}>
+                  <button
+                    type="button"
+                    className={styles.calendarNameButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleBookClick(book);
+                    }}
+                  >
+                    {book.name}
+                  </button>
                 </h3>
                 <span
                   className={`${styles.backendBadge} ${
