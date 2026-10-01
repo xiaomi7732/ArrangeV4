@@ -146,10 +146,11 @@ function TodoCard({ todo, onClick, onStatusChange }: {
               })()}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
               {todo.etaDateTime && (() => {
-                const eta = formatRelativeDate(todo.etaDateTime);
+                const isOpen = todo.status !== 'finished' && todo.status !== 'cancelled';
+                const eta = formatRelativeDate(todo.etaDateTime, new Date(), isOpen ? 'deadline' : 'moment');
                 return (
                   <span 
-                    className={`${styles.todoDateValue} ${eta.isOverdue ? styles.todoDateOverdue : ''}`}
+                    className={`${styles.todoDateValue} ${isOpen && eta.isOverdue ? styles.todoDateOverdue : ''}`}
                     title={`ETA: ${eta.fullDate}`}
                   >
                     {eta.text}

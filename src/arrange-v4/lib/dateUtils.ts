@@ -1,8 +1,13 @@
 /**
+ * Which kind of instant a date represents. Only a deadline can be "overdue".
+ */
+export type RelativeDateKind = 'moment' | 'deadline';
+
+/**
  * Result of formatting a date relative to today.
  */
 export interface RelativeDateInfo {
-  /** Display text, e.g. "in 3d", "2d overdue", "Jan 15" */
+  /** Display text, e.g. "in 3d", "2d ago", "2d overdue", "Jan 15" */
   text: string;
   /** True when the date is in the past */
   isOverdue: boolean;
@@ -55,17 +60,23 @@ export function formatShortDate(dateStr: string): string {
  * Formats a date as a relative string when it's within ±14 days of now,
  * otherwise falls back to a short absolute date (e.g. "Jan 15").
  *
+ * `kind` decides the wording for past dates. Only a deadline can be "overdue";
+ * a planned start or an actual timestamp that has passed is simply in the past,
+ * so it reads "2d ago".
+ *
  * Examples:
  *   - "today"
  *   - "tomorrow"
  *   - "in 3d"
  *   - "yesterday"
- *   - "2d overdue"
+ *   - "2d ago"        (kind: 'moment', the default)
+ *   - "2d overdue"    (kind: 'deadline')
  *   - "Jan 15" (for dates further away)
  */
 export function formatRelativeDate(
   dateStr: string,
   now: Date = new Date(),
+  kind: RelativeDateKind = 'moment',
 ): RelativeDateInfo {
   const target = new Date(dateStr);
 
@@ -83,7 +94,14 @@ export function formatRelativeDate(
   if (diffDays === 1) return { text: 'tomorrow', isOverdue: false, fullDate };
   if (diffDays === -1) return { text: 'yesterday', isOverdue: true, fullDate };
   if (diffDays > 1 && diffDays <= 14) return { text: `in ${diffDays}d`, isOverdue: false, fullDate };
-  if (diffDays < -1 && diffDays >= -14) return { text: `${Math.abs(diffDays)}d overdue`, isOverdue: true, fullDate };
+  if (diffDays < -1 && diffDays >= -14) {
+    const days = Math.abs(diffDays);
+    return {
+      text: kind === 'deadline' ? `${days}d overdue` : `${days}d ago`,
+      isOverdue: true,
+      fullDate,
+    };
+  }
 
   const text = target.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   return { text, isOverdue, fullDate };

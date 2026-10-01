@@ -65,4 +65,28 @@ describe('local calendar date handling', () => {
     // Tooltips and detail views must not disagree about the same instant.
     assert.equal(formatRelativeDate('2026-09-30T18:23:00Z').fullDate, absolute);
   });
+
+  it('only calls a past date overdue when it is a deadline', () => {
+    const now = new Date('2026-09-30T12:00:00-07:00');
+    const threeDaysAgo = '2026-09-27T09:00:00-07:00';
+
+    assert.equal(formatRelativeDate(threeDaysAgo, now).text, '3d ago');
+    assert.equal(formatRelativeDate(threeDaysAgo, now, 'moment').text, '3d ago');
+    assert.equal(formatRelativeDate(threeDaysAgo, now, 'deadline').text, '3d overdue');
+    // The flag is about the instant, not the wording, so it is kind-agnostic.
+    assert.equal(formatRelativeDate(threeDaysAgo, now).isOverdue, true);
+  });
+
+  it('uses the same wording for both kinds outside the Nd-past range', () => {
+    const now = new Date('2026-09-30T12:00:00-07:00');
+
+    for (const kind of ['moment', 'deadline'] as const) {
+      assert.equal(formatRelativeDate('2026-09-30T09:00:00-07:00', now, kind).text, 'today');
+      assert.equal(formatRelativeDate('2026-10-01T09:00:00-07:00', now, kind).text, 'tomorrow');
+      assert.equal(formatRelativeDate('2026-09-29T09:00:00-07:00', now, kind).text, 'yesterday');
+      assert.equal(formatRelativeDate('2026-10-03T09:00:00-07:00', now, kind).text, 'in 3d');
+      // Beyond 14 days it falls back to an absolute date.
+      assert.equal(formatRelativeDate('2026-09-01T09:00:00-07:00', now, kind).text, 'Sep 1');
+    }
+  });
 });
