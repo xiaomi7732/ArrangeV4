@@ -43,6 +43,7 @@ import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivati
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
+import EmptyListMessage from '@/components/EmptyListMessage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -990,7 +991,11 @@ function ScrumPageContent() {
                         </SortableTodo>
                       ))}
                       {items.length === 0 && (
-                        <p className={styles.laneEmpty}>No items</p>
+                        <EmptyListMessage
+                          filtered={taskQuery.queryActive}
+                          onClearFilters={taskQuery.clearAll}
+                          className={styles.laneEmpty}
+                        />
                       )}
                     </SortableTodoList>
                   </div>
