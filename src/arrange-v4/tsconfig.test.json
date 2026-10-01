@@ -34,6 +34,8 @@
     "lib/hooks/useModalDialog.test.ts",
     "lib/hooks/bookRedirect.ts",
     "lib/hooks/bookRedirect.test.ts",
+    "lib/books/bookName.ts",
+    "lib/books/bookName.test.ts",
     "lib/selectionUtils.ts",
     "lib/selectionUtils.test.ts",
     "lib/optimisticUpdate.ts",
