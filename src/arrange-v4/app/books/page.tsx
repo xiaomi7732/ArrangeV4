@@ -151,7 +151,7 @@ export default function BooksPage() {
         </button>
       </>
     ),
-    [isAuthenticated, authRecoveryRequired, busy, loading],
+    [isAuthenticated, authRecoveryRequired, busy, loading, books, auth.provider],
   );
 
   if (authRecoveryRequired) {

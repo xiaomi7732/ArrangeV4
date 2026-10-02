@@ -26,6 +26,31 @@ export function shouldDismissOnPointer({
 }
 
 /**
+ * Picks which of the currently open panels should handle an Escape press.
+ *
+ * Every open panel listens on the document, so without this they would all
+ * close on one key press and each would try to move focus to its own trigger.
+ * The panel containing the focused element owns the key; failing that the most
+ * recently opened one does, which is the one the user just interacted with.
+ *
+ * `owners[i]` says whether open panel `i` contains the event target.
+ */
+export function selectDismissIndex(owners: readonly boolean[]): number {
+  const owner = owners.indexOf(true);
+  if (owner !== -1) return owner;
+  return owners.length - 1;
+}
+
+interface OpenPanel {
+  contains: (target: Node | null) => boolean;
+  close: () => void;
+  focusTrigger: () => void;
+}
+
+/** Open panels in the order they were opened; the last is the newest. */
+const openPanels: OpenPanel[] = [];
+
+/**
  * Gives a disclosure panel the dismissal behaviour the rest of the app has:
  * Escape closes it and returns focus to its trigger, and (unless opted out) a
  * press anywhere outside closes it. Unmounting on navigation closes it too,
@@ -53,11 +78,26 @@ export function useDismissiblePanel<P extends HTMLElement, T extends HTMLElement
     // our trigger would pull the user out of it.
     const modalIsOpen = () => document.querySelector('[role="dialog"]') !== null;
 
+    const entry: OpenPanel = {
+      contains: target =>
+        target !== null
+        && (panelRef.current?.contains(target) === true
+          || triggerRef.current?.contains(target) === true),
+      close: onClose,
+      focusTrigger: () => triggerRef.current?.focus(),
+    };
+    openPanels.push(entry);
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (!shouldDismissOnKey(event.key)) return;
       if (modalIsOpen()) return;
-      onClose();
-      triggerRef.current?.focus();
+      const target = event.target as Node | null;
+      // Every open panel sees this event; only one of them may act on it.
+      if (openPanels[selectDismissIndex(openPanels.map(p => p.contains(target)))] !== entry) {
+        return;
+      }
+      entry.close();
+      entry.focusTrigger();
     };
 
     const onPointerDown = (event: PointerEvent) => {
@@ -74,6 +114,8 @@ export function useDismissiblePanel<P extends HTMLElement, T extends HTMLElement
       document.addEventListener('pointerdown', onPointerDown);
     }
     return () => {
+      const index = openPanels.indexOf(entry);
+      if (index !== -1) openPanels.splice(index, 1);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('pointerdown', onPointerDown);
     };
