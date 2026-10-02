@@ -36,6 +36,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { countCheckedEntries } from '@/lib/checklist';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -231,7 +232,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       )}
       
       {todo.checklist && todo.checklist.length > 0 && (() => {
-        const done = todo.checklist.filter(i => i.startsWith('-[x]')).length;
+        const done = countCheckedEntries(todo.checklist);
         const total = todo.checklist.length;
         return (
           <p className={styles.todoChecklistSummary}>

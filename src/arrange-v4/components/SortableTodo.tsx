@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   closestCenter,
   pointerWithin,
@@ -47,12 +47,14 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
 
   // The whole card is the drag surface, so the click that ends a drag has to be
   // swallowed or dropping a card would also open it.
-  const suppressor = useRef<ClickSuppressor | null>(null);
-  if (suppressor.current === null) suppressor.current = createClickSuppressor();
-  if (isDragging) suppressor.current.noteDragging();
+  const suppressor = useRef<ClickSuppressor>(createClickSuppressor());
+
+  useEffect(() => {
+    if (isDragging) suppressor.current.noteDragging();
+  }, [isDragging]);
 
   const handleClickCapture = (event: React.MouseEvent) => {
-    if (!suppressor.current?.shouldSuppressClick()) return;
+    if (!suppressor.current.shouldSuppressClick()) return;
     event.preventDefault();
     event.stopPropagation();
   };

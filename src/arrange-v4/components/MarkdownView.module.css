@@ -63,7 +63,8 @@
   color: #4b5563;
 }
 
-.prose code {
+.prose code,
+.inline code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85em;
   padding: 1px 4px;
@@ -85,12 +86,14 @@
   white-space: pre;
 }
 
-.prose a {
+.prose a,
+.inline a {
   color: #2563eb;
   text-decoration: underline;
 }
 
-.prose a:hover {
+.prose a:hover,
+.inline a:hover {
   color: #1d4ed8;
 }
 
@@ -122,6 +125,20 @@
 
 .prose input[type='checkbox'] {
   margin-right: 6px;
+}
+
+/*
+ * One-line variant, used for checklist items. Only inline constructs make
+ * sense on a single line, so it borrows the prose rules for those and adds no
+ * block spacing of its own.
+ */
+.inline {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.inline > * {
+  margin: 0;
 }
 
 .imagePlaceholder {

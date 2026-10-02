@@ -10,6 +10,7 @@ import type { TodoItem, TodoStatus } from '../store/types';
 import { ALL_STATUSES } from '../store/types';
 import { isDateToday } from '../dateUtils';
 import { markdownToSearchText } from '../markdown';
+import { checklistEntryText } from '../checklist';
 
 export type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
 
@@ -104,9 +105,12 @@ export function searchTerms(text: string): string[] {
     .filter(term => term.length > 0);
 }
 
-/** Strips `-[x] ` / `-[] ` checklist markers so they never match search terms. */
+/**
+ * Strips the stored `-[x] ` / `-[] ` marker and the Markdown around the item
+ * text, so neither can match search terms.
+ */
 export function checklistText(entry: string): string {
-  return entry.replace(/^-\[[xX]?\]\s*/, '');
+  return markdownToSearchText(checklistEntryText(entry));
 }
 
 /** Lowercased searchable text for a task: title, tags, remarks, and checklist. */

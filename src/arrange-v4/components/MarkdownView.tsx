@@ -8,6 +8,11 @@ import styles from './MarkdownView.module.css';
 interface MarkdownViewProps {
   content: string;
   className?: string;
+  /**
+   * Render as a single line: no block wrapper around the text. Used for
+   * checklist items, which are one-liners.
+   */
+  inline?: boolean;
 }
 
 /**
@@ -24,13 +29,17 @@ interface MarkdownViewProps {
  * - Link and image URLs go through an allow-list, so `javascript:` and `data:`
  *   targets are dropped rather than rendered.
  */
-export default function MarkdownView({ content, className }: MarkdownViewProps) {
+export default function MarkdownView({ content, className, inline = false }: MarkdownViewProps) {
+  const Wrapper = inline ? 'span' : 'div';
   return (
-    <div className={`${styles.prose} ${className ?? ''}`}>
+    <Wrapper className={`${inline ? styles.inline : styles.prose} ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={url => safeMarkdownUrl(url) ?? ''}
         components={{
+          // A one-liner carries no paragraph of its own: the block wrapper
+          // would break the line out of its label and add vertical space.
+          ...(inline ? { p: ({ children }) => <>{children}</> } : {}),
           // Only known-safe props are forwarded; react-markdown also passes its
           // internal `node`, which must not reach the DOM.
           a: ({ href, title, children }) => {
@@ -49,6 +58,6 @@ export default function MarkdownView({ content, className }: MarkdownViewProps) 
       >
         {content}
       </ReactMarkdown>
-    </div>
+    </Wrapper>
   );
 }
