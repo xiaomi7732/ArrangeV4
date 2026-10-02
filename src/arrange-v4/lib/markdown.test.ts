@@ -34,15 +34,20 @@ describe('safeMarkdownUrl', () => {
 });
 
 describe('markdownToSearchText', () => {
-  it('keeps link labels and drops their targets', () => {
+  it('keeps link labels and their targets', () => {
+    // Before remarks were Markdown they were indexed verbatim, so searching
+    // for a hostname found the task; that recall is preserved.
     assert.equal(
       markdownToSearchText('see [the design doc](https://example.com/spec) first'),
-      'see the design doc first',
+      'see the design doc https://example.com/spec first',
     );
   });
 
-  it('keeps image alt text and drops the image URL', () => {
-    assert.equal(markdownToSearchText('![burndown chart](https://x/y.png)'), 'burndown chart');
+  it('keeps image alt text and the image URL', () => {
+    assert.equal(
+      markdownToSearchText('![burndown chart](https://x/y.png)'),
+      'burndown chart https://x/y.png',
+    );
   });
 
   it('keeps autolink targets, which are the only text shown', () => {

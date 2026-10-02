@@ -43,3 +43,23 @@ export function restoreSnapshot<T extends Identified>(
   });
   return changed ? next : (items as T[]);
 }
+
+/**
+ * Drops updates aimed at items whose stored data could not be read.
+ *
+ * The stores refuse to write such an item, because merging into a payload they
+ * could not parse would destroy whatever is still in it. A batch reorder would
+ * otherwise fail as a whole and take the rest of the lane with it, so one
+ * damaged event makes every drag in its quadrant fail until it is repaired by
+ * hand. Skipping just that item leaves its stored order where it was.
+ */
+export function dropUnwritableUpdates<U>(
+  updates: ReadonlyMap<string, U>,
+  items: readonly { id: string; dataUnreadable?: boolean }[],
+): Map<string, U> {
+  const unwritable = new Set(
+    items.filter(item => item.dataUnreadable).map(item => item.id),
+  );
+  if (unwritable.size === 0) return new Map(updates);
+  return new Map([...updates].filter(([id]) => !unwritable.has(id)));
+}

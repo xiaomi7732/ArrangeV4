@@ -32,7 +32,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { dropUnwritableUpdates, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -603,6 +603,9 @@ function ScrumPageContent() {
     }
 
     const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
+    // An item whose saved data could not be read is refused by the stores, and
+    // one of them in the lane would otherwise fail the whole batch.
+    const writableUpdates = dropUnwritableUpdates(updates, todoItems);
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
@@ -612,7 +615,7 @@ function ScrumPageContent() {
     beginMutation();
 
     try {
-      await persistUpdates(updates);
+      await persistUpdates(writableUpdates);
     } catch (err: unknown) {
       console.error('Error updating Scrum order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
@@ -1015,7 +1018,7 @@ function ScrumPageContent() {
                       className={styles.laneContent}
                     >
                       {items.map(todo => (
-                        <SortableTodo key={todo.id} id={todo.id} containerId={laneId(status)} disabled={isSavingOrder}>
+                        <SortableTodo key={todo.id} id={todo.id} containerId={laneId(status)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                           <ScrumCard
                             todo={todo}
                             onClick={isSavingOrder ? undefined : setSelectedTodo}

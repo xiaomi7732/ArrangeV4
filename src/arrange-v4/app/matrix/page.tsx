@@ -34,7 +34,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { dropUnwritableUpdates, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -752,6 +752,9 @@ function MatrixPageContent() {
     }
 
     const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
+    // An item whose saved data could not be read is refused by the stores, and
+    // one of them in the quadrant would otherwise fail the whole batch.
+    const writableUpdates = dropUnwritableUpdates(updates, todoItems);
     setTodoItems(items => replaceItems(items, replacements));
     setError(null);
     mutationVersionRef.current += 1;
@@ -761,7 +764,7 @@ function MatrixPageContent() {
     beginMutation();
 
     try {
-      await persistUpdates(updates);
+      await persistUpdates(writableUpdates);
     } catch (err: unknown) {
       console.error('Error updating Matrix order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
@@ -1302,7 +1305,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.doFirst.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1345,7 +1348,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.schedule.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1388,7 +1391,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.delegate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1431,7 +1434,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.eliminate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}

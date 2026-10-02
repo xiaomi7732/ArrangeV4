@@ -66,10 +66,13 @@ export function markdownToSearchText(source: string): string {
     // Any fence left over is unmatched; drop it and its language tag.
     .replace(/^[ \t]{0,3}(?:`{3,}|~{3,})[^\n]*\n?/gm, ' ')
     .replace(/(`+)([\s\S]*?)\1(?!`)/g, (_match, _fence: string, code: string) => liftCode(code))
-    // Images first, so their alt text survives but the URL does not.
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // Inline links: keep the label, drop the target.
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // Images and links keep their visible text, and their destination is kept
+    // too: before remarks were Markdown they were indexed verbatim, so a
+    // search for a hostname used to find the task and still should. The
+    // destination is separated by spaces so it cannot form a match that spans
+    // the boundary with the surrounding text.
+    .replace(/!\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, '$1 $2 ')
+    .replace(/\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, '$1 $2 ')
     // Autolinks.
     .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
     // Leading block markers: headings, quotes, list bullets.

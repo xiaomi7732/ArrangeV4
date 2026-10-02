@@ -77,8 +77,9 @@ describe('taskSearchText', () => {
     assert.ok(haystack.includes('rollout'));
     assert.ok(haystack.includes('runbook'));
     assert.ok(haystack.includes('ready'));
-    // The URL and the syntax must not become search terms of their own.
-    assert.equal(haystack.includes('https://example.com/run'), false);
+    // The link target stays searchable, as it was before remarks were
+    // Markdown, but the syntax must not become a search term of its own.
+    assert.ok(haystack.includes('https://example.com/run'));
     assert.equal(haystack.includes('**'), false);
     assert.equal(haystack.includes('##'), false);
   });

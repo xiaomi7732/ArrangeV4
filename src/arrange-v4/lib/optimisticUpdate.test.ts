@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { restoreSnapshot, snapshotItems } from './optimisticUpdate';
+import { dropUnwritableUpdates, restoreSnapshot, snapshotItems } from './optimisticUpdate';
 
 interface Row {
   id: string;
@@ -79,5 +79,27 @@ describe('restoreSnapshot', () => {
 
     const result = restoreSnapshot(optimistic, snapshot);
     assert.deepEqual(result.map(row => row.value), ['A', 'X', 'C']);
+  });
+});
+
+describe('dropUnwritableUpdates', () => {
+  const items = [
+    { id: 'a' },
+    { id: 'b', dataUnreadable: true },
+    { id: 'c' },
+  ];
+
+  it('skips an item whose saved data could not be read', () => {
+    // The stores refuse such a write, and one of them in the lane would
+    // otherwise fail the whole reorder batch.
+    const updates = new Map([['a', 1], ['b', 2], ['c', 3]]);
+    assert.deepEqual([...dropUnwritableUpdates(updates, items).keys()], ['a', 'c']);
+  });
+
+  it('copies the map when every item is writable', () => {
+    const updates = new Map([['a', 1]]);
+    const result = dropUnwritableUpdates(updates, [{ id: 'a' }]);
+    assert.deepEqual([...result], [['a', 1]]);
+    assert.notEqual(result, updates);
   });
 });
