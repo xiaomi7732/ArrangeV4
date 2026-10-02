@@ -89,20 +89,23 @@ function repairNbsp(text: string): string {
 }
 
 /**
- * Repairs the one kind of nbsp damage that is distinguishable from content.
+ * Repairs the one kind of nbsp damage that is both distinguishable and harmful.
  *
- * Outlook only rewrites *runs* of whitespace, so the damage it leaves is always
- * an U+00A0 sitting next to another U+00A0 or a plain space (`"a  b"` becomes
- * `"a \u00A0b"`). A nonbreaking space the user typed — `10\u00A0000 €` — is
- * isolated between ordinary characters. Repairing only the run signature heals
- * indentation inside a Markdown code block, which parses fine and so would
- * never reach the fallback chain, without touching anything a user could have
- * typed deliberately. Payloads written by this version escape nbsp and space
- * runs alike, so this pass is a no-op on them and only legacy events are seen.
+ * Outlook only rewrites *runs* of whitespace, and only a run at the start of a
+ * line actually changes what the reader sees: U+00A0 renders exactly like a
+ * space mid-sentence, but it is not indentation, so a Markdown code block or a
+ * nested list stops rendering as one. Interior runs are therefore left alone —
+ * a user may genuinely have typed them and healing would gain nothing — while
+ * leading runs are restored. A leading run the user typed as nonbreaking spaces
+ * renders the same either way, so nothing visible is lost in that case either.
+ *
+ * Line starts inside the payload are both real newlines (outside strings) and
+ * the two-character `\n` escape (inside them). Payloads written by this version
+ * escape nbsp and space runs alike, so this pass only ever sees legacy events.
  */
 function repairNbspRuns(text: string): string {
-  return text.replace(/[ \u00A0]{2,}/g, run =>
-    (run.includes('\u00A0') ? ' '.repeat(run.length) : run));
+  return text.replace(/(^|\n|\\n)([ \u00A0]{2,})/g, (match, prefix: string, run: string) =>
+    (run.includes('\u00A0') ? prefix + ' '.repeat(run.length) : match));
 }
 
 function stripZeroWidth(text: string): string {

@@ -151,11 +151,11 @@ describe('arrange event body codec', () => {
     assert.equal(result.data.remarks!.content, content);
   });
 
-  it('heals nbsp runs inside a legacy remark that still parses', () => {
+  it('heals nbsp indentation inside a legacy remark that still parses', () => {
     // Inside <pre> the structural whitespace often survives, so the payload
     // parses and never reaches the fallback chain — but the code-block
     // indentation inside the remark is now nonbreaking spaces and no longer
-    // renders as code. Runs are Outlook's signature, so they are safe to heal.
+    // renders as code.
     const content = 'intro\n\n\u00A0\u00A0\u00A0\u00A0const x = 1;\n';
     const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
     const text = `${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}`;
@@ -163,6 +163,15 @@ describe('arrange event body codec', () => {
     assert.equal(result.status, 'ok');
     if (result.status !== 'ok') return;
     assert.equal(result.data.remarks!.content, 'intro\n\n    const x = 1;\n');
+  });
+
+  it('keeps an interior nonbreaking space run the user may have typed', () => {
+    // Mid-sentence, U+00A0 renders exactly like a space, so there is nothing
+    // to gain by rewriting content that might well be deliberate.
+    const content = 'Copied\u00A0\u00A0text from elsewhere';
+    const payload: Payload = { status: 'new', remarks: { type: 'text', content } };
+    const text = `${ARRANGE_DATA_START_MARKER}\n${JSON.stringify(payload)}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: payload });
   });
 
   it('keeps a nonbreaking space that the content legitimately contains', () => {

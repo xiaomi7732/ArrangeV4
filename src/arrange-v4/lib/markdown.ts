@@ -55,12 +55,16 @@ export function markdownToSearchText(source: string): string {
     // Any stray sentinel in the source would collide with the placeholders.
     .split(CODE_SPAN_SENTINEL)
     .join('')
-    // Fenced code: keep the code, drop the fences and any language tag. The
-    // contents are literal too, so they are lifted out with the code spans.
-    .replace(/(```|~~~)[^\n]*\n([\s\S]*?)(?:\1|$)/g, (_match, _fence: string, code: string) =>
-      ` ${liftCode(code)} `)
-    .replace(/```[^\n]*\n?/g, ' ')
-    .replace(/~~~[^\n]*\n?/g, ' ')
+    // Fenced code: keep the contents literal — they are lifted out with the
+    // code spans. The closing fence must be at least as long as the opening
+    // one and on its own line, so a fence inside a code line cannot end the
+    // block early and a four-backtick fence can quote a three-backtick one.
+    .replace(
+      /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:\n[ \t]{0,3}\1`*~*[ \t]*(?=\n|$)|$)/gm,
+      (_match, _fence: string, code: string) => ` ${liftCode(code)} `,
+    )
+    // Any fence left over is unmatched; drop it and its language tag.
+    .replace(/^[ \t]{0,3}(?:`{3,}|~{3,})[^\n]*\n?/gm, ' ')
     .replace(/(`+)([\s\S]*?)\1(?!`)/g, (_match, _fence: string, code: string) => liftCode(code))
     // Images first, so their alt text survives but the URL does not.
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')

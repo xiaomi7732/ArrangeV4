@@ -92,6 +92,14 @@ describe('markdownToSearchText', () => {
     assert.equal(markdownToSearchText('**bold** then `*literal*`'), 'bold then *literal*');
   });
 
+  it('indexes fenced code literally and respects the fence length', () => {
+    const quoted = '````\nuse ```js in a remark\n````';
+    assert.equal(markdownToSearchText(quoted), 'use ```js in a remark');
+    const inner = '```\nconsole.log("```")\n```';
+    assert.equal(markdownToSearchText(inner), 'console.log("```")');
+    assert.equal(markdownToSearchText('```py\n__init__ = 1\n```'), '__init__ = 1');
+  });
+
   it('keeps the contents of a fenced code block', () => {
     const text = markdownToSearchText('```ts\nconst answer = 42;\n```');
     assert.ok(text.includes('const answer = 42;'), text);
