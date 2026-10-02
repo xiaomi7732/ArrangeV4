@@ -83,6 +83,15 @@ describe('markdownToSearchText', () => {
     assert.equal(markdownToSearchText('a**b**c'), 'abc');
   });
 
+  it('indexes a code span literally', () => {
+    // Markdown inside a code span is text, not syntax: react-markdown renders
+    // `__init__` and `~/src` as typed, so searching for them must match.
+    assert.equal(markdownToSearchText('see `__init__` first'), 'see __init__ first');
+    assert.equal(markdownToSearchText('cd `~/src`'), 'cd ~/src');
+    assert.equal(markdownToSearchText('`a_b` and `c_d`'), 'a_b and c_d');
+    assert.equal(markdownToSearchText('**bold** then `*literal*`'), 'bold then *literal*');
+  });
+
   it('keeps the contents of a fenced code block', () => {
     const text = markdownToSearchText('```ts\nconst answer = 42;\n```');
     assert.ok(text.includes('const answer = 42;'), text);

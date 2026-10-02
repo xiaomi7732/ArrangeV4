@@ -106,18 +106,63 @@ describe('arrange event body codec', () => {
     assert.deepEqual(roundTrip(payload), { status: 'ok', data: payload });
   });
 
-  it('repairs nbsp damage in a legacy payload that will not parse', () => {
+  it('repairs structural nbsp damage without touching string contents', () => {
     const content = 'intro\n\n    const x = 1;\n';
     const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
     // Legacy bodies were pretty-printed, so Outlook rewrote structural
-    // indentation too and the payload stopped parsing outright.
-    const damaged = `{\u00A0${json.slice(1)}`.replace(/ {2,}/g, m => '\u00A0'.repeat(m.length));
+    // indentation and the payload stopped parsing outright. Only the damage
+    // outside the string literals can be the cause, so only that is repaired —
+    // guessing at string contents would rewrite the user's own text.
+    const damaged = `{\u00A0\u00A0${json.slice(1)}`;
     const text = `${ARRANGE_DATA_START_MARKER}\n${damaged}\n${ARRANGE_DATA_END_MARKER}`;
     const result = parseArrangeBody<Payload>(text);
     assert.equal(result.status, 'ok');
     if (result.status !== 'ok') return;
-    const line = result.data.remarks!.content.split('\n')[2];
-    assert.ok(/^ {4}/.test(line), 'markdown code-block indentation must be repaired');
+    assert.equal(result.data.remarks!.content, content);
+  });
+
+  it('keeps a typed nonbreaking space even when the payload needs repair', () => {
+    const content = 'Pay 10\u00A0000 \u20AC';
+    const json = JSON.stringify({ status: 'new', remarks: { type: 'text', content } });
+    const text = `${ARRANGE_DATA_START_MARKER}\n{\u00A0${json.slice(1)}\n${ARRANGE_DATA_END_MARKER}`;
+    const result = parseArrangeBody<Payload>(text);
+    assert.equal(result.status, 'ok');
+    if (result.status !== 'ok') return;
+    assert.equal(result.data.remarks!.content, content);
+  });
+
+  it('keeps an emoji joiner even when the payload needs repair', () => {
+    const content = '\u{1F469}\u200D\u{1F4BB} pairing';
+    const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
+    const text = `${ARRANGE_DATA_START_MARKER}\n{\u200B${json.slice(1)}\n${ARRANGE_DATA_END_MARKER}`;
+    const result = parseArrangeBody<Payload>(text);
+    assert.equal(result.status, 'ok');
+    if (result.status !== 'ok') return;
+    assert.equal(result.data.remarks!.content, content);
+  });
+
+  it('does not mistake an escaped quote for the end of a string', () => {
+    const content = 'say "hi"\u00A0now';
+    const json = JSON.stringify({ status: 'new', remarks: { type: 'text', content } });
+    const text = `${ARRANGE_DATA_START_MARKER}\n{\u00A0${json.slice(1)}\n${ARRANGE_DATA_END_MARKER}`;
+    const result = parseArrangeBody<Payload>(text);
+    assert.equal(result.status, 'ok');
+    if (result.status !== 'ok') return;
+    assert.equal(result.data.remarks!.content, content);
+  });
+
+  it('heals nbsp runs inside a legacy remark that still parses', () => {
+    // Inside <pre> the structural whitespace often survives, so the payload
+    // parses and never reaches the fallback chain — but the code-block
+    // indentation inside the remark is now nonbreaking spaces and no longer
+    // renders as code. Runs are Outlook's signature, so they are safe to heal.
+    const content = 'intro\n\n\u00A0\u00A0\u00A0\u00A0const x = 1;\n';
+    const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
+    const text = `${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}`;
+    const result = parseArrangeBody<Payload>(text);
+    assert.equal(result.status, 'ok');
+    if (result.status !== 'ok') return;
+    assert.equal(result.data.remarks!.content, 'intro\n\n    const x = 1;\n');
   });
 
   it('keeps a nonbreaking space that the content legitimately contains', () => {

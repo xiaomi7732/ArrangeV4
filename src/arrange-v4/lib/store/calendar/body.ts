@@ -47,20 +47,69 @@ export function escapeHtml(str: string): string {
 }
 
 /**
- * Repairs the characters HTML normalisation introduces.
+ * Repairs the characters HTML normalisation introduces, outside string literals.
  *
  * Outlook rewrites runs of spaces as `&nbsp;`, which decodes to U+00A0. That is
  * not legal JSON whitespace, so an unnormalised payload fails to parse outright.
- * Inside a string it parses but silently corrupts leading indentation, which
- * matters for whitespace-significant content such as Markdown code blocks.
+ * Inside a string, however, both U+00A0 and the zero-width characters are
+ * perfectly legal — so damage that actually breaks parsing can only sit outside
+ * one. Rewriting string contents to make an unrelated break parse would alter
+ * the user's own text: a typed nonbreaking space in `10 000 €`, or the joiner
+ * that holds an emoji sequence together.
  */
+function repairOutsideStrings(text: string, repair: (ch: string) => string): string {
+  let out = '';
+  let inString = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === '\\') {
+        out += ch + (text[i + 1] ?? '');
+        i++;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      out += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    out += repair(ch);
+  }
+
+  return out;
+}
+
 function repairNbsp(text: string): string {
-  return text.replace(/\u00A0/g, ' ');
+  return repairOutsideStrings(text, ch => (ch === '\u00A0' ? ' ' : ch));
+}
+
+/**
+ * Repairs the one kind of nbsp damage that is distinguishable from content.
+ *
+ * Outlook only rewrites *runs* of whitespace, so the damage it leaves is always
+ * an U+00A0 sitting next to another U+00A0 or a plain space (`"a  b"` becomes
+ * `"a \u00A0b"`). A nonbreaking space the user typed — `10\u00A0000 €` — is
+ * isolated between ordinary characters. Repairing only the run signature heals
+ * indentation inside a Markdown code block, which parses fine and so would
+ * never reach the fallback chain, without touching anything a user could have
+ * typed deliberately. Payloads written by this version escape nbsp and space
+ * runs alike, so this pass is a no-op on them and only legacy events are seen.
+ */
+function repairNbspRuns(text: string): string {
+  return text.replace(/[ \u00A0]{2,}/g, run =>
+    (run.includes('\u00A0') ? ' '.repeat(run.length) : run));
 }
 
 function stripZeroWidth(text: string): string {
-  return text.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  return repairOutsideStrings(text, ch => (ZERO_WIDTH_REGEX.test(ch) ? '' : ch));
 }
+
+const ZERO_WIDTH_REGEX = /[\u200B-\u200D\uFEFF]/;
 
 /** Serialises a payload into the `<pre>`-fenced HTML body Outlook stores. */
 export function serializeArrangeBody(value: unknown): string {
@@ -106,11 +155,11 @@ export function parseArrangeBody<T>(text: string): ArrangePayloadResult<T> {
     return { status: 'corrupt', reason: 'closing marker is missing' };
   }
 
-  // Repair is a fallback, not a first step: a payload that already parses is
-  // returned byte-for-byte, so neither a nonbreaking space nor a zero-width
+  // Repair is otherwise a fallback, not a first step: a payload that already
+  // parses is returned as-is, so neither a nonbreaking space nor a zero-width
   // joiner the user actually typed is rewritten. Payloads written by this
   // version escape both, so anything repaired here came from Outlook.
-  const raw = text.slice(payloadStart, endIndex).trim();
+  const raw = repairNbspRuns(text.slice(payloadStart, endIndex).trim());
   if (!raw) return { status: 'corrupt', reason: 'payload is empty' };
 
   const parsed =

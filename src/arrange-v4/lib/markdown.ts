@@ -42,10 +42,26 @@ export function safeMarkdownUrl(url: string | null | undefined): string | null {
  * syntax. Deliberately approximate: it only has to feed the search index.
  */
 export function markdownToSearchText(source: string): string {
+  // A code span renders literally, so its contents must survive the marker
+  // stripping below: `` `__init__` `` and `` `~/src` `` are text, not syntax.
+  // They are lifted out first and put back once the stripping is done.
+  const codeSpans: string[] = [];
+  const liftCode = (code: string): string => {
+    codeSpans.push(code);
+    return `${CODE_SPAN_SENTINEL}${codeSpans.length - 1}${CODE_SPAN_SENTINEL}`;
+  };
+
   return source
-    // Fenced code: keep the code, drop the fences and any language tag.
+    // Any stray sentinel in the source would collide with the placeholders.
+    .split(CODE_SPAN_SENTINEL)
+    .join('')
+    // Fenced code: keep the code, drop the fences and any language tag. The
+    // contents are literal too, so they are lifted out with the code spans.
+    .replace(/(```|~~~)[^\n]*\n([\s\S]*?)(?:\1|$)/g, (_match, _fence: string, code: string) =>
+      ` ${liftCode(code)} `)
     .replace(/```[^\n]*\n?/g, ' ')
     .replace(/~~~[^\n]*\n?/g, ' ')
+    .replace(/(`+)([\s\S]*?)\1(?!`)/g, (_match, _fence: string, code: string) => liftCode(code))
     // Images first, so their alt text survives but the URL does not.
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
     // Inline links: keep the label, drop the target.
@@ -69,9 +85,20 @@ export function markdownToSearchText(source: string): string {
     // behaves like an ASCII identifier.
     .replace(/_+/g, (run, offset: number, full: string) =>
       (isWordChar(full[offset - 1]) && isWordChar(full[offset + run.length]) ? run : ''))
+    .replace(
+      new RegExp(`${CODE_SPAN_SENTINEL}(\\d+)${CODE_SPAN_SENTINEL}`, 'g'),
+      (_match, index: string) => codeSpans[Number(index)] ?? '',
+    )
     .replace(/[ \t]+/g, ' ')
     .trim();
 }
+
+/**
+ * Fences the placeholders that stand in for literal code while the Markdown
+ * markers are stripped. Any occurrence in the source is removed first, so a
+ * placeholder can never collide with the user's own text.
+ */
+const CODE_SPAN_SENTINEL = '\u0000';
 
 const WORD_CHAR_REGEX = /[\p{L}\p{N}_]/u;
 
