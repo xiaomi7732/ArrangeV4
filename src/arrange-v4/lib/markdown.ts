@@ -58,8 +58,11 @@ export function markdownToSearchText(source: string): string {
     .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
     // Table pipes.
     .replace(/\|/g, ' ')
-    // Emphasis, strikethrough and inline code markers.
-    .replace(/[*_~`]/g, '')
+    // Emphasis, strikethrough and inline code markers, but only where they sit
+    // at a delimiter position: stripping them everywhere turned `snake_case`
+    // into `snakecase`, which no one would ever search for.
+    .replace(/(^|[^\w])[*_~`]+/g, '$1')
+    .replace(/[*_~`]+(?=[^\w]|$)/g, '')
     .replace(/[ \t]+/g, ' ')
     .trim();
 }

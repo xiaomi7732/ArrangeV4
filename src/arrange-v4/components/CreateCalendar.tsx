@@ -26,7 +26,7 @@ export default function CreateCalendar({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validation = validateBookName(calendarName, existingNames);
+    const validation = validateBookName(calendarName, existingNames, { stripArrangeSuffix: appendArrangeSuffix });
     if (!validation.ok) {
       setError(validation.error);
       return;
@@ -71,7 +71,7 @@ export default function CreateCalendar({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen, isCreating]);
 
-  const liveValidation = validateBookName(calendarName, existingNames);
+  const liveValidation = validateBookName(calendarName, existingNames, { stripArrangeSuffix: appendArrangeSuffix });
   // Only surface the live message once the user has typed something, so the
   // empty form does not open with a red "required" error.
   const liveError = calendarName.trim() && !liveValidation.ok ? liveValidation.error : null;

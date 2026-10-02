@@ -433,6 +433,9 @@ export class CalendarStore implements TodoStore {
     const stale = items.filter(
       (item) =>
         item.id &&
+        // A write to an unreadable item is refused, so sweeping it would fail
+        // every time and keep the session sweep from ever being marked done.
+        !item.dataUnreadable &&
         isNonTerminalStatus(item.status) &&
         computeBumpedDates(item.etsDateTime, item.etaDateTime) !== null,
     );
@@ -532,6 +535,7 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
         `Arrange data for event ${event.id} could not be read (${parsed.reason}); `
         + 'showing the event without its saved fields.',
       );
+      item.dataUnreadable = true;
     }
     if (parsed.status === 'ok') {
       const stored = parsed.data;

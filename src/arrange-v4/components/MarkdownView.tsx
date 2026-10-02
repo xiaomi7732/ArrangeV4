@@ -31,11 +31,13 @@ export default function MarkdownView({ content, className }: MarkdownViewProps) 
         remarkPlugins={[remarkGfm]}
         urlTransform={url => safeMarkdownUrl(url) ?? ''}
         components={{
-          a: ({ href, children, ...props }) => {
+          // Only known-safe props are forwarded; react-markdown also passes its
+          // internal `node`, which must not reach the DOM.
+          a: ({ href, title, children }) => {
             const safeHref = safeMarkdownUrl(href);
-            if (!safeHref) return <span {...props}>{children}</span>;
+            if (!safeHref) return <span title={title}>{children}</span>;
             return (
-              <a {...props} href={safeHref} target="_blank" rel="noopener noreferrer">
+              <a href={safeHref} title={title} target="_blank" rel="noopener noreferrer">
                 {children}
               </a>
             );

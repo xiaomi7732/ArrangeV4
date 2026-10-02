@@ -30,6 +30,13 @@ export type ArrangePayloadResult<T> =
   /** Markers present but the payload could not be read. Never treat as empty. */
   | { status: 'corrupt'; reason: string };
 
+/**
+ * Characters HTML normalisation adds or rewrites, which a reader must strip
+ * before parsing. Escaping them on write means any literal occurrence found on
+ * read came from Outlook, never from the user's own content.
+ */
+const NORMALIZATION_SENSITIVE_REGEX = /[\u00A0\u200B-\u200D\uFEFF]/g;
+
 export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -46,6 +53,10 @@ export function escapeHtml(str: string): string {
  * not legal JSON whitespace, so an unnormalised payload fails to parse outright.
  * Inside a string it parses but silently corrupts leading indentation, which
  * matters for whitespace-significant content such as Markdown code blocks.
+ *
+ * Safe to apply to the whole payload because `serializeArrangeBody` escapes
+ * these characters, so user content never carries them literally — a zero-width
+ * joiner in an emoji sequence survives the round trip.
  */
 export function normalizePayloadText(text: string): string {
   return text
@@ -58,7 +69,11 @@ export function serializeArrangeBody(value: unknown): string {
   // Not pretty-printed: indentation runs are exactly what HTML normalisation
   // rewrites as `&nbsp;`, and nothing reads this by eye.
   const json = JSON.stringify(value);
-  const fenced = json.split(MARKER_PREFIX).join(ESCAPED_MARKER_PREFIX);
+  const fenced = json
+    .split(MARKER_PREFIX)
+    .join(ESCAPED_MARKER_PREFIX)
+    .replace(NORMALIZATION_SENSITIVE_REGEX, ch =>
+      `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
   return `<pre>${ARRANGE_DATA_START_MARKER}\n${escapeHtml(fenced)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
 }
 
@@ -68,7 +83,13 @@ export function serializeArrangeBody(value: unknown): string {
  */
 export function parseArrangeBody<T>(text: string): ArrangePayloadResult<T> {
   const startIndex = text.indexOf(ARRANGE_DATA_START_MARKER);
-  if (startIndex === -1) return { status: 'absent' };
+  if (startIndex === -1) {
+    // A closing marker on its own means a payload was written and its opening
+    // marker was damaged. Reporting "absent" would let a write replace it.
+    return text.includes(ARRANGE_DATA_END_MARKER)
+      ? { status: 'corrupt', reason: 'opening marker is missing' }
+      : { status: 'absent' };
+  }
 
   const payloadStart = startIndex + ARRANGE_DATA_START_MARKER.length;
 

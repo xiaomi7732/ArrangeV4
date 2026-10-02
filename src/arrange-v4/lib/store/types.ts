@@ -49,6 +49,13 @@ export interface TodoItem {
     type: 'text' | 'markdown';
     content: string;
   } | null;
+  /**
+   * The backend holds saved fields for this item that it could not read, so
+   * the item is shown with defaults. Writes to it are refused rather than
+   * overwriting the unreadable data, so callers must not queue background
+   * writes against it.
+   */
+  dataUnreadable?: boolean;
 }
 
 export type TodoItemWithId = TodoItem & {

@@ -66,14 +66,13 @@ export default function RemarksEditor({
       if (next === 'preview') rememberCaret();
       setMode(next);
       if (next !== 'write') return;
-      // Restore after the panel is visible again; a hidden textarea cannot
-      // take focus or be scrolled.
+      // Restore after the panel is visible again; a hidden textarea cannot be
+      // scrolled. Focus deliberately stays on the tab, which is where the tabs
+      // pattern puts it — stealing it would break arrow-key navigation.
       requestAnimationFrame(() => {
         const textarea = textareaRef.current;
         const caret = caretRef.current;
-        if (!textarea) return;
-        textarea.focus();
-        if (!caret) return;
+        if (!textarea || !caret) return;
         textarea.setSelectionRange(caret.start, caret.end);
         textarea.scrollTop = caret.scrollTop;
       });

@@ -61,7 +61,9 @@ export default function DialogTabs<T extends string>({
             role="tab"
             id={tabElementId(idPrefix, tab.id)}
             aria-selected={selected}
-            aria-controls={tabPanelElementId(idPrefix, tab.id)}
+            // Only the selected panel is rendered in the dialogs, so pointing
+            // an inactive tab at its panel id would dangle.
+            aria-controls={selected ? tabPanelElementId(idPrefix, tab.id) : undefined}
             tabIndex={selected ? 0 : -1}
             ref={node => {
               if (node) tabRefs.current.set(tab.id, node);

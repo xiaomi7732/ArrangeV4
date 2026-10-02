@@ -107,7 +107,9 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const nextRemarks = remarks.trim()
         ? {
             type: (remarksMarkdown ? 'markdown' : 'text') as 'markdown' | 'text',
-            content: remarks.trim(),
+            // Markdown is whitespace-significant — four leading spaces on the
+            // first line are a code block — so the text is stored verbatim.
+            content: remarksMarkdown ? remarks : remarks.trim(),
           }
         : null;
       const nextChecklist = checklist.length > 0 ? checklist : [];
@@ -125,8 +127,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
         updatedFields.etaDateTime = nextEta;
       }
+      // Compared untrimmed: saving an unrelated field must not quietly rewrite
+      // a remark the user never touched.
       const remarksChanged =
-        remarks.trim() !== (todo.remarks?.content || '') ||
+        remarks !== (todo.remarks?.content || '') ||
         (nextRemarks !== null && nextRemarks.type !== (todo.remarks?.type || 'text'));
       if (remarksChanged) updatedFields.remarks = nextRemarks;
       if (!sameValue(nextChecklist, todo.checklist || [])) {

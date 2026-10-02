@@ -62,6 +62,14 @@ describe('markdownToSearchText', () => {
     assert.equal(markdownToSearchText('**bold** _italic_ ~~gone~~ `code`'), 'bold italic gone code');
   });
 
+  it('keeps markers that are part of a word, so identifiers stay searchable', () => {
+    // Stripping them everywhere indexed `snake_case` as `snakecase`, which a
+    // user searching for the term they typed would never match.
+    assert.equal(markdownToSearchText('rename snake_case to camelCase'), 'rename snake_case to camelCase');
+    assert.equal(markdownToSearchText('use `snake_case` here'), 'use snake_case here');
+    assert.equal(markdownToSearchText('**fix snake_case**'), 'fix snake_case');
+  });
+
   it('keeps the contents of a fenced code block', () => {
     const text = markdownToSearchText('```ts\nconst answer = 42;\n```');
     assert.ok(text.includes('const answer = 42;'), text);

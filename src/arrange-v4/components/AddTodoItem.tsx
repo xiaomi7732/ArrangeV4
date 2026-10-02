@@ -104,7 +104,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
         etaDateTime: etaDateTime ? new Date(etaDateTime).toISOString() : undefined,
         remarks: remarks.trim() ? {
           type: 'markdown',
-          content: remarks.trim(),
+          // Verbatim: Markdown is whitespace-significant.
+          content: remarks,
         } : undefined,
         checklist: checklist.length > 0 ? checklist : undefined,
         categories: categories.length > 0 ? categories : undefined,

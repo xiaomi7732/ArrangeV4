@@ -15,6 +15,14 @@ describe('validateBookName', () => {
     });
   });
 
+  it('keeps a typed arrange suffix when the backend does not append one', () => {
+    // Sheets books carry no suffix, so "Team by arrange" is just a name.
+    assert.deepEqual(validateBookName('Team by arrange', ['Team'], { stripArrangeSuffix: false }), {
+      ok: true,
+      name: 'Team by arrange',
+    });
+  });
+
   it('trims surrounding whitespace from an accepted name', () => {
     assert.deepEqual(validateBookName('  Launch Plan  ', []), { ok: true, name: 'Launch Plan' });
   });

@@ -106,6 +106,23 @@ describe('arrange event body codec', () => {
     assert.equal(normalizePayloadText('a\u200Bb\uFEFFc'), 'abc');
   });
 
+  it('preserves zero-width joiners that belong to the content', () => {
+    // Stripping U+200D unconditionally split emoji sequences, so a saved
+    // "woman technologist" came back as two unrelated glyphs.
+    const payload: Payload = {
+      status: 'new',
+      remarks: { type: 'markdown', content: 'ship it \u{1F469}\u200D\u{1F4BB}\u200B' },
+    };
+    assert.deepEqual(roundTrip(payload), { status: 'ok', data: payload });
+  });
+
+  it('treats a lone closing marker as corrupt, not absent', () => {
+    // The payload was written and its opening marker was damaged; reporting
+    // "absent" would let the next write replace what is still in there.
+    const result = parseArrangeBody<Payload>(`==ArrangeDataStart==\n{}\n${ARRANGE_DATA_END_MARKER}`);
+    assert.equal(result.status, 'corrupt');
+  });
+
   it('still reads legacy pretty-printed payloads', () => {
     const text = `<pre>${ARRANGE_DATA_START_MARKER}\n${JSON.stringify(base, null, 2)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
     assert.deepEqual(parseArrangeBody<Payload>(decodeBody(text)), { status: 'ok', data: base });

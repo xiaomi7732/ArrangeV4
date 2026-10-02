@@ -21,27 +21,45 @@ export interface BookNameValidationError {
 export type BookNameValidation = BookNameValidationOk | BookNameValidationError;
 
 /** Collapses internal whitespace runs so "a  b" and "a b" compare equal. */
-function canonicalize(name: string): string {
-  return name
-    .trimEnd()
-    .replace(ARRANGE_SUFFIX_REGEX, '')
-    .trim()
+function canonicalize(name: string, stripArrangeSuffix: boolean): string {
+  return normalize(name, stripArrangeSuffix)
     .replace(/\s+/g, ' ')
     .toLowerCase();
+}
+
+function normalize(name: string, stripArrangeSuffix: boolean): string {
+  // Strip before trimming: trimming first removes the leading space, after
+  // which " by arrange" no longer matches and "by arrange" survives as a name.
+  const withoutSuffix = stripArrangeSuffix
+    ? name.trimEnd().replace(ARRANGE_SUFFIX_REGEX, '')
+    : name;
+  return withoutSuffix.trim();
+}
+
+export interface BookNameOptions {
+  /**
+   * Whether the backend appends " by arrange" itself. Only then should a
+   * user-typed suffix be removed — a Sheets book may legitimately be named
+   * "Team by arrange".
+   */
+  stripArrangeSuffix?: boolean;
 }
 
 export function validateBookName(
   rawName: string,
   existingNames: readonly string[],
+  { stripArrangeSuffix = true }: BookNameOptions = {},
 ): BookNameValidation {
-  const trimmed = rawName.trimEnd().replace(ARRANGE_SUFFIX_REGEX, '').trim();
+  const trimmed = normalize(rawName, stripArrangeSuffix);
 
   if (!trimmed) {
     return { ok: false, error: 'Book name is required' };
   }
 
-  const candidate = canonicalize(rawName);
-  const clash = existingNames.find(existing => canonicalize(existing) === candidate);
+  const candidate = canonicalize(rawName, stripArrangeSuffix);
+  const clash = existingNames.find(
+    existing => canonicalize(existing, stripArrangeSuffix) === candidate,
+  );
   if (clash !== undefined) {
     return { ok: false, error: `A book named "${clash.trim()}" already exists` };
   }
