@@ -60,7 +60,7 @@ export function markdownToSearchText(source: string): string {
     // one and on its own line, so a fence inside a code line cannot end the
     // block early and a four-backtick fence can quote a three-backtick one.
     .replace(
-      /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:\n[ \t]{0,3}\1`*~*[ \t]*(?=\n|$)|$)/gm,
+      /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:\n[ \t]{0,3}\1`*~*[ \t]*(?=\n|$)|(?![\s\S]))/gm,
       (_match, _fence: string, code: string) => ` ${liftCode(code)} `,
     )
     // Any fence left over is unmatched; drop it and its language tag.

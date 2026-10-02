@@ -98,6 +98,12 @@ describe('markdownToSearchText', () => {
     const inner = '```\nconsole.log("```")\n```';
     assert.equal(markdownToSearchText(inner), 'console.log("```")');
     assert.equal(markdownToSearchText('```py\n__init__ = 1\n```'), '__init__ = 1');
+    // The closing fence, not the first line end, terminates the block.
+    assert.equal(
+      markdownToSearchText('```py\nfirst = 1\n__init__ = 2\n```'),
+      'first = 1\n__init__ = 2',
+    );
+    assert.equal(markdownToSearchText('```py\nfirst = 1\n__init__ = 2'), 'first = 1\n__init__ = 2');
   });
 
   it('keeps the contents of a fenced code block', () => {

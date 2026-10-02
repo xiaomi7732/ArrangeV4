@@ -151,18 +151,15 @@ describe('arrange event body codec', () => {
     assert.equal(result.data.remarks!.content, content);
   });
 
-  it('heals nbsp indentation inside a legacy remark that still parses', () => {
-    // Inside <pre> the structural whitespace often survives, so the payload
-    // parses and never reaches the fallback chain — but the code-block
-    // indentation inside the remark is now nonbreaking spaces and no longer
-    // renders as code.
-    const content = 'intro\n\n\u00A0\u00A0\u00A0\u00A0const x = 1;\n';
-    const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
-    const text = `${ARRANGE_DATA_START_MARKER}\n${json}\n${ARRANGE_DATA_END_MARKER}`;
-    const result = parseArrangeBody<Payload>(text);
-    assert.equal(result.status, 'ok');
-    if (result.status !== 'ok') return;
-    assert.equal(result.data.remarks!.content, 'intro\n\n    const x = 1;\n');
+  it('keeps nbsp indentation in a legacy remark that still parses', () => {
+    // A nonbreaking space is legal inside a JSON string and indistinguishable
+    // from one the user typed, and guessing wrong changes what the remark
+    // means: four leading nbsp are an indented paragraph, four spaces are a
+    // code block. Legacy damage stays visible and fixable by hand instead.
+    const content = 'intro\n\n\u00A0\u00A0\u00A0\u00A0not code\n';
+    const payload: Payload = { status: 'new', remarks: { type: 'markdown', content } };
+    const text = `${ARRANGE_DATA_START_MARKER}\n${JSON.stringify(payload)}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: payload });
   });
 
   it('keeps an interior nonbreaking space run the user may have typed', () => {

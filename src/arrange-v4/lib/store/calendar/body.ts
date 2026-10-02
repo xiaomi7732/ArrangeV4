@@ -88,26 +88,6 @@ function repairNbsp(text: string): string {
   return repairOutsideStrings(text, ch => (ch === '\u00A0' ? ' ' : ch));
 }
 
-/**
- * Repairs the one kind of nbsp damage that is both distinguishable and harmful.
- *
- * Outlook only rewrites *runs* of whitespace, and only a run at the start of a
- * line actually changes what the reader sees: U+00A0 renders exactly like a
- * space mid-sentence, but it is not indentation, so a Markdown code block or a
- * nested list stops rendering as one. Interior runs are therefore left alone —
- * a user may genuinely have typed them and healing would gain nothing — while
- * leading runs are restored. A leading run the user typed as nonbreaking spaces
- * renders the same either way, so nothing visible is lost in that case either.
- *
- * Line starts inside the payload are both real newlines (outside strings) and
- * the two-character `\n` escape (inside them). Payloads written by this version
- * escape nbsp and space runs alike, so this pass only ever sees legacy events.
- */
-function repairNbspRuns(text: string): string {
-  return text.replace(/(^|\n|\\n)([ \u00A0]{2,})/g, (match, prefix: string, run: string) =>
-    (run.includes('\u00A0') ? prefix + ' '.repeat(run.length) : match));
-}
-
 function stripZeroWidth(text: string): string {
   return repairOutsideStrings(text, ch => (ZERO_WIDTH_REGEX.test(ch) ? '' : ch));
 }
@@ -158,11 +138,14 @@ export function parseArrangeBody<T>(text: string): ArrangePayloadResult<T> {
     return { status: 'corrupt', reason: 'closing marker is missing' };
   }
 
-  // Repair is otherwise a fallback, not a first step: a payload that already
-  // parses is returned as-is, so neither a nonbreaking space nor a zero-width
-  // joiner the user actually typed is rewritten. Payloads written by this
-  // version escape both, so anything repaired here came from Outlook.
-  const raw = repairNbspRuns(text.slice(payloadStart, endIndex).trim());
+  // Repair is a fallback, never a first step: a payload that already parses is
+  // returned as-is. A nonbreaking space inside a string is legal JSON and is
+  // indistinguishable from one the user typed, and guessing wrong changes what
+  // the remark means — four leading nbsp are an indented paragraph, four spaces
+  // are a code block. Leaving legacy damage visible is recoverable by hand;
+  // silently rewriting it is not. Payloads written by this version escape nbsp,
+  // zero-width characters and space runs, so they can never acquire it.
+  const raw = text.slice(payloadStart, endIndex).trim();
   if (!raw) return { status: 'corrupt', reason: 'payload is empty' };
 
   const parsed =
