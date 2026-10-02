@@ -164,6 +164,13 @@ describe('markdownToSearchText', () => {
     );
   });
 
+  it('keeps code written inside a link destination', () => {
+    assert.equal(
+      markdownToSearchText('[a](https://x/`q`) tail'),
+      'a https://x/q tail',
+    );
+  });
+
   it('flattens a remark full of images without stalling', () => {
     const started = Date.now();
     markdownToSearchText('![a](b) '.repeat(40_000));

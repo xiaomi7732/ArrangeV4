@@ -76,7 +76,7 @@ export function markdownToSearchText(source: string): string {
   // `__init__.py` must survive the marker stripping below — and it is
   // separated by spaces so it cannot form a match that spans the boundary
   // with the surrounding text.
-  return replaceLinks(withCodeLifted)
+  const flattened = replaceLinks(withCodeLifted)
     // Autolinks and the bare URLs remark-gfm turns into links. The URL is the
     // visible text here, so it is lifted like a destination: otherwise
     // `__init__.py` would be indexed as `init.py` and could never be found by
@@ -106,13 +106,32 @@ export function markdownToSearchText(source: string): string {
     // cannot consume each other's context. Unicode-aware, so `café_bar`
     // behaves like an ASCII identifier.
     .replace(/_+/g, (run, offset: number, full: string) =>
-      (isWordChar(full[offset - 1]) && isWordChar(full[offset + run.length]) ? run : ''))
-    .replace(
-      new RegExp(`${CODE_SPAN_SENTINEL}(\\d+)${CODE_SPAN_SENTINEL}`, 'g'),
-      (_match, index: string) => codeSpans[Number(index)] ?? '',
-    )
+      (isWordChar(full[offset - 1]) && isWordChar(full[offset + run.length]) ? run : ''));
+
+  return restoreCode(flattened, codeSpans)
     .replace(/[ \t]+/g, ' ')
     .trim();
+}
+
+/**
+ * Puts the lifted code back.
+ *
+ * A placeholder can hold another one — a code span inside a link destination
+ * is lifted a second time with the destination — and a single pass never
+ * rescans what it has just substituted, so this repeats until none are left.
+ * Every pass unwraps one layer, and the bound is only there so a placeholder
+ * that cannot be resolved can never loop.
+ */
+function restoreCode(text: string, codeSpans: readonly string[]): string {
+  const placeholder = new RegExp(`${CODE_SPAN_SENTINEL}(\\d+)${CODE_SPAN_SENTINEL}`, 'g');
+  let restored = text;
+  for (let pass = 0; pass < 8 && restored.includes(CODE_SPAN_SENTINEL); pass += 1) {
+    restored = restored.replace(
+      placeholder,
+      (_match, index: string) => codeSpans[Number(index)] ?? '',
+    );
+  }
+  return restored;
 }
 
 /**
