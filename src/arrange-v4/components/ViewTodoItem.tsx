@@ -370,6 +370,15 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           <div className={styles.error} role="alert">{error}</div>
         )}
 
+        {todo.dataUnreadable && (
+          <div className={styles.warning} role="status">
+            Some of this item&apos;s saved data could not be read, so status, flags,
+            checklist and remarks are shown as defaults. The saved data is still
+            there — editing is disabled so it cannot be overwritten. Open the
+            event in Outlook to repair or clear its description.
+          </div>
+        )}
+
         <div className={styles.form}>
           <DialogTabs
              tabs={TODO_DIALOG_TABS}
@@ -539,7 +548,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             {onUpdate && (
               <button type="button"
                 onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
-                disabled={checklistUpdating}
+                disabled={checklistUpdating || todo.dataUnreadable}
+                title={todo.dataUnreadable
+                  ? 'Editing is disabled while this item\u2019s saved data cannot be read'
+                  : undefined}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>

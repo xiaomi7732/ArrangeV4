@@ -509,7 +509,32 @@ function parseStoredBody(
   body: { contentType?: string; content?: string },
 ): ArrangePayloadResult<Partial<StoredTodoBody>> {
   if (!body?.content) return { status: 'absent' };
-  return parseArrangeBody<Partial<StoredTodoBody>>(extractBodyText(body));
+  const parsed = parseArrangeBody<Partial<StoredTodoBody>>(extractBodyText(body));
+  if (parsed.status === 'ok' && !hasAnyStoredField(parsed.data)) {
+    // Arrange never writes a payload without its own fields, so an object with
+    // none of them is damage. Accepting it would merge defaults over whatever
+    // the event really held.
+    return { status: 'corrupt', reason: 'payload has no Arrange fields' };
+  }
+  return parsed;
+}
+
+const STORED_BODY_FIELDS: readonly (keyof StoredTodoBody)[] = [
+  'status',
+  'urgent',
+  'important',
+  'checklist',
+  'remarks',
+  'startDateTime',
+  'finishDateTime',
+  'originalEtsDateTime',
+  'originalEtaDateTime',
+  'matrixOrder',
+  'scrumOrder',
+];
+
+function hasAnyStoredField(data: Partial<StoredTodoBody>): boolean {
+  return STORED_BODY_FIELDS.some(field => field in data);
 }
 
 function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {

@@ -47,21 +47,19 @@ export function escapeHtml(str: string): string {
 }
 
 /**
- * Removes characters that HTML normalisation introduces and JSON cannot read.
+ * Repairs the characters HTML normalisation introduces.
  *
  * Outlook rewrites runs of spaces as `&nbsp;`, which decodes to U+00A0. That is
  * not legal JSON whitespace, so an unnormalised payload fails to parse outright.
  * Inside a string it parses but silently corrupts leading indentation, which
  * matters for whitespace-significant content such as Markdown code blocks.
- *
- * Safe to apply to the whole payload because `serializeArrangeBody` escapes
- * these characters, so user content never carries them literally — a zero-width
- * joiner in an emoji sequence survives the round trip.
  */
-export function normalizePayloadText(text: string): string {
-  return text
-    .replace(/\u00A0/g, ' ')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '');
+function repairNbsp(text: string): string {
+  return text.replace(/\u00A0/g, ' ');
+}
+
+function stripZeroWidth(text: string): string {
+  return text.replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
 
 /** Serialises a payload into the `<pre>`-fenced HTML body Outlook stores. */
@@ -100,17 +98,36 @@ export function parseArrangeBody<T>(text: string): ArrangePayloadResult<T> {
     return { status: 'corrupt', reason: 'closing marker is missing' };
   }
 
-  const json = normalizePayloadText(text.slice(payloadStart, endIndex)).trim();
-  if (!json) return { status: 'corrupt', reason: 'payload is empty' };
+  // U+00A0 is always repaired: Outlook introduces it in place of real spaces,
+  // and new payloads escape any the user actually typed. Zero-width characters
+  // are only stripped if the payload will not parse with them in place, since a
+  // legacy payload may carry a legitimate one — a joiner in an emoji sequence.
+  const raw = repairNbsp(text.slice(payloadStart, endIndex)).trim();
+  if (!raw) return { status: 'corrupt', reason: 'payload is empty' };
 
+  const parsed = tryParse<T>(raw) ?? tryParse<T>(stripZeroWidth(raw));
+  if (!parsed) {
+    return { status: 'corrupt', reason: describeJsonError(raw) };
+  }
+  if (!parsed.value || typeof parsed.value !== 'object' || Array.isArray(parsed.value)) {
+    return { status: 'corrupt', reason: 'payload is not an object' };
+  }
+  return { status: 'ok', data: parsed.value };
+}
+
+function tryParse<T>(json: string): { value: T } | null {
   try {
-    const data = JSON.parse(json) as T;
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      return { status: 'corrupt', reason: 'payload is not an object' };
-    }
-    return { status: 'ok', data };
+    return { value: JSON.parse(json) as T };
+  } catch {
+    return null;
+  }
+}
+
+function describeJsonError(json: string): string {
+  try {
+    JSON.parse(json);
+    return 'payload is not valid JSON';
   } catch (error) {
-    const reason = error instanceof Error ? error.message : 'payload is not valid JSON';
-    return { status: 'corrupt', reason };
+    return error instanceof Error ? error.message : 'payload is not valid JSON';
   }
 }

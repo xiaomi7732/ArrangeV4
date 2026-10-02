@@ -58,11 +58,13 @@ export function markdownToSearchText(source: string): string {
     .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
     // Table pipes.
     .replace(/\|/g, ' ')
-    // Emphasis, strikethrough and inline code markers, but only where they sit
-    // at a delimiter position: stripping them everywhere turned `snake_case`
-    // into `snakecase`, which no one would ever search for.
-    .replace(/(^|[^\w])[*_~`]+/g, '$1')
-    .replace(/[*_~`]+(?=[^\w]|$)/g, '')
+    // Emphasis, strikethrough and inline code markers, but only when the run is
+    // not inside a word: stripping them everywhere turned `snake_case` into
+    // `snakecase`, which no one would ever search for. Unicode-aware, so
+    // `café_bar` is treated the same way as an ASCII identifier. Written with a
+    // replacer rather than lookbehind, which older Safari cannot even parse.
+    .replace(/([\p{L}\p{N}_]?)([*_~`]+)([\p{L}\p{N}_]?)/gu, (match, before, _run, after) =>
+      (before && after ? match : `${before}${after}`))
     .replace(/[ \t]+/g, ' ')
     .trim();
 }

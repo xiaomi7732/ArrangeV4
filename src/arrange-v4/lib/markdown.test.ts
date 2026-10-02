@@ -70,6 +70,17 @@ describe('markdownToSearchText', () => {
     assert.equal(markdownToSearchText('**fix snake_case**'), 'fix snake_case');
   });
 
+  it('applies the word rule to non-ASCII words too', () => {
+    assert.equal(markdownToSearchText('fix café_bar handling'), 'fix café_bar handling');
+    assert.equal(markdownToSearchText('**日本語** notes'), '日本語 notes');
+  });
+
+  it('leaves an intra-word run alone rather than stripping half of it', () => {
+    // Half-stripping produced `foo*bar*baz`, which matches neither what the
+    // user typed nor what the renderer shows.
+    assert.equal(markdownToSearchText('foo**bar**baz'), 'foo**bar**baz');
+  });
+
   it('keeps the contents of a fenced code block', () => {
     const text = markdownToSearchText('```ts\nconst answer = 42;\n```');
     assert.ok(text.includes('const answer = 42;'), text);

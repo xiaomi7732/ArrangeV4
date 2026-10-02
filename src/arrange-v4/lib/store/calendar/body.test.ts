@@ -3,7 +3,6 @@ import { describe, it } from 'node:test';
 import {
   ARRANGE_DATA_END_MARKER,
   ARRANGE_DATA_START_MARKER,
-  normalizePayloadText,
   parseArrangeBody,
   serializeArrangeBody,
 } from './body';
@@ -102,8 +101,9 @@ describe('arrange event body codec', () => {
     assert.ok(/^ {4}/.test(line), 'markdown code-block indentation must stay real spaces');
   });
 
-  it('strips zero-width characters', () => {
-    assert.equal(normalizePayloadText('a\u200Bb\uFEFFc'), 'abc');
+  it('strips zero-width characters that break the payload', () => {
+    const text = `${ARRANGE_DATA_START_MARKER}\n{"status":"new",\uFEFF"remarks":null}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: base });
   });
 
   it('preserves zero-width joiners that belong to the content', () => {
@@ -114,6 +114,22 @@ describe('arrange event body codec', () => {
       remarks: { type: 'markdown', content: 'ship it \u{1F469}\u200D\u{1F4BB}\u200B' },
     };
     assert.deepEqual(roundTrip(payload), { status: 'ok', data: payload });
+  });
+
+  it('preserves zero-width joiners in a legacy payload that escaped nothing', () => {
+    // Events written before the escaping existed carry the joiner literally;
+    // stripping it on read altered content that was perfectly readable.
+    const payload: Payload = {
+      status: 'new',
+      remarks: { type: 'markdown', content: '\u{1F469}\u200D\u{1F4BB} pairing' },
+    };
+    const text = `${ARRANGE_DATA_START_MARKER}\n${JSON.stringify(payload)}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: payload });
+  });
+
+  it('still strips zero-width characters when they break the JSON', () => {
+    const text = `${ARRANGE_DATA_START_MARKER}\n{\u200B"status":"new",\u200B"remarks":null}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: base });
   });
 
   it('treats a lone closing marker as corrupt, not absent', () => {
