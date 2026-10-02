@@ -9,6 +9,9 @@ export function sortByPersistedOrder(
   field: OrderField,
   fallbackCompare: (a: TodoItemWithId, b: TodoItemWithId) => number,
 ): TodoItemWithId[] {
+  // Half a step below the saved positions, which are always whole steps: an
+  // item with no saved order can then never tie one that has it, so where it
+  // lands does not depend on the order the backend happened to return.
   const fallbackRank = new Map(
     items
       .filter(item => {
@@ -16,7 +19,7 @@ export function sortByPersistedOrder(
         return typeof order !== 'number' || !Number.isFinite(order);
       })
       .sort(fallbackCompare)
-      .map((item, index) => [item.id, (index + 1) * ORDER_STEP]),
+      .map((item, index) => [item.id, (index + 1) * ORDER_STEP - ORDER_STEP / 2]),
   );
 
   return items
@@ -91,6 +94,26 @@ export function normalizeOrder(
     return updated;
   });
   return { items: normalized, changed };
+}
+
+/**
+ * Puts back the saved order of any item the stores refuse to write.
+ *
+ * An item whose payload could not be read is left out of the write, so showing
+ * it at its new position would be a lie the next read undoes. Keeping the saved
+ * value means the board shows straight away what a refresh would show.
+ */
+export function keepStoredOrder(
+  replacements: TodoItemWithId[],
+  items: readonly TodoItemWithId[],
+  field: OrderField,
+): TodoItemWithId[] {
+  const stored = new Map(items.map(item => [item.id, item]));
+  return replacements.map(item => {
+    const original = stored.get(item.id);
+    if (!original?.dataUnreadable || original[field] === item[field]) return item;
+    return { ...item, [field]: original[field] };
+  });
 }
 
 export function replaceItems(

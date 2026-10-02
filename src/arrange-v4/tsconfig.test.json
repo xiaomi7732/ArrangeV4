@@ -46,6 +46,8 @@
     "lib/selectionUtils.test.ts",
     "lib/optimisticUpdate.ts",
     "lib/optimisticUpdate.test.ts",
+    "lib/orderUtils.ts",
+    "lib/orderUtils.test.ts",
     "lib/store/tokenAcquisition.ts",
     "lib/store/tokenAcquisition.test.ts",
     "lib/store/types.ts",

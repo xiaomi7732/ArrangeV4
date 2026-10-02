@@ -25,6 +25,7 @@ import {
 import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
+  keepStoredOrder,
   moveBetweenContainers,
   nextOrder,
   normalizeOrder,
@@ -606,7 +607,8 @@ function ScrumPageContent() {
     // An item whose saved data could not be read is refused by the stores, and
     // one of them in the lane would otherwise fail the whole batch.
     const writableUpdates = dropUnwritableUpdates(updates, todoItems);
-    setTodoItems(items => replaceItems(items, replacements));
+    const shownReplacements = keepStoredOrder(replacements, todoItems, 'scrumOrder');
+    setTodoItems(items => replaceItems(items, shownReplacements));
     setError(null);
     mutationVersionRef.current += 1;
     const orderMutationVersion = mutationVersionRef.current;

@@ -43,6 +43,8 @@ export function selectDismissIndex(owners: readonly boolean[]): number {
 
 interface OpenPanel {
   contains: (target: Node | null) => boolean;
+  /** False once the panel element is gone while the flag still says open. */
+  isMounted: () => boolean;
   close: () => void;
   focusTrigger: () => void;
 }
@@ -84,6 +86,7 @@ export function useDismissiblePanel<P extends HTMLElement, T extends HTMLElement
         && (panelRef.current?.contains(target) === true
           || triggerRef.current?.contains(target) === true),
       close: onClose,
+      isMounted: () => panelRef.current !== null,
       focusTrigger: () => triggerRef.current?.focus(),
     };
     openPanels.push(entry);
@@ -93,7 +96,10 @@ export function useDismissiblePanel<P extends HTMLElement, T extends HTMLElement
       if (modalIsOpen()) return;
       const target = event.target as Node | null;
       // Every open panel sees this event; only one of them may act on it.
-      if (openPanels[selectDismissIndex(openPanels.map(p => p.contains(target)))] !== entry) {
+      // A panel whose element is no longer rendered, while whatever flag holds
+      // it open has not caught up, must not swallow the key.
+      const live = openPanels.filter(panel => panel.isMounted());
+      if (live[selectDismissIndex(live.map(p => p.contains(target)))] !== entry) {
         return;
       }
       entry.close();

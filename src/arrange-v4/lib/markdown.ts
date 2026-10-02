@@ -51,6 +51,13 @@ export function markdownToSearchText(source: string): string {
     return `${CODE_SPAN_SENTINEL}${codeSpans.length - 1}${CODE_SPAN_SENTINEL}`;
   };
 
+  const replaceLink = (
+    _match: string,
+    label: string,
+    angled: string | undefined,
+    bare: string | undefined,
+  ): string => `${label} ${liftCode(angled ?? bare ?? '')} `;
+
   return source
     // Any stray sentinel in the source would collide with the placeholders.
     .split(CODE_SPAN_SENTINEL)
@@ -69,16 +76,21 @@ export function markdownToSearchText(source: string): string {
     // Images and links keep their visible text, and their destination is kept
     // too: before remarks were Markdown they were indexed verbatim, so a
     // search for a hostname used to find the task and still should. The
-    // destination is separated by spaces so it cannot form a match that spans
-    // the boundary with the surrounding text.
-    .replace(/!\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, '$1 $2 ')
-    .replace(/\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, '$1 $2 ')
+    // destination is lifted out like code, because a URL is literal text —
+    // `Foo_(bar)` and `__init__.py` must survive the marker stripping below —
+    // and it is separated by spaces so it cannot form a match that spans the
+    // boundary with the surrounding text.
+    .replace(new RegExp(`!\\[([^\\]]*)\\]${LINK_DESTINATION}`, 'g'), replaceLink)
+    .replace(new RegExp(`\\[([^\\]]*)\\]${LINK_DESTINATION}`, 'g'), replaceLink)
     // Autolinks.
     .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
     // Leading block markers: headings, quotes, list bullets.
     .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
     .replace(/^[ \t]*>[ \t]?/gm, '')
     .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
+    // A GFM task marker renders as a checkbox, not as text: leaving it in
+    // would make a search for "x" match every remark with a ticked box.
+    .replace(/^\[[ xX]\][ \t]*/gm, '')
     // Table pipes.
     .replace(/\|/g, ' ')
     // Asterisk, tilde and backtick runs are always markers: CommonMark treats
@@ -106,6 +118,13 @@ export function markdownToSearchText(source: string): string {
  * placeholder can never collide with the user's own text.
  */
 const CODE_SPAN_SENTINEL = '\u0000';
+
+/**
+ * The `(destination)` half of a link or image, in either the bare or the
+ * angle-bracketed form. A title after the destination is dropped.
+ */
+const LINK_DESTINATION =
+  '\\(\\s*(?:<([^>\\n]*)>|((?:[^()\\s]|\\([^()\\s]*\\))*))[^)]*\\)';
 
 const WORD_CHAR_REGEX = /[\p{L}\p{N}_]/u;
 

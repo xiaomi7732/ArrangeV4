@@ -50,6 +50,38 @@ describe('markdownToSearchText', () => {
     );
   });
 
+  it('indexes a URL literally, so its punctuation survives', () => {
+    // A URL is not Markdown: stripping its underscores or asterisks would
+    // index something the user can never search for.
+    assert.equal(
+      markdownToSearchText('[wiki](https://en.wikipedia.org/wiki/Foo_(bar))'),
+      'wiki https://en.wikipedia.org/wiki/Foo_(bar)',
+    );
+    assert.equal(
+      markdownToSearchText('[src](https://host/__init__.py)'),
+      'src https://host/__init__.py',
+    );
+  });
+
+  it('unwraps an angle-bracketed destination and drops a link title', () => {
+    assert.equal(
+      markdownToSearchText('[a](<https://example.com/a b>)'),
+      'a https://example.com/a b',
+    );
+    assert.equal(
+      markdownToSearchText('[a](https://example.com "the title")'),
+      'a https://example.com',
+    );
+  });
+
+  it('drops task list checkboxes, which render as boxes rather than text', () => {
+    // Otherwise a search for "x" matches every remark with a ticked box.
+    assert.equal(
+      markdownToSearchText('- [x] ship it\n- [ ] write it up'),
+      'ship it\nwrite it up',
+    );
+  });
+
   it('keeps autolink targets, which are the only text shown', () => {
     assert.equal(
       markdownToSearchText('ping <https://example.com/status>'),
