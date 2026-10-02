@@ -58,13 +58,23 @@ export function markdownToSearchText(source: string): string {
     .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
     // Table pipes.
     .replace(/\|/g, ' ')
-    // Emphasis, strikethrough and inline code markers, but only when the run is
-    // not inside a word: stripping them everywhere turned `snake_case` into
-    // `snakecase`, which no one would ever search for. Unicode-aware, so
-    // `café_bar` is treated the same way as an ASCII identifier. Written with a
-    // replacer rather than lookbehind, which older Safari cannot even parse.
-    .replace(/([\p{L}\p{N}_]?)([*_~`]+)([\p{L}\p{N}_]?)/gu, (match, before, _run, after) =>
-      (before && after ? match : `${before}${after}`))
+    // Asterisk, tilde and backtick runs are always markers: CommonMark treats
+    // them as emphasis even inside a word, so `a**b**c` really does render as
+    // `abc`.
+    .replace(/[*~`]+/g, '')
+    // Underscores are the exception — CommonMark does not emphasise inside a
+    // word, which is exactly why `snake_case` reads literally. Neighbours are
+    // inspected by offset rather than captured, so adjacent runs in `x_y_z`
+    // cannot consume each other's context. Unicode-aware, so `café_bar`
+    // behaves like an ASCII identifier.
+    .replace(/_+/g, (run, offset: number, full: string) =>
+      (isWordChar(full[offset - 1]) && isWordChar(full[offset + run.length]) ? run : ''))
     .replace(/[ \t]+/g, ' ')
     .trim();
+}
+
+const WORD_CHAR_REGEX = /[\p{L}\p{N}_]/u;
+
+function isWordChar(char: string | undefined): boolean {
+  return char !== undefined && WORD_CHAR_REGEX.test(char);
 }

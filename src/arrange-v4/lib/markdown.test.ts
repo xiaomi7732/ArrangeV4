@@ -75,10 +75,12 @@ describe('markdownToSearchText', () => {
     assert.equal(markdownToSearchText('**日本語** notes'), '日本語 notes');
   });
 
-  it('leaves an intra-word run alone rather than stripping half of it', () => {
-    // Half-stripping produced `foo*bar*baz`, which matches neither what the
-    // user typed nor what the renderer shows.
-    assert.equal(markdownToSearchText('foo**bar**baz'), 'foo**bar**baz');
+  it('leaves an intra-word underscore run alone but not an asterisk run', () => {
+    // CommonMark emphasises `*` inside a word but not `_`, so the flattened
+    // text matches what the reader actually sees in both cases.
+    assert.equal(markdownToSearchText('x_y_z'), 'x_y_z');
+    assert.equal(markdownToSearchText('foo**bar**baz'), 'foobarbaz');
+    assert.equal(markdownToSearchText('a**b**c'), 'abc');
   });
 
   it('keeps the contents of a fenced code block', () => {

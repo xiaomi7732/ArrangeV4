@@ -82,7 +82,7 @@ describe('arrange event body codec', () => {
     assert.ok(!/\n {2}/.test(body), 'payload should not be pretty-printed');
   });
 
-  it('recovers a payload whose spaces were rewritten as nbsp', () => {
+  it('recovers a legacy payload whose structural spaces were rewritten as nbsp', () => {
     // Outlook normalises space runs to &nbsp;, which decodes to U+00A0 —
     // not legal JSON whitespace, so the whole item used to fail to parse.
     const pretty = JSON.stringify(base, null, 2).replace(/ {2}/g, '\u00A0\u00A0');
@@ -90,15 +90,45 @@ describe('arrange event body codec', () => {
     assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: base });
   });
 
-  it('restores real spaces inside whitespace-significant content', () => {
+  it('leaves no space run for Outlook to rewrite as nbsp', () => {
+    // Space runs are the only thing HTML normalisation rewrites here, so a
+    // payload written by this version cannot come back damaged at all.
+    const body = serializeArrangeBody({
+      status: 'new',
+      remarks: { type: 'markdown', content: 'intro\n\n    const x = 1;\n' },
+    });
+    assert.ok(!/ {2}/.test(body), 'serialised body should contain no space runs');
+  });
+
+  it('round-trips whitespace-significant content exactly', () => {
+    const content = 'intro\n\n    const x = 1;\n';
+    const payload: Payload = { status: 'new', remarks: { type: 'markdown', content } };
+    assert.deepEqual(roundTrip(payload), { status: 'ok', data: payload });
+  });
+
+  it('repairs nbsp damage in a legacy payload that will not parse', () => {
     const content = 'intro\n\n    const x = 1;\n';
     const json = JSON.stringify({ status: 'new', remarks: { type: 'markdown', content } });
-    const text = `${ARRANGE_DATA_START_MARKER}\n${json.replace(/ {2,}/g, m => '\u00A0'.repeat(m.length))}\n${ARRANGE_DATA_END_MARKER}`;
+    // Legacy bodies were pretty-printed, so Outlook rewrote structural
+    // indentation too and the payload stopped parsing outright.
+    const damaged = `{\u00A0${json.slice(1)}`.replace(/ {2,}/g, m => '\u00A0'.repeat(m.length));
+    const text = `${ARRANGE_DATA_START_MARKER}\n${damaged}\n${ARRANGE_DATA_END_MARKER}`;
     const result = parseArrangeBody<Payload>(text);
     assert.equal(result.status, 'ok');
     if (result.status !== 'ok') return;
     const line = result.data.remarks!.content.split('\n')[2];
-    assert.ok(/^ {4}/.test(line), 'markdown code-block indentation must stay real spaces');
+    assert.ok(/^ {4}/.test(line), 'markdown code-block indentation must be repaired');
+  });
+
+  it('keeps a nonbreaking space that the content legitimately contains', () => {
+    // "10 kg" written with U+00A0 parses fine, so nothing should rewrite it.
+    const payload: Payload = {
+      status: 'new',
+      remarks: { type: 'text', content: '10\u00A0kg of coffee' },
+    };
+    const text = `${ARRANGE_DATA_START_MARKER}\n${JSON.stringify(payload)}\n${ARRANGE_DATA_END_MARKER}`;
+    assert.deepEqual(parseArrangeBody<Payload>(text), { status: 'ok', data: payload });
+    assert.deepEqual(roundTrip(payload), { status: 'ok', data: payload });
   });
 
   it('strips zero-width characters that break the payload', () => {

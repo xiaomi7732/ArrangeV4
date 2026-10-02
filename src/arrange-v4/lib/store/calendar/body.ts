@@ -70,9 +70,17 @@ export function serializeArrangeBody(value: unknown): string {
   const fenced = json
     .split(MARKER_PREFIX)
     .join(ESCAPED_MARKER_PREFIX)
-    .replace(NORMALIZATION_SENSITIVE_REGEX, ch =>
-      `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    .replace(NORMALIZATION_SENSITIVE_REGEX, escapeAsJsonUnicode)
+    // Space runs inside the user's own content are what Outlook rewrites as
+    // `&nbsp;`. Escaping them leaves the serialised text with nothing to
+    // rewrite, so a payload written by this version is never damaged and a
+    // reader never has to guess whether a space run was ours or Outlook's.
+    .replace(/ {2,}/g, run => escapeAsJsonUnicode(' ').repeat(run.length));
   return `<pre>${ARRANGE_DATA_START_MARKER}\n${escapeHtml(fenced)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+}
+
+function escapeAsJsonUnicode(ch: string): string {
+  return `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
 }
 
 /**
@@ -98,14 +106,17 @@ export function parseArrangeBody<T>(text: string): ArrangePayloadResult<T> {
     return { status: 'corrupt', reason: 'closing marker is missing' };
   }
 
-  // U+00A0 is always repaired: Outlook introduces it in place of real spaces,
-  // and new payloads escape any the user actually typed. Zero-width characters
-  // are only stripped if the payload will not parse with them in place, since a
-  // legacy payload may carry a legitimate one — a joiner in an emoji sequence.
-  const raw = repairNbsp(text.slice(payloadStart, endIndex)).trim();
+  // Repair is a fallback, not a first step: a payload that already parses is
+  // returned byte-for-byte, so neither a nonbreaking space nor a zero-width
+  // joiner the user actually typed is rewritten. Payloads written by this
+  // version escape both, so anything repaired here came from Outlook.
+  const raw = text.slice(payloadStart, endIndex).trim();
   if (!raw) return { status: 'corrupt', reason: 'payload is empty' };
 
-  const parsed = tryParse<T>(raw) ?? tryParse<T>(stripZeroWidth(raw));
+  const parsed =
+    tryParse<T>(raw)
+    ?? tryParse<T>(repairNbsp(raw))
+    ?? tryParse<T>(stripZeroWidth(repairNbsp(raw)));
   if (!parsed) {
     return { status: 'corrupt', reason: describeJsonError(raw) };
   }
