@@ -130,6 +130,23 @@ describe('markdownToSearchText', () => {
     );
   });
 
+  it('indexes a visible URL literally, bracketed or not', () => {
+    // The URL is the text the reader sees, so it has to be searchable as
+    // written rather than stripped of its Markdown-looking punctuation.
+    assert.equal(
+      markdownToSearchText('<https://host/__init__.py>'),
+      'https://host/__init__.py',
+    );
+    assert.equal(
+      markdownToSearchText('see https://host/a*b*c and https://x/Foo_(bar) here'),
+      'see https://host/a*b*c and https://x/Foo_(bar) here',
+    );
+    assert.equal(
+      markdownToSearchText('read https://host/page.'),
+      'read https://host/page.',
+    );
+  });
+
   it('strips heading, quote and list markers', () => {
     assert.equal(markdownToSearchText('## Plan'), 'Plan');
     assert.equal(markdownToSearchText('> quoted note'), 'quoted note');

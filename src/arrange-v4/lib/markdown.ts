@@ -77,8 +77,16 @@ export function markdownToSearchText(source: string): string {
   // separated by spaces so it cannot form a match that spans the boundary
   // with the surrounding text.
   return replaceLinks(withCodeLifted)
-    // Autolinks.
-    .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
+    // Autolinks and the bare URLs remark-gfm turns into links. The URL is the
+    // visible text here, so it is lifted like a destination: otherwise
+    // `__init__.py` would be indexed as `init.py` and could never be found by
+    // the words the reader can see on screen.
+    .replace(/<((?:https?|mailto):[^>\s]+)>/g, (_match, url: string) => liftCode(url))
+    .replace(/\b(?:https?:\/\/|mailto:)[^\s<>]+/g, (url: string) => {
+      // Trailing punctuation reads as the end of the sentence, not the URL.
+      const trimmed = url.replace(/[.,;:!?'"]+$/, '');
+      return liftCode(trimmed) + url.slice(trimmed.length);
+    })
     // Leading block markers: headings, quotes, list bullets. A GFM task
     // marker renders as a checkbox rather than as text, so it goes with the
     // bullet that makes it one — a line of prose starting `[x]` keeps it.
