@@ -151,6 +151,25 @@ describe('markdownToSearchText', () => {
     );
   });
 
+  it('keeps code that abuts a URL, which has no space to separate it', () => {
+    assert.equal(
+      markdownToSearchText('see https://host/path`__init__`'),
+      'see https://host/path__init__',
+    );
+    // A code span binds tighter than an autolink, so the brackets stay as the
+    // literal text they render as — what matters is that `b` is still indexed.
+    assert.equal(
+      markdownToSearchText('<https://host/a`b`>'),
+      '<https://host/ab>',
+    );
+  });
+
+  it('flattens a remark full of images without stalling', () => {
+    const started = Date.now();
+    markdownToSearchText('![a](b) '.repeat(40_000));
+    assert.ok(Date.now() - started < 1_000, 'image flattening should stay close to linear');
+  });
+
   it('accepts a link title that is escaped or wraps onto the next line', () => {
     assert.equal(
       markdownToSearchText('[doc](https://host/a "say \\"old\\" version")'),

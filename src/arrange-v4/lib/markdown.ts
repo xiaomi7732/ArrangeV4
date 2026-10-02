@@ -80,9 +80,10 @@ export function markdownToSearchText(source: string): string {
     // Autolinks and the bare URLs remark-gfm turns into links. The URL is the
     // visible text here, so it is lifted like a destination: otherwise
     // `__init__.py` would be indexed as `init.py` and could never be found by
-    // the words the reader can see on screen.
-    .replace(/<((?:https?|mailto):[^>\s]+)>/gi, (_match, url: string) => liftCode(url))
-    .replace(/\b(?:https?:\/\/|mailto:)[^\s<>]+/gi, (url: string) => {
+    // the words the reader can see on screen. A placeholder standing in for
+    // code is excluded, so a URL that abuts a code span cannot swallow it.
+    .replace(/<((?:https?|mailto):[^>\s\u0000]+)>/gi, (_match, url: string) => liftCode(url))
+    .replace(/\b(?:https?:\/\/|mailto:)[^\s<>\u0000]+/gi, (url: string) => {
       // Trailing punctuation reads as the end of the sentence, not the URL.
       const trimmed = url.replace(/[.,;:!?'"]+$/, '');
       return liftCode(trimmed) + url.slice(trimmed.length);
@@ -219,17 +220,20 @@ function isEscaped(text: string, index: number): boolean {
  * malformed input.
  */
 function flattenLinks(text: string, liftCode: (code: string) => string): string {
-  let out = '';
+  // Chunks rather than one growing string: an image drops the bang before it,
+  // and rewriting the whole output to do that would cost O(n^2) in the number
+  // of images in one remark.
+  const out: string[] = [];
   let i = 0;
 
   while (i < text.length) {
     if (text[i] === '\\') {
-      out += text.slice(i, i + 2);
+      out.push(text.slice(i, i + 2));
       i += 2;
       continue;
     }
     if (text[i] !== '[') {
-      out += text[i];
+      out.push(text[i]);
       i += 1;
       continue;
     }
@@ -251,20 +255,20 @@ function flattenLinks(text: string, liftCode: (code: string) => string): string 
       ? readDestination(text, j)
       : null;
     if (!destination) {
-      out += text[i];
+      out.push(text[i]);
       i += 1;
       continue;
     }
 
     // `![alt](src)` is an image: the bang is syntax, not text. An escaped
     // `\!` is a bang the reader sees, so it stays.
-    if (text[i - 1] === '!' && !isEscaped(text, i - 1)) out = out.slice(0, -1);
+    if (text[i - 1] === '!' && !isEscaped(text, i - 1)) out.pop();
     const label = flattenLinks(text.slice(labelStart, j - 1), liftCode);
-    out += `${label} ${liftCode(destination.value)} `;
+    out.push(`${label} ${liftCode(destination.value)} `);
     i = destination.end;
   }
 
-  return out;
+  return out.join('');
 }
 
 const WORD_CHAR_REGEX = /[\p{L}\p{N}_]/u;
