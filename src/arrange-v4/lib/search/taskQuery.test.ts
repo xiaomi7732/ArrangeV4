@@ -68,6 +68,22 @@ describe('taskSearchText', () => {
     assert.ok(haystack.includes('tag build'));
   });
 
+  it('indexes markdown remarks as rendered text, not as source', () => {
+    const haystack = taskSearchText(task({
+      subject: 'Ship Release',
+      remarks: { type: 'markdown', content: '## Rollout\n\n- [Runbook](https://example.com/run) **ready**' },
+    }));
+
+    assert.ok(haystack.includes('rollout'));
+    assert.ok(haystack.includes('runbook'));
+    assert.ok(haystack.includes('ready'));
+    // The link target stays searchable, as it was before remarks were
+    // Markdown, but the syntax must not become a search term of its own.
+    assert.ok(haystack.includes('https://example.com/run'));
+    assert.equal(haystack.includes('**'), false);
+    assert.equal(haystack.includes('##'), false);
+  });
+
   it('excludes checklist markers so "x" does not match every checked entry', () => {
     const haystack = taskSearchText(task({ subject: 'Plan', checklist: ['-[x] done'] }));
     assert.equal(haystack.includes('-[x]'), false);

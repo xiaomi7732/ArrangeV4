@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useId, Suspense } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -25,6 +25,7 @@ import {
 import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
+  keepStoredOrder,
   moveBetweenContainers,
   nextOrder,
   normalizeOrder,
@@ -32,7 +33,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -40,9 +41,11 @@ import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
+import EmptyListMessage from '@/components/EmptyListMessage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -128,6 +131,21 @@ function ScrumPageContent() {
   const taskQuery = useTaskQuery(bookId);
   const { query } = taskQuery;
   const [showStatusFilters, setShowStatusFilters] = useState(false);
+  const statusPanelId = useId();
+  const tagsPanelId = useId();
+  const closeStatusPanel = useCallback(() => setShowStatusFilters(false), []);
+  const closeTagsPanel = useCallback(() => setShowTags(false), []);
+  const statusPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showStatusFilters,
+    closeStatusPanel,
+  );
+  const tagsPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showTags,
+    closeTagsPanel,
+    // Open by default and in the page flow, so an outside click must not
+    // collapse it out from under the user.
+    { dismissOnOutsidePress: false },
+  );
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -586,7 +604,11 @@ function ScrumPageContent() {
     }
 
     const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
-    setTodoItems(items => replaceItems(items, replacements));
+    // An item whose saved data could not be read is refused by the stores, and
+    // one of them in the lane would otherwise fail the whole batch.
+    const writableUpdates = dropUnwritableUpdates(updates, todoItems);
+    const shownReplacements = keepStoredOrder(replacements, todoItems, 'scrumOrder');
+    setTodoItems(items => replaceItems(items, shownReplacements));
     setError(null);
     mutationVersionRef.current += 1;
     const orderMutationVersion = mutationVersionRef.current;
@@ -595,7 +617,7 @@ function ScrumPageContent() {
     beginMutation();
 
     try {
-      await persistUpdates(updates);
+      await persistUpdates(writableUpdates);
     } catch (err: unknown) {
       console.error('Error updating Scrum order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
@@ -696,13 +718,21 @@ function ScrumPageContent() {
     // the rewrite wrong: it targets the book the operation started on.
     if (!bookId) return false;
     if (affectedItems.length === 0) return true;
+    // An item whose saved data could not be read would be refused by the store
+    // and take the whole batch with it, leaving the tag unchanged everywhere.
+    const { writable: writableItems, skipped } = partitionWritableItems(affectedItems);
+    const skippedNotice = describeSkippedUnwritable(skipped.length);
+    if (writableItems.length === 0) {
+      if (skippedNotice) setError(skippedNotice);
+      return false;
+    }
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     const tagsMutationVersion = mutationVersionRef.current;
-    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
+    const tagsSnapshot = snapshotItems(todoItems, writableItems.map(item => item.id));
     beginMutation();
 
-    const affectedIds = new Set(affectedItems.map(a => a.id));
+    const affectedIds = new Set(writableItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -716,7 +746,7 @@ function ScrumPageContent() {
     try {
       const updated = await store.updateItems(
         operationBookId,
-        affectedItems.map(item => ({
+        writableItems.map(item => ({
           itemId: item.id,
           updates: {
             categories: computeNewCategories(item),
@@ -726,6 +756,7 @@ function ScrumPageContent() {
       // The backend change landed, so saved filters for that book must be
       // rewritten either way; only the on-screen merge is book-specific.
       if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
+      if (skippedNotice && bookIdRef.current === operationBookId) setError(skippedNotice);
       return true;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
@@ -856,18 +887,24 @@ function ScrumPageContent() {
               <span className={styles.filterCount} />
               <div className={styles.boardHeaderActions}>
                 <button
+                  ref={statusPanel.triggerRef}
                   className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                   onClick={() => setShowStatusFilters(prev => !prev)}
                   aria-expanded={showStatusFilters}
+                  aria-haspopup="true"
+                  aria-controls={statusPanelId}
                 >
                   {showStatusFilters ? '▲' : '▼'} Status{statusFilterActive ? ' ●' : ''}
                 </button>
                 {allCategories.length > 0 && (
                   <div className={styles.comboButton}>
                     <button
+                      ref={tagsPanel.triggerRef}
                       className={styles.comboButtonMain}
                       onClick={() => setShowTags(prev => !prev)}
                       aria-expanded={showTags}
+                      aria-haspopup="true"
+                      aria-controls={tagsPanelId}
                     >
                       {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                     </button>
@@ -886,7 +923,7 @@ function ScrumPageContent() {
             </div>
 
             {showStatusFilters && (
-              <div className={styles.filterBar}>
+              <div className={styles.filterBar} id={statusPanelId} ref={statusPanel.panelRef}>
                 {ALL_STATUSES.map(status => (
                   <div key={status} className={styles.filterGroup}>
                     <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
@@ -917,7 +954,7 @@ function ScrumPageContent() {
             )}
 
             {showTags && allCategories.length > 0 && (
-              <div className={styles.tagBar}>
+              <div className={styles.tagBar} id={tagsPanelId} ref={tagsPanel.panelRef}>
                 <div className={styles.categoryFilterChips}>
                   <button
                     className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}
@@ -974,7 +1011,17 @@ function ScrumPageContent() {
                       <h3 className={`${styles.laneTitle} ${laneStyle.title}`}>
                         {STATUS_LABELS[status]}
                       </h3>
-                      <span className={styles.laneCount}>{items.length}</span>
+                      <div className={styles.laneHeaderActions}>
+                        <span className={styles.laneCount}>{items.length}</span>
+                        <AddTodoItem
+                          onAddTodo={handleAddTodo}
+                          disabled={loading}
+                          defaultStatus={status}
+                          addLabel={`Add item to ${STATUS_LABELS[status]}`}
+                          compact
+                          availableCategories={allCategories}
+                        />
+                      </div>
                     </div>
                     <SortableTodoList
                       id={laneId(status)}
@@ -982,7 +1029,7 @@ function ScrumPageContent() {
                       className={styles.laneContent}
                     >
                       {items.map(todo => (
-                        <SortableTodo key={todo.id} id={todo.id} containerId={laneId(status)} disabled={isSavingOrder}>
+                        <SortableTodo key={todo.id} id={todo.id} containerId={laneId(status)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                           <ScrumCard
                             todo={todo}
                             onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -990,7 +1037,11 @@ function ScrumPageContent() {
                         </SortableTodo>
                       ))}
                       {items.length === 0 && (
-                        <p className={styles.laneEmpty}>No items</p>
+                        <EmptyListMessage
+                          filtered={taskQuery.queryActive}
+                          onClearFilters={taskQuery.clearAll}
+                          className={styles.laneEmpty}
+                        />
                       )}
                     </SortableTodoList>
                   </div>

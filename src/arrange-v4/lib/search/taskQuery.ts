@@ -9,6 +9,7 @@
 import type { TodoItem, TodoStatus } from '../store/types';
 import { ALL_STATUSES } from '../store/types';
 import { isDateToday } from '../dateUtils';
+import { markdownToSearchText } from '../markdown';
 
 export type StatusFilterMode = 'showAll' | 'todayOnly' | 'hide';
 
@@ -113,7 +114,13 @@ export function taskSearchText(todo: TodoItem): string {
   const parts: string[] = [todo.subject || ''];
 
   if (todo.categories) parts.push(...todo.categories);
-  if (todo.remarks?.content) parts.push(todo.remarks.content);
+  if (todo.remarks?.content) {
+    parts.push(
+      todo.remarks.type === 'markdown'
+        ? markdownToSearchText(todo.remarks.content)
+        : todo.remarks.content,
+    );
+  }
   if (todo.checklist) {
     for (const entry of todo.checklist) parts.push(checklistText(entry));
   }

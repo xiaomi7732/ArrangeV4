@@ -366,6 +366,12 @@
 .laneTitleFinished { color: #16a34a; }
 .laneTitleCancelled { color: #9333ea; }
 
+.laneHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .laneCount {
   font-size: 0.75rem;
   font-weight: 600;

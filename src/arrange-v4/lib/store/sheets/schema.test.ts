@@ -42,6 +42,21 @@ describe('Google Sheets TODO schema', () => {
     assert.equal(record.rowNumber, 2);
   });
 
+  it('keeps a hand-typed remarks cell instead of discarding it', () => {
+    // A cell edited directly in Google Sheets is not our JSON envelope. It used
+    // to read back as "no remarks", so the next save replaced what was typed.
+    const headers = Array.from(TODO_HEADERS);
+    const row = Array.from({ length: headers.length }, () => '') as unknown[];
+    row[0] = 'todo-9';
+    row[1] = 'Review notes';
+    row[4] = 'new';
+    row[9] = 'call Bob about the invoice';
+
+    const [record] = parseSheetRows([headers, row]);
+
+    assert.deepEqual(record.item.remarks, { type: 'text', content: 'call Bob about the invoice' });
+  });
+
   it('extends the original 16-column schema without losing legacy rows', () => {
     const legacyHeaders = Array.from(TODO_HEADERS.slice(0, 16));
     const headers = normalizeHeaders(legacyHeaders);

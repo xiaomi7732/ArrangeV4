@@ -31,7 +31,7 @@ export default function ScrumCard({ todo, onClick }: ScrumCardProps) {
         {todo.important && <span className={`${styles.badge} ${styles.badgeImportant}`}>Important</span>}
         {todo.urgent && <span className={`${styles.badge} ${styles.badgeUrgent}`}>Urgent</span>}
         {todo.etaDateTime && todo.status !== 'finished' && todo.status !== 'cancelled' && (() => {
-          const eta = formatRelativeDate(todo.etaDateTime);
+          const eta = formatRelativeDate(todo.etaDateTime, new Date(), 'deadline');
           return (
             <span
               className={`${styles.eta} ${eta.isOverdue ? styles.etaOverdue : ''}`}

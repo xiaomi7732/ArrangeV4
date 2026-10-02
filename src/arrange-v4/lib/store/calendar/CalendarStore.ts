@@ -15,10 +15,15 @@ import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
 import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
 import { computeBumpedDates } from './bump';
+import {
+  parseArrangeBody,
+  serializeArrangeBody,
+  type ArrangePayloadResult,
+} from './body';
 import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
+import type { StoredTodoBody } from './storedFields';
+import { describeStoredFieldDamage } from './storedFields';
 
-const ARRANGE_DATA_START_MARKER = '====ArrangeDataStart====';
-const ARRANGE_DATA_END_MARKER = '====ArrangeDataEnd====';
 const itemUpdateQueues = new Map<string, Promise<void>>();
 const itemUpdateWaiters: Array<() => void> = [];
 let activeItemUpdates = 0;
@@ -41,19 +46,6 @@ function releaseItemUpdateSlot(): void {
   activeItemUpdates -= 1;
 }
 
-interface StoredTodoBody {
-  status: string;
-  urgent: boolean;
-  important: boolean;
-  checklist: string[];
-  remarks: TodoItem['remarks'];
-  startDateTime: string | null;
-  finishDateTime: string | null;
-  originalEtsDateTime: string | null;
-  originalEtaDateTime: string | null;
-  matrixOrder?: number;
-  scrumOrder?: number;
-}
 
 /**
  * Implements TodoStore against the Microsoft Graph Calendar API.
@@ -275,7 +267,17 @@ export class CalendarStore implements TodoStore {
     };
     if (existingEvent.body?.content) {
       const parsed = parseStoredBody(existingEvent.body);
-      if (parsed) existingStored = { ...existingStored, ...parsed };
+      if (parsed.status === 'corrupt') {
+        // Refusing the write is the whole point: merging onto defaults would
+        // persist them over the user's real status, flags, checklist and
+        // remarks, turning a recoverable read problem into permanent loss.
+        throw new Error(
+          `This item's saved data could not be read (${parsed.reason}). `
+          + 'Saving now would overwrite it, so the change was not applied. '
+          + 'Open the event in Outlook to repair or clear its description, then retry.',
+        );
+      }
+      if (parsed.status === 'ok') existingStored = { ...existingStored, ...parsed.data };
     }
 
     const merged: StoredTodoBody = {
@@ -420,6 +422,9 @@ export class CalendarStore implements TodoStore {
     const stale = items.filter(
       (item) =>
         item.id &&
+        // A write to an unreadable item is refused, so sweeping it would fail
+        // every time and keep the session sweep from ever being marked done.
+        !item.dataUnreadable &&
         isNonTerminalStatus(item.status) &&
         computeBumpedDates(item.etsDateTime, item.etaDateTime) !== null,
     );
@@ -480,18 +485,8 @@ function stripHtmlTags(html: string): string {
   return div.textContent || div.innerText || '';
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function buildBodyHtml(stored: StoredTodoBody): string {
-  const json = JSON.stringify(stored, null, 2);
-  return `<pre>${ARRANGE_DATA_START_MARKER}\n${escapeHtml(json)}\n${ARRANGE_DATA_END_MARKER}</pre>`;
+  return serializeArrangeBody(stored);
 }
 
 function extractBodyText(body: { contentType?: string; content?: string }): string {
@@ -499,20 +494,16 @@ function extractBodyText(body: { contentType?: string; content?: string }): stri
   return body.contentType === 'html' ? stripHtmlTags(body.content) : body.content;
 }
 
-function parseStoredBody(body: { contentType?: string; content?: string }): Partial<StoredTodoBody> | null {
-  const content = extractBodyText(body);
-  const startIndex = content.indexOf(ARRANGE_DATA_START_MARKER);
-  const endIndex = content.indexOf(ARRANGE_DATA_END_MARKER);
-  if (startIndex === -1 || endIndex === -1) return null;
-  try {
-    const jsonContent = content
-      .substring(startIndex + ARRANGE_DATA_START_MARKER.length, endIndex)
-      .trim();
-    return JSON.parse(jsonContent);
-  } catch (error) {
-    console.error('Error parsing stored TODO body:', error);
-    return null;
-  }
+function parseStoredBody(
+  body: { contentType?: string; content?: string },
+): ArrangePayloadResult<Partial<StoredTodoBody>> {
+  if (!body?.content) return { status: 'absent' };
+  const parsed = parseArrangeBody<Partial<StoredTodoBody>>(extractBodyText(body));
+  if (parsed.status !== 'ok') return parsed;
+  // Parsing only proves it was JSON. Accepting a payload whose fields are not
+  // Arrange data would merge nonsense over whatever the event really held.
+  const damage = describeStoredFieldDamage(parsed.data);
+  return damage === null ? parsed : { status: 'corrupt', reason: damage };
 }
 
 function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
@@ -529,8 +520,19 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
   };
 
   if (event.body?.content) {
-    const stored = parseStoredBody(event.body);
-    if (stored) {
+    const parsed = parseStoredBody(event.body);
+    if (parsed.status === 'corrupt') {
+      // Surfaced as a warning rather than thrown: one damaged event must not
+      // take down the whole board. Writes to this item are blocked separately
+      // so the unreadable data is never overwritten with defaults.
+      console.warn(
+        `Arrange data for event ${event.id} could not be read (${parsed.reason}); `
+        + 'showing the event without its saved fields.',
+      );
+      item.dataUnreadable = true;
+    }
+    if (parsed.status === 'ok') {
+      const stored = parsed.data;
       item.status = stored.status as TodoItem['status'];
       item.urgent = stored.urgent;
       item.important = stored.important;

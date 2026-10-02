@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useId, Suspense } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -27,6 +27,7 @@ import {
 import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import {
+  keepStoredOrder,
   moveBetweenContainers,
   nextOrder,
   normalizeOrder,
@@ -34,7 +35,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -43,9 +44,11 @@ import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
+import EmptyListMessage from '@/components/EmptyListMessage';
 import AddTodoItem from '@/components/AddTodoItem';
 import ViewTodoItem from '@/components/ViewTodoItem';
 import ManageTags from '@/components/ManageTags';
@@ -78,6 +81,9 @@ function TodoCard({ todo, onClick, onStatusChange }: {
 }) {
   const currentStatus = todo.status || 'new';
   const bumpedFrom = describeDateBump(todo);
+  // The backend refuses writes to an item whose saved data it could not read,
+  // so offering the status buttons would only produce a failed save.
+  const writesBlocked = todo.dataUnreadable === true;
 
   const handleStatusClick = (e: React.MouseEvent<HTMLButtonElement>, status: TodoStatus) => {
     e.stopPropagation(); // Prevent card click when clicking status
@@ -118,7 +124,10 @@ function TodoCard({ todo, onClick, onStatusChange }: {
             key={status}
             className={`${styles.statusBadge} ${styles[`status_${status}`]} ${status === currentStatus ? styles.statusActive : ''}`}
             onClick={(e) => handleStatusClick(e, status)}
-            title={`Set status to ${STATUS_LABELS[status]}`}
+            disabled={writesBlocked}
+            title={writesBlocked
+              ? 'Changing status is disabled while this item\u2019s saved data cannot be read'
+              : `Set status to ${STATUS_LABELS[status]}`}
             aria-pressed={status === currentStatus}
           >
             {STATUS_LABELS[status]}
@@ -146,10 +155,11 @@ function TodoCard({ todo, onClick, onStatusChange }: {
               })()}
               {todo.etsDateTime && todo.etaDateTime && <span className={styles.todoDateSep}>→</span>}
               {todo.etaDateTime && (() => {
-                const eta = formatRelativeDate(todo.etaDateTime);
+                const isOpen = todo.status !== 'finished' && todo.status !== 'cancelled';
+                const eta = formatRelativeDate(todo.etaDateTime, new Date(), isOpen ? 'deadline' : 'moment');
                 return (
                   <span 
-                    className={`${styles.todoDateValue} ${eta.isOverdue ? styles.todoDateOverdue : ''}`}
+                    className={`${styles.todoDateValue} ${isOpen && eta.isOverdue ? styles.todoDateOverdue : ''}`}
                     title={`ETA: ${eta.fullDate}`}
                   >
                     {eta.text}
@@ -291,6 +301,21 @@ function MatrixPageContent() {
   const { query } = taskQuery;
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
+  const statusPanelId = useId();
+  const tagsPanelId = useId();
+  const closeStatusPanel = useCallback(() => setShowFilters(false), []);
+  const closeTagsPanel = useCallback(() => setShowTags(false), []);
+  const statusPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showFilters,
+    closeStatusPanel,
+  );
+  const tagsPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
+    showTags,
+    closeTagsPanel,
+    // The tag bar is open by default and sits in the page flow, so collapsing
+    // it on every click elsewhere on the board would be hostile.
+    { dismissOnOutsidePress: false },
+  );
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const sensors = useSensors(
@@ -734,7 +759,11 @@ function MatrixPageContent() {
     }
 
     const orderSnapshot = snapshotItems(todoItems, replacements.map(item => item.id));
-    setTodoItems(items => replaceItems(items, replacements));
+    // An item whose saved data could not be read is refused by the stores, and
+    // one of them in the quadrant would otherwise fail the whole batch.
+    const writableUpdates = dropUnwritableUpdates(updates, todoItems);
+    const shownReplacements = keepStoredOrder(replacements, todoItems, 'matrixOrder');
+    setTodoItems(items => replaceItems(items, shownReplacements));
     setError(null);
     mutationVersionRef.current += 1;
     const orderMutationVersion = mutationVersionRef.current;
@@ -743,7 +772,7 @@ function MatrixPageContent() {
     beginMutation();
 
     try {
-      await persistUpdates(updates);
+      await persistUpdates(writableUpdates);
     } catch (err: unknown) {
       console.error('Error updating Matrix order:', err);
       revertOptimisticUpdate(orderSnapshot, orderMutationVersion, bookId);
@@ -894,13 +923,21 @@ function MatrixPageContent() {
     // the rewrite wrong: it targets the book the operation started on.
     if (!bookId) return false;
     if (affectedItems.length === 0) return true;
+    // An item whose saved data could not be read would be refused by the store
+    // and take the whole batch with it, leaving the tag unchanged everywhere.
+    const { writable: writableItems, skipped } = partitionWritableItems(affectedItems);
+    const skippedNotice = describeSkippedUnwritable(skipped.length);
+    if (writableItems.length === 0) {
+      if (skippedNotice) setError(skippedNotice);
+      return false;
+    }
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     const tagsMutationVersion = mutationVersionRef.current;
-    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
+    const tagsSnapshot = snapshotItems(todoItems, writableItems.map(item => item.id));
     beginMutation();
 
-    const affectedIds = new Set(affectedItems.map(a => a.id));
+    const affectedIds = new Set(writableItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -914,7 +951,7 @@ function MatrixPageContent() {
     try {
       const updated = await store.updateItems(
         operationBookId,
-        affectedItems.map(item => ({
+        writableItems.map(item => ({
           itemId: item.id,
           updates: {
             categories: computeNewCategories(item),
@@ -924,6 +961,7 @@ function MatrixPageContent() {
       // The backend change landed, so saved filters for that book must be
       // rewritten either way; only the on-screen merge is book-specific.
       if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
+      if (skippedNotice && bookIdRef.current === operationBookId) setError(skippedNotice);
       return true;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);
@@ -1156,9 +1194,12 @@ function MatrixPageContent() {
                   {allCategories.length > 0 && (
                     <div className={styles.comboButton}>
                       <button
+                        ref={tagsPanel.triggerRef}
                         className={styles.comboButtonMain}
                         onClick={() => setShowTags(prev => !prev)}
                         aria-expanded={showTags}
+                        aria-haspopup="true"
+                        aria-controls={tagsPanelId}
                       >
                         {showTags ? '▲' : '▼'} Tags{categoryFilterActive ? ' ●' : ''}
                       </button>
@@ -1174,16 +1215,19 @@ function MatrixPageContent() {
                     </div>
                   )}
                   <button
+                    ref={statusPanel.triggerRef}
                     className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
                     onClick={() => setShowFilters(prev => !prev)}
                     aria-expanded={showFilters}
+                    aria-haspopup="true"
+                    aria-controls={statusPanelId}
                   >
                     {showFilters ? '▲ Status' : '▼ Status'}{isStatusFilterActive(query) ? ' ●' : ''}
                   </button>
                 </div>
               </div>
               {showFilters && (
-                <div className={styles.filterBar}>
+                <div className={styles.filterBar} id={statusPanelId} ref={statusPanel.panelRef}>
                   {ALL_STATUSES.map(status => (
                     <div key={status} className={styles.filterGroup}>
                       <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
@@ -1212,7 +1256,7 @@ function MatrixPageContent() {
                 </div>
               )}
               {showTags && allCategories.length > 0 && (
-                <div className={styles.tagBar}>
+                <div className={styles.tagBar} id={tagsPanelId} ref={tagsPanel.panelRef}>
                   <div className={styles.categoryFilterChips}>
                       <button
                         className={`${styles.categoryFilterChip} ${query.includeUncategorized ? styles.categoryFilterChipActive : ''}`}
@@ -1267,6 +1311,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={true}
                       defaultImportant={true}
+                      addLabel="Add item to Do First"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1277,7 +1322,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.doFirst.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1286,7 +1331,11 @@ function MatrixPageContent() {
                       </SortableTodo>
                     ))}
                     {quadrants.doFirst.length === 0 && (
-                      <p className={styles.quadrantEmpty}>No items</p>
+                      <EmptyListMessage
+                        filtered={taskQuery.queryActive}
+                        onClearFilters={taskQuery.clearAll}
+                        className={styles.quadrantEmpty}
+                      />
                     )}
                   </SortableTodoList>
                 </div>
@@ -1305,6 +1354,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={false}
                       defaultImportant={true}
+                      addLabel="Add item to Schedule"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1315,7 +1365,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.schedule.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1324,7 +1374,11 @@ function MatrixPageContent() {
                       </SortableTodo>
                     ))}
                     {quadrants.schedule.length === 0 && (
-                      <p className={styles.quadrantEmpty}>No items</p>
+                      <EmptyListMessage
+                        filtered={taskQuery.queryActive}
+                        onClearFilters={taskQuery.clearAll}
+                        className={styles.quadrantEmpty}
+                      />
                     )}
                   </SortableTodoList>
                 </div>
@@ -1343,6 +1397,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={true}
                       defaultImportant={false}
+                      addLabel="Add item to Delegate"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1353,7 +1408,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.delegate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1362,7 +1417,11 @@ function MatrixPageContent() {
                       </SortableTodo>
                     ))}
                     {quadrants.delegate.length === 0 && (
-                      <p className={styles.quadrantEmpty}>No items</p>
+                      <EmptyListMessage
+                        filtered={taskQuery.queryActive}
+                        onClearFilters={taskQuery.clearAll}
+                        className={styles.quadrantEmpty}
+                      />
                     )}
                   </SortableTodoList>
                 </div>
@@ -1381,6 +1440,7 @@ function MatrixPageContent() {
                       disabled={loading}
                       defaultUrgent={false}
                       defaultImportant={false}
+                      addLabel="Add item to Eliminate"
                       compact={true}
                       availableCategories={allCategories}
                     />
@@ -1391,7 +1451,7 @@ function MatrixPageContent() {
                     className={styles.quadrantContent}
                   >
                     {quadrants.eliminate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder}>
+                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
                         <TodoCard
                           todo={todo}
                           onClick={isSavingOrder ? undefined : setSelectedTodo}
@@ -1400,7 +1460,11 @@ function MatrixPageContent() {
                       </SortableTodo>
                     ))}
                     {quadrants.eliminate.length === 0 && (
-                      <p className={styles.quadrantEmpty}>No items</p>
+                      <EmptyListMessage
+                        filtered={taskQuery.queryActive}
+                        onClearFilters={taskQuery.clearAll}
+                        className={styles.quadrantEmpty}
+                      />
                     )}
                   </SortableTodoList>
                 </div>

@@ -8,6 +8,8 @@ import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { getLastBookId, setLastBookId, clearLastBookId } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
+import { useHydrated } from './useHydrated';
+import { resolveBookRedirect } from './bookRedirect';
 
 /**
  * Shared hook for resolving the selected book.
@@ -26,6 +28,7 @@ export function useBookId(routePrefix: string) {
   const router = useRouter();
   const rawBookId = searchParams.get('bookId');
   const { isAuthenticated, busy, provider } = useAuthClient();
+  const hydrated = useHydrated();
   const normalizedBookId = normalizeBookId(rawBookId);
   const normalizedBackend = normalizedBookId
     ? parseBookId(normalizedBookId)?.backend
@@ -51,22 +54,25 @@ export function useBookId(routePrefix: string) {
   // Only fall back to saved-book localStorage when there's no `?bookId` at
   // all. An invalid value (present but unknown prefix) must not silently load
   // a different book — that's misleading. Send to /books in that case.
+  //
+  // Gated on hydration: `provider` comes from localStorage, which the
+  // statically pre-rendered HTML cannot read. Acting on the build-time
+  // placeholder would bounce every Google-backed board to /books on reload
+  // and on any deep link.
   useEffect(() => {
-    if (!rawBookId) {
-      const saved = normalizeBookId(getLastBookId(store.activeBackend));
-      const savedBackend = saved ? parseBookId(saved)?.backend : undefined;
-      if (saved && savedBackend && authProviderForBackend(savedBackend) === provider) {
-        router.replace(`${routePrefix}?bookId=${encodeURIComponent(saved)}`);
-      }
-    } else if (!normalizedBookId) {
-      router.replace('/books');
-    } else {
-      const backend = parseBookId(normalizedBookId)?.backend;
-      if (backend && authProviderForBackend(backend) !== provider) {
-        router.replace('/books');
-      }
+    const redirect = resolveBookRedirect({
+      hydrated,
+      rawBookId,
+      normalizedBookId,
+      savedBookId: hydrated ? getLastBookId(store.activeBackend) : null,
+      provider,
+      routePrefix,
+    });
+    if (redirect.kind === 'replace') {
+      router.replace(redirect.href);
     }
   }, [
+    hydrated,
     rawBookId,
     normalizedBookId,
     provider,

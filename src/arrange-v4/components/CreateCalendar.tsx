@@ -1,18 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { validateBookName } from '@/lib/books/bookName';
 import styles from './CreateCalendar.module.css';
 
 interface CreateCalendarProps {
   onCreateCalendar: (name: string) => Promise<void>;
   disabled?: boolean;
   appendArrangeSuffix?: boolean;
+  /** Display names of the books that already exist, used to reject duplicates. */
+  existingNames?: readonly string[];
 }
 
 export default function CreateCalendar({
   onCreateCalendar,
   disabled = false,
   appendArrangeSuffix = true,
+  existingNames = [],
 }: CreateCalendarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [calendarName, setCalendarName] = useState('');
@@ -21,9 +25,10 @@ export default function CreateCalendar({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!calendarName.trim()) {
-      setError('Book name is required');
+
+    const validation = validateBookName(calendarName, existingNames, { stripArrangeSuffix: appendArrangeSuffix });
+    if (!validation.ok) {
+      setError(validation.error);
       return;
     }
 
@@ -32,12 +37,11 @@ export default function CreateCalendar({
 
     try {
       const finalName = appendArrangeSuffix
-        && !calendarName.toLowerCase().endsWith(' by arrange')
-        ? `${calendarName} by arrange`
-        : calendarName;
-      
+        ? `${validation.name} by arrange`
+        : validation.name;
+
       await onCreateCalendar(finalName);
-      
+
       // Reset form and close modal on success
       setCalendarName('');
       setIsOpen(false);
@@ -67,6 +71,12 @@ export default function CreateCalendar({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen, isCreating]);
 
+  const liveValidation = validateBookName(calendarName, existingNames, { stripArrangeSuffix: appendArrangeSuffix });
+  // Only surface the live message once the user has typed something, so the
+  // empty form does not open with a red "required" error.
+  const liveError = calendarName.trim() && !liveValidation.ok ? liveValidation.error : null;
+  const shownError = error ?? liveError;
+
   return (
     <>
       <button
@@ -91,10 +101,15 @@ export default function CreateCalendar({
                   type="text"
                   id="calendarName"
                   value={calendarName}
-                  onChange={(e) => setCalendarName(e.target.value)}
+                  onChange={(e) => {
+                    setCalendarName(e.target.value);
+                    setError(null);
+                  }}
                   placeholder="My Book"
                   className={styles.input}
                   disabled={isCreating}
+                  aria-invalid={shownError ? true : undefined}
+                  aria-describedby={shownError ? 'calendarNameError' : undefined}
                   autoFocus
                 />
                 {appendArrangeSuffix && (
@@ -104,9 +119,9 @@ export default function CreateCalendar({
                 )}
               </div>
 
-              {error && (
-                <div className={styles.error}>
-                  {error}
+              {shownError && (
+                <div className={styles.error} id="calendarNameError" role="alert">
+                  {shownError}
                 </div>
               )}
 
@@ -121,7 +136,7 @@ export default function CreateCalendar({
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreating || !calendarName.trim()}
+                  disabled={isCreating || !liveValidation.ok}
                   className={styles.submitButton}
                 >
                   {isCreating ? 'Creating...' : 'Create'}

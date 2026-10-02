@@ -1,11 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { formatAbsoluteDateTime } from '@/lib/dateUtils';
 import { describeDateBump } from '@/lib/bumpNotice';
+import {
+  TODO_DIALOG_TABS,
+  tabElementId,
+  tabPanelElementId,
+  type TodoDialogTab,
+} from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
+import DialogTabs from './DialogTabs';
+import MarkdownView from './MarkdownView';
+import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
 
@@ -22,7 +31,7 @@ interface ViewTodoItemProps {
   availableCategories?: string[];
 }
 
-type ViewTab = 'essentials' | 'tags' | 'remarks' | 'checklist';
+type ViewTab = TodoDialogTab;
 
 function formatLocalDateTime(isoString?: string) {
   if (!isoString) return '';
@@ -37,6 +46,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
+  const tabsId = useId();
   // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
   const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
   const displayChecklist = viewChecklist ?? todo.checklist;
@@ -54,6 +64,11 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const [etsDateTime, setEtsDateTime] = useState(formatLocalDateTime(todo.etsDateTime));
   const [etaDateTime, setEtaDateTime] = useState(formatLocalDateTime(todo.etaDateTime));
   const [remarks, setRemarks] = useState(todo.remarks?.content || '');
+  // A remark with no stored type predates Markdown support, so it stays plain
+  // until the user opts it in; anything new is authored as Markdown.
+  const [remarksMarkdown, setRemarksMarkdown] = useState(
+    !todo.remarks || todo.remarks.type === 'markdown',
+  );
   const [checklist, setChecklist] = useState<string[]>(todo.checklist || []);
   const [categories, setCategories] = useState<string[]>(todo.categories || []);
 
@@ -90,7 +105,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const nextEts = etsDateTime ? new Date(etsDateTime).toISOString() : undefined;
       const nextEta = etaDateTime ? new Date(etaDateTime).toISOString() : undefined;
       const nextRemarks = remarks.trim()
-        ? { type: todo.remarks?.type || 'text', content: remarks.trim() }
+        ? {
+            type: (remarksMarkdown ? 'markdown' : 'text') as 'markdown' | 'text',
+            // Markdown is whitespace-significant — four leading spaces on the
+            // first line are a code block — so the text is stored verbatim.
+            content: remarksMarkdown ? remarks : remarks.trim(),
+          }
         : null;
       const nextChecklist = checklist.length > 0 ? checklist : [];
       const nextCategories = categories.length > 0 ? categories : [];
@@ -107,7 +127,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
         updatedFields.etaDateTime = nextEta;
       }
-      if (remarks !== (todo.remarks?.content || '')) updatedFields.remarks = nextRemarks;
+      // Compared untrimmed: saving an unrelated field must not quietly rewrite
+      // a remark the user never touched.
+      const remarksChanged =
+        remarks !== (todo.remarks?.content || '') ||
+        (nextRemarks !== null && nextRemarks.type !== (todo.remarks?.type || 'text'));
+      if (remarksChanged) updatedFields.remarks = nextRemarks;
       if (!sameValue(nextChecklist, todo.checklist || [])) {
         updatedFields.checklist = nextChecklist;
       }
@@ -136,6 +161,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setEtsDateTime(formatLocalDateTime(todo.etsDateTime));
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
+    setRemarksMarkdown(!todo.remarks || todo.remarks.type === 'markdown');
     setChecklist(todo.checklist || []);
     setCategories(todo.categories || []);
     setError(null);
@@ -178,19 +204,24 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           <form onSubmit={handleSave} className={styles.form}>
-            <div className={styles.tabBar}>
-              <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('essentials')}>Essentials</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('tags')}>Tags</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('remarks')}>Remarks</button>
-              <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
-                onClick={() => setActiveTab('checklist')}>Checklist</button>
-            </div>
+            <DialogTabs
+               tabs={TODO_DIALOG_TABS}
+               activeTab={activeTab}
+               onChange={setActiveTab}
+               idPrefix={tabsId}
+               ariaLabel="TODO item sections"
+               className={styles.tabBar}
+               tabClassName={styles.tab}
+               activeTabClassName={styles.tabActive}
+            />
 
             {activeTab === 'essentials' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'essentials')}
+                aria-labelledby={tabElementId(tabsId, 'essentials')}
+              >
                 <div className={styles.formGroup}>
                   <label htmlFor="edit-subject" className={styles.label}>Subject *</label>
                   <input type="text" id="edit-subject" value={subject}
@@ -250,7 +281,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             {activeTab === 'tags' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'tags')}
+                aria-labelledby={tabElementId(tabsId, 'tags')}
+              >
                 <TagPicker
                   availableCategories={availableCategories}
                   categories={categories}
@@ -261,19 +297,32 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             {activeTab === 'remarks' && (
-              <div className={styles.tabContent}>
-                <div className={styles.formGroupFill}>
-                  <label htmlFor="edit-remarks" className={styles.label}>Remarks</label>
-                  <textarea id="edit-remarks" value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Add any notes or remarks..."
-                    disabled={isSubmitting} className={styles.textarea} />
-                </div>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'remarks')}
+                aria-labelledby={tabElementId(tabsId, 'remarks')}
+              >
+                <RemarksEditor
+                  textareaId="edit-remarks"
+                  value={remarks}
+                  onChange={setRemarks}
+                  disabled={isSubmitting}
+                  isMarkdown={remarksMarkdown}
+                  onIsMarkdownChange={
+                    todo.remarks && todo.remarks.type !== 'markdown' ? setRemarksMarkdown : undefined
+                  }
+                />
               </div>
             )}
 
             {activeTab === 'checklist' && (
-              <div className={styles.tabContent}>
+              <div
+                className={styles.tabContent}
+                role="tabpanel"
+                id={tabPanelElementId(tabsId, 'checklist')}
+                aria-labelledby={tabElementId(tabsId, 'checklist')}
+              >
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Checklist</label>
                   <ChecklistEditor
@@ -321,20 +370,34 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           <div className={styles.error} role="alert">{error}</div>
         )}
 
-        <div className={styles.form}>
-          <div className={styles.tabBar}>
-            <button type="button" className={`${styles.tab} ${activeTab === 'essentials' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('essentials')}>Essentials</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'tags' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('tags')}>Tags</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'remarks' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('remarks')}>Remarks</button>
-            <button type="button" className={`${styles.tab} ${activeTab === 'checklist' ? styles.tabActive : ''}`}
-              onClick={() => setActiveTab('checklist')}>Checklist</button>
+        {todo.dataUnreadable && (
+          <div className={styles.warning} role="status">
+            Some of this item&apos;s saved data could not be read, so status, flags,
+            checklist and remarks are shown as defaults. The saved data is still
+            there — editing is disabled so it cannot be overwritten. Open the
+            event in Outlook to repair or clear its description.
           </div>
+        )}
+
+        <div className={styles.form}>
+          <DialogTabs
+             tabs={TODO_DIALOG_TABS}
+             activeTab={activeTab}
+             onChange={setActiveTab}
+             idPrefix={tabsId}
+             ariaLabel="TODO item sections"
+             className={styles.tabBar}
+             tabClassName={styles.tab}
+             activeTabClassName={styles.tabActive}
+          />
 
           {activeTab === 'essentials' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'essentials')}
+              aria-labelledby={tabElementId(tabsId, 'essentials')}
+            >
               <div className={styles.formGroup}>
                 <span className={styles.label}>Status</span>
                 <span className={styles.value}>{STATUS_LABELS[todo.status || 'new']}</span>
@@ -390,7 +453,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'tags' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'tags')}
+              aria-labelledby={tabElementId(tabsId, 'tags')}
+            >
               {todo.categories && todo.categories.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Tags</span>
@@ -409,11 +477,20 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'remarks' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'remarks')}
+              aria-labelledby={tabElementId(tabsId, 'remarks')}
+            >
               {todo.remarks?.content ? (
                 <div className={styles.formGroupFill}>
                   <span className={styles.label}>Remarks</span>
-                  <div className={styles.remarksBox}>{todo.remarks.content}</div>
+                  {todo.remarks.type === 'markdown' ? (
+                    <MarkdownView content={todo.remarks.content} className={styles.remarksBox} />
+                  ) : (
+                    <div className={styles.remarksBox}>{todo.remarks.content}</div>
+                  )}
                 </div>
               ) : (
                 <p className={styles.tabPlaceholder}>No remarks</p>
@@ -422,7 +499,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
           )}
 
           {activeTab === 'checklist' && (
-            <div className={styles.tabContent}>
+            <div
+              className={styles.tabContent}
+              role="tabpanel"
+              id={tabPanelElementId(tabsId, 'checklist')}
+              aria-labelledby={tabElementId(tabsId, 'checklist')}
+            >
               {displayChecklist && displayChecklist.length > 0 ? (
                 <div className={styles.formGroup}>
                   <span className={styles.label}>Checklist</span>
@@ -466,7 +548,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             {onUpdate && (
               <button type="button"
                 onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
-                disabled={checklistUpdating}
+                disabled={checklistUpdating || todo.dataUnreadable}
+                title={todo.dataUnreadable
+                  ? 'Editing is disabled while this item\u2019s saved data cannot be read'
+                  : undefined}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>

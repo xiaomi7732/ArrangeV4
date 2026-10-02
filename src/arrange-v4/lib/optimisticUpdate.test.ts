@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { restoreSnapshot, snapshotItems } from './optimisticUpdate';
+import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from './optimisticUpdate';
 
 interface Row {
   id: string;
@@ -79,5 +79,63 @@ describe('restoreSnapshot', () => {
 
     const result = restoreSnapshot(optimistic, snapshot);
     assert.deepEqual(result.map(row => row.value), ['A', 'X', 'C']);
+  });
+});
+
+describe('dropUnwritableUpdates', () => {
+  const items = [
+    { id: 'a' },
+    { id: 'b', dataUnreadable: true },
+    { id: 'c' },
+  ];
+
+  it('skips an item whose saved data could not be read', () => {
+    // The stores refuse such a write, and one of them in the lane would
+    // otherwise fail the whole reorder batch.
+    const updates = new Map([['a', 1], ['b', 2], ['c', 3]]);
+    assert.deepEqual([...dropUnwritableUpdates(updates, items).keys()], ['a', 'c']);
+  });
+
+  it('copies the map when every item is writable', () => {
+    const updates = new Map([['a', 1]]);
+    const result = dropUnwritableUpdates(updates, [{ id: 'a' }]);
+    assert.deepEqual([...result], [['a', 1]]);
+    assert.notEqual(result, updates);
+  });
+});
+
+describe('partitionWritableItems', () => {
+  it('keeps unreadable items out of the batch so the rest still write', () => {
+    const items = [
+      { id: 'a' },
+      { id: 'b', dataUnreadable: true },
+      { id: 'c' },
+    ];
+    const { writable, skipped } = partitionWritableItems(items);
+    assert.deepEqual(writable.map(i => i.id), ['a', 'c']);
+    assert.deepEqual(skipped.map(i => i.id), ['b']);
+  });
+
+  it('reports nothing skipped when every item is writable', () => {
+    const { writable, skipped } = partitionWritableItems([
+      { id: 'a', dataUnreadable: false },
+      { id: 'b', dataUnreadable: false },
+    ]);
+    assert.equal(writable.length, 2);
+    assert.equal(skipped.length, 0);
+  });
+});
+
+describe('describeSkippedUnwritable', () => {
+  it('says nothing when every item was written', () => {
+    assert.equal(describeSkippedUnwritable(0), null);
+  });
+
+  it('counts one item in the singular', () => {
+    assert.match(describeSkippedUnwritable(1) || '', /^1 item kept the old tag/);
+  });
+
+  it('counts several items in the plural', () => {
+    assert.match(describeSkippedUnwritable(3) || '', /^3 items kept the old tag/);
   });
 });

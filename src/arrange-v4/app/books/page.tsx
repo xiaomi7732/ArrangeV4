@@ -134,6 +134,7 @@ export default function BooksPage() {
           onCreateCalendar={handleCreateBook}
           disabled={loading}
           appendArrangeSuffix={auth.provider === 'microsoft'}
+          existingNames={books.map(b => b.name)}
         />
         <button
           onClick={() => void fetchBooks()}
@@ -150,7 +151,7 @@ export default function BooksPage() {
         </button>
       </>
     ),
-    [isAuthenticated, authRecoveryRequired, busy, loading],
+    [isAuthenticated, authRecoveryRequired, busy, loading, books, auth.provider],
   );
 
   if (authRecoveryRequired) {

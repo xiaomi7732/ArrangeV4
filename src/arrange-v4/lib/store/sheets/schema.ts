@@ -335,8 +335,9 @@ function previousMetadataCell(headers: string[], row: unknown[]): SheetMetadata 
 
 function remarksCell(value: unknown): TodoItem['remarks'] {
   if (!value) return null;
+  const raw = String(value);
   try {
-    const parsed = JSON.parse(String(value)) as Partial<NonNullable<TodoItem['remarks']>>;
+    const parsed = JSON.parse(raw) as Partial<NonNullable<TodoItem['remarks']>>;
     if (
       (parsed.type === 'text' || parsed.type === 'markdown')
       && typeof parsed.content === 'string'
@@ -344,9 +345,12 @@ function remarksCell(value: unknown): TodoItem['remarks'] {
       return { type: parsed.type, content: parsed.content };
     }
   } catch {
-    // Invalid user-edited JSON is treated as absent rather than breaking the book.
+    // Falls through to the plain-text reading below.
   }
-  return null;
+  // A cell that is not our envelope was almost certainly typed by hand in
+  // Google Sheets. Showing it as a plain-text remark keeps it visible and
+  // keeps the next save from quietly replacing it, which discarding it did.
+  return { type: 'text', content: raw };
 }
 
 function statusCell(value: unknown): TodoStatus {
