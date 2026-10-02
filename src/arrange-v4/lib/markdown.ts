@@ -165,11 +165,35 @@ function readDestination(text: string, start: number): Destination | null {
     value = text.slice(valueStart, Math.min(i, limit));
   }
 
-  // Whatever is left before the closing parenthesis is a title, which is not
-  // shown in the rendered link. It has to close on the same line: otherwise an
-  // unclosed `](` would swallow every visible word up to the next `)`.
-  while (i < limit && text[i] !== ')' && text[i] !== '\n') i += 1;
-  return text[i] === ')' && i < limit ? { value, end: i + 1 } : null;
+  // A title may follow, in quotes or parentheses; it is not shown in the
+  // rendered link. Anything else before the closing parenthesis means this was
+  // never a link — `[x](foo bar baz)` renders as the literal text it looks
+  // like, so its words have to stay in the index.
+  while (i < limit && (text[i] === ' ' || text[i] === '\t')) i += 1;
+  if (i < limit && text[i] !== ')') {
+    const closer = TITLE_DELIMITERS.get(text[i]);
+    if (closer === undefined) return null;
+    i += 1;
+    while (i < limit && text[i] !== closer && text[i] !== '\n') i += 1;
+    if (text[i] !== closer) return null;
+    i += 1;
+    while (i < limit && (text[i] === ' ' || text[i] === '\t')) i += 1;
+  }
+  return i < limit && text[i] === ')' ? { value, end: i + 1 } : null;
+}
+
+/** The ways a link title can be wrapped, and what closes each of them. */
+const TITLE_DELIMITERS = new Map([['"', '"'], ["'", "'"], ['(', ')']]);
+
+/**
+ * Whether the character at `index` is escaped, so `\!` is a literal bang and
+ * not image syntax. A backslash run only ever precedes one such character, so
+ * counting it keeps the whole scan linear.
+ */
+function isEscaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === '\\'; i -= 1) backslashes += 1;
+  return backslashes % 2 === 1;
 }
 
 /**
@@ -218,8 +242,9 @@ function flattenLinks(text: string, liftCode: (code: string) => string): string 
       continue;
     }
 
-    // `![alt](src)` is an image: the bang is syntax, not text.
-    if (out.endsWith('!')) out = out.slice(0, -1);
+    // `![alt](src)` is an image: the bang is syntax, not text. An escaped
+    // `\!` is a bang the reader sees, so it stays.
+    if (text[i - 1] === '!' && !isEscaped(text, i - 1)) out = out.slice(0, -1);
     const label = flattenLinks(text.slice(labelStart, j - 1), liftCode);
     out += `${label} ${liftCode(destination.value)} `;
     i = destination.end;

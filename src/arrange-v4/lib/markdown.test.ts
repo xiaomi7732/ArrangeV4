@@ -88,6 +88,20 @@ describe('markdownToSearchText', () => {
     );
   });
 
+  it('keeps the words of something that only looks like a link', () => {
+    // `[x](foo bar baz)` has no valid title, so it renders as plain text.
+    assert.equal(markdownToSearchText('[x](foo bar baz)'), '[x](foo bar baz)');
+    assert.equal(markdownToSearchText('[x](https://h "a title")'), 'x https://h');
+    assert.equal(markdownToSearchText('[x](https://h (a title))'), 'x https://h');
+  });
+
+  it('keeps an escaped bang, which the reader sees', () => {
+    assert.equal(
+      markdownToSearchText('\\![x](https://host)'),
+      '\\!x https://host',
+    );
+  });
+
   it('unwraps an angle-bracketed destination and drops a link title', () => {
     assert.equal(
       markdownToSearchText('[a](<https://example.com/a b>)'),
