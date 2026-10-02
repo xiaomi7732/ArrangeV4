@@ -18,6 +18,8 @@
   "include": [
     "lib/auth/recoveryState.ts",
     "lib/auth/recoveryState.test.ts",
+    "lib/dragClick.ts",
+    "lib/dragClick.test.ts",
     "lib/dateUtils.ts",
     "lib/dateUtils.test.ts",
     "lib/markdown.ts",

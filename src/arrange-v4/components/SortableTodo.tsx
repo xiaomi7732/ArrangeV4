@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   closestCenter,
   pointerWithin,
@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { createClickSuppressor, type ClickSuppressor } from '@/lib/dragClick';
 import styles from './SortableTodo.module.css';
 
 interface SortableTodoProps {
@@ -44,6 +45,18 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
     disabled,
   });
 
+  // The whole card is the drag surface, so the click that ends a drag has to be
+  // swallowed or dropping a card would also open it.
+  const suppressor = useRef<ClickSuppressor | null>(null);
+  if (suppressor.current === null) suppressor.current = createClickSuppressor();
+  if (isDragging) suppressor.current.noteDragging();
+
+  const handleClickCapture = (event: React.MouseEvent) => {
+    if (!suppressor.current?.shouldSuppressClick()) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -53,6 +66,13 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
         transition,
         opacity: isDragging ? 0.35 : 1,
       }}
+      // Dragging from anywhere on the card, not just the grip. The sensors are
+      // configured with a distance (mouse) and delay (touch) threshold, so a
+      // plain click on the card or on a button inside it still works; the grip
+      // stays as the visual hint and the keyboard-reachable activator.
+      onPointerDownCapture={() => suppressor.current?.notePointerDown()}
+      onClickCapture={handleClickCapture}
+      {...listeners}
     >
       <div className={styles.content}>{children}</div>
       <button
@@ -61,7 +81,6 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
         className={styles.dragHandle}
         aria-label="Drag to reorder"
         {...attributes}
-        {...listeners}
       >
         <GripIcon />
       </button>
