@@ -51,14 +51,9 @@ export function markdownToSearchText(source: string): string {
     return `${CODE_SPAN_SENTINEL}${codeSpans.length - 1}${CODE_SPAN_SENTINEL}`;
   };
 
-  const replaceLink = (
-    _match: string,
-    label: string,
-    angled: string | undefined,
-    bare: string | undefined,
-  ): string => `${label} ${liftCode(angled ?? bare ?? '')} `;
+  const replaceLinks = (text: string): string => flattenLinks(text, liftCode);
 
-  return source
+  const withCodeLifted = source
     // Any stray sentinel in the source would collide with the placeholders.
     .split(CODE_SPAN_SENTINEL)
     .join('')
@@ -72,25 +67,24 @@ export function markdownToSearchText(source: string): string {
     )
     // Any fence left over is unmatched; drop it and its language tag.
     .replace(/^[ \t]{0,3}(?:`{3,}|~{3,})[^\n]*\n?/gm, ' ')
-    .replace(/(`+)([\s\S]*?)\1(?!`)/g, (_match, _fence: string, code: string) => liftCode(code))
-    // Images and links keep their visible text, and their destination is kept
-    // too: before remarks were Markdown they were indexed verbatim, so a
-    // search for a hostname used to find the task and still should. The
-    // destination is lifted out like code, because a URL is literal text —
-    // `Foo_(bar)` and `__init__.py` must survive the marker stripping below —
-    // and it is separated by spaces so it cannot form a match that spans the
-    // boundary with the surrounding text.
-    .replace(new RegExp(`!\\[([^\\]]*)\\]${LINK_DESTINATION}`, 'g'), replaceLink)
-    .replace(new RegExp(`\\[([^\\]]*)\\]${LINK_DESTINATION}`, 'g'), replaceLink)
+    .replace(/(`+)([\s\S]*?)\1(?!`)/g, (_match, _fence: string, code: string) => liftCode(code));
+
+  // Images and links keep their visible text, and their destination is kept
+  // too: before remarks were Markdown they were indexed verbatim, so a search
+  // for a hostname used to find the task and still should. The destination is
+  // lifted out like code, because a URL is literal text — `Foo_(bar)` and
+  // `__init__.py` must survive the marker stripping below — and it is
+  // separated by spaces so it cannot form a match that spans the boundary
+  // with the surrounding text.
+  return replaceLinks(withCodeLifted)
     // Autolinks.
     .replace(/<((?:https?|mailto):[^>\s]+)>/g, '$1')
-    // Leading block markers: headings, quotes, list bullets.
+    // Leading block markers: headings, quotes, list bullets. A GFM task
+    // marker renders as a checkbox rather than as text, so it goes with the
+    // bullet that makes it one — a line of prose starting `[x]` keeps it.
     .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
     .replace(/^[ \t]*>[ \t]?/gm, '')
-    .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/gm, '')
-    // A GFM task marker renders as a checkbox, not as text: leaving it in
-    // would make a search for "x" match every remark with a ticked box.
-    .replace(/^\[[ xX]\][ \t]*/gm, '')
+    .replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+(?:\[[ xX]\][ \t]+)?/gm, '')
     // Table pipes.
     .replace(/\|/g, ' ')
     // Asterisk, tilde and backtick runs are always markers: CommonMark treats
@@ -120,11 +114,119 @@ export function markdownToSearchText(source: string): string {
 const CODE_SPAN_SENTINEL = '\u0000';
 
 /**
- * The `(destination)` half of a link or image, in either the bare or the
- * angle-bracketed form. A title after the destination is dropped.
+ * The longest link label and destination worth scanning.
+ *
+ * An unmatched `[` or `(` has to be abandoned at some point, and without a
+ * bound every one of them would rescan the rest of the remark: a shared
+ * Sheets cell full of `[x](` fragments would then take seconds to index on
+ * every keystroke. Real labels and URLs are far below these.
  */
-const LINK_DESTINATION =
-  '\\(\\s*(?:<([^>\\n]*)>|((?:[^()\\s]|\\([^()\\s]*\\))*))[^)]*\\)';
+const MAX_LABEL_LENGTH = 1024;
+const MAX_DESTINATION_LENGTH = 2048;
+
+interface Destination {
+  value: string;
+  end: number;
+}
+
+/**
+ * Reads the `(destination "title")` that follows a link label, starting at the
+ * opening parenthesis. Handles the bare form with balanced parentheses, the
+ * angle-bracketed form, and an optional title. Returns null when the
+ * parenthesis is not closed within the bound, which means it was not a link.
+ */
+function readDestination(text: string, start: number): Destination | null {
+  const limit = Math.min(text.length, start + MAX_DESTINATION_LENGTH);
+  let i = start + 1;
+  while (i < limit && (text[i] === ' ' || text[i] === '\t')) i += 1;
+
+  let value: string;
+  if (text[i] === '<') {
+    const close = text.indexOf('>', i + 1);
+    const newline = text.indexOf('\n', i + 1);
+    if (close === -1 || close >= limit || (newline !== -1 && newline < close)) return null;
+    value = text.slice(i + 1, close);
+    i = close + 1;
+  } else {
+    const valueStart = i;
+    let depth = 0;
+    while (i < limit) {
+      const char = text[i];
+      if (char === '\\') { i += 2; continue; }
+      if (char === ' ' || char === '\t' || char === '\n') break;
+      if (char === '(') depth += 1;
+      else if (char === ')') {
+        if (depth === 0) break;
+        depth -= 1;
+      }
+      i += 1;
+    }
+    if (depth !== 0) return null;
+    value = text.slice(valueStart, Math.min(i, limit));
+  }
+
+  // Whatever is left before the closing parenthesis is a title, which is not
+  // shown in the rendered link. It has to close on the same line: otherwise an
+  // unclosed `](` would swallow every visible word up to the next `)`.
+  while (i < limit && text[i] !== ')' && text[i] !== '\n') i += 1;
+  return text[i] === ')' && i < limit ? { value, end: i + 1 } : null;
+}
+
+/**
+ * Replaces every link and image with its visible text followed by its
+ * destination, lifting the destination out of reach of the marker stripping.
+ *
+ * Hand-written rather than a regex: a destination may contain balanced
+ * parentheses to any depth, and a regex that tries also backtracks badly over
+ * malformed input.
+ */
+function flattenLinks(text: string, liftCode: (code: string) => string): string {
+  let out = '';
+  let i = 0;
+
+  while (i < text.length) {
+    if (text[i] === '\\') {
+      out += text.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (text[i] !== '[') {
+      out += text[i];
+      i += 1;
+      continue;
+    }
+
+    // A label may itself contain a link or an image, so brackets are counted.
+    const labelStart = i + 1;
+    const labelLimit = Math.min(text.length, labelStart + MAX_LABEL_LENGTH);
+    let depth = 1;
+    let j = labelStart;
+    while (j < labelLimit && depth > 0) {
+      const char = text[j];
+      if (char === '\\') { j += 2; continue; }
+      if (char === '[') depth += 1;
+      else if (char === ']') depth -= 1;
+      j += 1;
+    }
+
+    const destination = depth === 0 && text[j] === '('
+      ? readDestination(text, j)
+      : null;
+    if (!destination) {
+      out += text[i];
+      i += 1;
+      continue;
+    }
+
+    // `![alt](src)` is an image: the bang is syntax, not text.
+    if (out.endsWith('!')) out = out.slice(0, -1);
+    const label = flattenLinks(text.slice(labelStart, j - 1), liftCode);
+    out += `${label} ${liftCode(destination.value)} `;
+    i = destination.end;
+  }
+
+  return out;
+}
 
 const WORD_CHAR_REGEX = /[\p{L}\p{N}_]/u;
 

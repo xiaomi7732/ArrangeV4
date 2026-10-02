@@ -61,6 +61,31 @@ describe('markdownToSearchText', () => {
       markdownToSearchText('[src](https://host/__init__.py)'),
       'src https://host/__init__.py',
     );
+    assert.equal(
+      markdownToSearchText('[deep](https://x/a(b(c))d)'),
+      'deep https://x/a(b(c))d',
+    );
+  });
+
+  it('keeps the words around an unclosed link, which are plainly visible', () => {
+    assert.equal(
+      markdownToSearchText('see [step 2](no link here\nping ops (they have the pager)'),
+      'see [step 2](no link here\nping ops (they have the pager)',
+    );
+  });
+
+  it('flattens a long run of malformed links without stalling', () => {
+    const started = Date.now();
+    markdownToSearchText('[x]('.repeat(12_000));
+    markdownToSearchText(`[a](${'x'.repeat(48_000)}`);
+    assert.ok(Date.now() - started < 1_000, 'flattening should stay close to linear');
+  });
+
+  it('keeps an image nested inside a link', () => {
+    assert.equal(
+      markdownToSearchText('[![chart](https://x/y.png)](https://x/report)'),
+      'chart https://x/y.png https://x/report',
+    );
   });
 
   it('unwraps an angle-bracketed destination and drops a link title', () => {
@@ -80,6 +105,8 @@ describe('markdownToSearchText', () => {
       markdownToSearchText('- [x] ship it\n- [ ] write it up'),
       'ship it\nwrite it up',
     );
+    // Without a bullet it is not a task item, just prose starting with "[x]".
+    assert.equal(markdownToSearchText('[x] marks the spot'), '[x] marks the spot');
   });
 
   it('keeps autolink targets, which are the only text shown', () => {
