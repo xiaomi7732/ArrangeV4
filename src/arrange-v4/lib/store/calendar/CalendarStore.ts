@@ -21,6 +21,8 @@ import {
   type ArrangePayloadResult,
 } from './body';
 import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
+import type { StoredTodoBody } from './storedFields';
+import { describeStoredFieldDamage } from './storedFields';
 
 const itemUpdateQueues = new Map<string, Promise<void>>();
 const itemUpdateWaiters: Array<() => void> = [];
@@ -44,19 +46,6 @@ function releaseItemUpdateSlot(): void {
   activeItemUpdates -= 1;
 }
 
-interface StoredTodoBody {
-  status: string;
-  urgent: boolean;
-  important: boolean;
-  checklist: string[];
-  remarks: TodoItem['remarks'];
-  startDateTime: string | null;
-  finishDateTime: string | null;
-  originalEtsDateTime: string | null;
-  originalEtaDateTime: string | null;
-  matrixOrder?: number;
-  scrumOrder?: number;
-}
 
 /**
  * Implements TodoStore against the Microsoft Graph Calendar API.
@@ -510,31 +499,11 @@ function parseStoredBody(
 ): ArrangePayloadResult<Partial<StoredTodoBody>> {
   if (!body?.content) return { status: 'absent' };
   const parsed = parseArrangeBody<Partial<StoredTodoBody>>(extractBodyText(body));
-  if (parsed.status === 'ok' && !hasAnyStoredField(parsed.data)) {
-    // Arrange never writes a payload without its own fields, so an object with
-    // none of them is damage. Accepting it would merge defaults over whatever
-    // the event really held.
-    return { status: 'corrupt', reason: 'payload has no Arrange fields' };
-  }
-  return parsed;
-}
-
-const STORED_BODY_FIELDS: readonly (keyof StoredTodoBody)[] = [
-  'status',
-  'urgent',
-  'important',
-  'checklist',
-  'remarks',
-  'startDateTime',
-  'finishDateTime',
-  'originalEtsDateTime',
-  'originalEtaDateTime',
-  'matrixOrder',
-  'scrumOrder',
-];
-
-function hasAnyStoredField(data: Partial<StoredTodoBody>): boolean {
-  return STORED_BODY_FIELDS.some(field => field in data);
+  if (parsed.status !== 'ok') return parsed;
+  // Parsing only proves it was JSON. Accepting a payload whose fields are not
+  // Arrange data would merge nonsense over whatever the event really held.
+  const damage = describeStoredFieldDamage(parsed.data);
+  return damage === null ? parsed : { status: 'corrupt', reason: damage };
 }
 
 function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {

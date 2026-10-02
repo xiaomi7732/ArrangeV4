@@ -57,6 +57,8 @@
     "lib/store/sheets/GoogleSheetsStore.test.ts",
     "lib/store/calendar/body.ts",
     "lib/store/calendar/body.test.ts",
+    "lib/store/calendar/storedFields.ts",
+    "lib/store/calendar/storedFields.test.ts",
     "lib/search/taskQuery.ts",
     "lib/search/taskQuery.test.ts",
     "lib/search/filterPresets.ts",

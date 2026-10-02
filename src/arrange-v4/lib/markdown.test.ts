@@ -81,6 +81,12 @@ describe('markdownToSearchText', () => {
     assert.ok(Date.now() - started < 1_000, 'flattening should stay close to linear');
   });
 
+  it('flattens a long run of unclosed angle destinations without stalling', () => {
+    const started = Date.now();
+    markdownToSearchText(`${'[x](<'.repeat(12_000)}tail`);
+    assert.ok(Date.now() - started < 1_000, 'the angle scan should respect its bound');
+  });
+
   it('keeps an image nested inside a link', () => {
     assert.equal(
       markdownToSearchText('[![chart](https://x/y.png)](https://x/report)'),

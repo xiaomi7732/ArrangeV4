@@ -33,7 +33,7 @@ import {
   replaceItems,
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
-import { dropUnwritableUpdates, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -718,13 +718,21 @@ function ScrumPageContent() {
     // the rewrite wrong: it targets the book the operation started on.
     if (!bookId) return false;
     if (affectedItems.length === 0) return true;
+    // An item whose saved data could not be read would be refused by the store
+    // and take the whole batch with it, leaving the tag unchanged everywhere.
+    const { writable: writableItems, skipped } = partitionWritableItems(affectedItems);
+    const skippedNotice = describeSkippedUnwritable(skipped.length);
+    if (writableItems.length === 0) {
+      if (skippedNotice) setError(skippedNotice);
+      return false;
+    }
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     const tagsMutationVersion = mutationVersionRef.current;
-    const tagsSnapshot = snapshotItems(todoItems, affectedItems.map(item => item.id));
+    const tagsSnapshot = snapshotItems(todoItems, writableItems.map(item => item.id));
     beginMutation();
 
-    const affectedIds = new Set(affectedItems.map(a => a.id));
+    const affectedIds = new Set(writableItems.map(a => a.id));
 
     setTodoItems(items =>
       items.map(item =>
@@ -738,7 +746,7 @@ function ScrumPageContent() {
     try {
       const updated = await store.updateItems(
         operationBookId,
-        affectedItems.map(item => ({
+        writableItems.map(item => ({
           itemId: item.id,
           updates: {
             categories: computeNewCategories(item),
@@ -748,6 +756,7 @@ function ScrumPageContent() {
       // The backend change landed, so saved filters for that book must be
       // rewritten either way; only the on-screen merge is book-specific.
       if (bookIdRef.current === operationBookId) mergePersistedSources(updated);
+      if (skippedNotice && bookIdRef.current === operationBookId) setError(skippedNotice);
       return true;
     } catch (err: unknown) {
       console.error('Error updating tags:', err);

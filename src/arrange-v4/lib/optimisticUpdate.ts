@@ -63,3 +63,32 @@ export function dropUnwritableUpdates<U>(
   if (unwritable.size === 0) return new Map(updates);
   return new Map([...updates].filter(([id]) => !unwritable.has(id)));
 }
+
+/**
+ * Splits items into those a store will accept a write for and those it will
+ * refuse because their stored data could not be read.
+ *
+ * A bulk tag rename spans whatever items carry the tag, so a single damaged
+ * one would otherwise reject the whole batch and leave the tag unchanged
+ * everywhere. Renaming the items that can be written, and saying plainly which
+ * were left alone, is the honest outcome.
+ */
+export function partitionWritableItems<T extends { dataUnreadable?: boolean }>(
+  items: readonly T[],
+): { writable: T[]; skipped: T[] } {
+  const writable: T[] = [];
+  const skipped: T[] = [];
+  for (const item of items) {
+    if (item.dataUnreadable) skipped.push(item);
+    else writable.push(item);
+  }
+  return { writable, skipped };
+}
+
+/** Explains which items a bulk tag change could not touch, or null when all were written. */
+export function describeSkippedUnwritable(count: number): string | null {
+  if (count <= 0) return null;
+  const subject = count === 1 ? '1 item' : `${count} items`;
+  return `${subject} kept the old tag because the saved data could not be read. `
+    + 'Open those events in Outlook to repair or clear their description, then retry.';
+}

@@ -170,9 +170,16 @@ function readDestination(text: string, start: number): Destination | null {
 
   let value: string;
   if (text[i] === '<') {
-    const close = text.indexOf('>', i + 1);
-    const newline = text.indexOf('\n', i + 1);
-    if (close === -1 || close >= limit || (newline !== -1 && newline < close)) return null;
+    // Scanned forward one character at a time rather than with indexOf, which
+    // would search the whole remainder of the document: a stray `[x](<` would
+    // then cost a full rescan each time, making a page of them quadratic.
+    let close = -1;
+    for (let j = i + 1; j < limit; j += 1) {
+      const char = text[j];
+      if (char === '\n') return null;
+      if (char === '>') { close = j; break; }
+    }
+    if (close === -1) return null;
     value = text.slice(i + 1, close);
     i = close + 1;
   } else {
