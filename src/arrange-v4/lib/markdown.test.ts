@@ -145,6 +145,26 @@ describe('markdownToSearchText', () => {
       markdownToSearchText('read https://host/page.'),
       'read https://host/page.',
     );
+    assert.equal(
+      markdownToSearchText('HTTPS://host/__init__.py'),
+      'HTTPS://host/__init__.py',
+    );
+  });
+
+  it('accepts a link title that is escaped or wraps onto the next line', () => {
+    assert.equal(
+      markdownToSearchText('[doc](https://host/a "say \\"old\\" version")'),
+      'doc https://host/a',
+    );
+    assert.equal(
+      markdownToSearchText('[doc](https://host/a "a title\nover two lines")'),
+      'doc https://host/a',
+    );
+    // A blank line ends the paragraph, so this was never a link.
+    assert.equal(
+      markdownToSearchText('[doc](https://host/a "unclosed\n\nlater words")').includes('later words'),
+      true,
+    );
   });
 
   it('strips heading, quote and list markers', () => {

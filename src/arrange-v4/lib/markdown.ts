@@ -81,8 +81,8 @@ export function markdownToSearchText(source: string): string {
     // visible text here, so it is lifted like a destination: otherwise
     // `__init__.py` would be indexed as `init.py` and could never be found by
     // the words the reader can see on screen.
-    .replace(/<((?:https?|mailto):[^>\s]+)>/g, (_match, url: string) => liftCode(url))
-    .replace(/\b(?:https?:\/\/|mailto:)[^\s<>]+/g, (url: string) => {
+    .replace(/<((?:https?|mailto):[^>\s]+)>/gi, (_match, url: string) => liftCode(url))
+    .replace(/\b(?:https?:\/\/|mailto:)[^\s<>]+/gi, (url: string) => {
       // Trailing punctuation reads as the end of the sentence, not the URL.
       const trimmed = url.replace(/[.,;:!?'"]+$/, '');
       return liftCode(trimmed) + url.slice(trimmed.length);
@@ -176,16 +176,22 @@ function readDestination(text: string, start: number): Destination | null {
   // A title may follow, in quotes or parentheses; it is not shown in the
   // rendered link. Anything else before the closing parenthesis means this was
   // never a link — `[x](foo bar baz)` renders as the literal text it looks
-  // like, so its words have to stay in the index.
+  // like, so its words have to stay in the index. A title may be escaped and
+  // may wrap onto the next line, but not across a blank one, which ends the
+  // paragraph and with it any chance that this was a link.
   while (i < limit && (text[i] === ' ' || text[i] === '\t')) i += 1;
   if (i < limit && text[i] !== ')') {
     const closer = TITLE_DELIMITERS.get(text[i]);
     if (closer === undefined) return null;
     i += 1;
-    while (i < limit && text[i] !== closer && text[i] !== '\n') i += 1;
+    while (i < limit && text[i] !== closer) {
+      if (text[i] === '\\') { i += 2; continue; }
+      if (text[i] === '\n' && text[i + 1] === '\n') return null;
+      i += 1;
+    }
     if (text[i] !== closer) return null;
     i += 1;
-    while (i < limit && (text[i] === ' ' || text[i] === '\t')) i += 1;
+    while (i < limit && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n')) i += 1;
   }
   return i < limit && text[i] === ')' ? { value, end: i + 1 } : null;
 }
