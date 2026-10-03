@@ -6,7 +6,7 @@ import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrate
 import SortableChecklistItem from './SortableChecklistItem';
 import MarkdownView from './MarkdownView';
 import { formatChecklistEntry, parseChecklistEntry, toggleChecklistEntry } from '@/lib/checklist';
-import { markdownToSearchText } from '@/lib/markdown';
+import { markdownToPlainText } from '@/lib/markdown';
 import styles from './AddTodoItem.module.css';
 
 interface ChecklistEditorProps {
@@ -158,7 +158,7 @@ export default function ChecklistEditor({
                 const { checked, text } = parseChecklistEntry(item);
                 const id = renderIds[idx];
                 return (
-                  <SortableChecklistItem key={id} id={id} disabled={disabled} itemLabel={markdownToSearchText(text)}>
+                  <SortableChecklistItem key={id} id={id} disabled={disabled} itemLabel={markdownToPlainText(text)}>
                     {showCheckboxes ? (
                       <label className={styles.checklistCheckLabel}>
                         <input type="checkbox" checked={checked} disabled={disabled}

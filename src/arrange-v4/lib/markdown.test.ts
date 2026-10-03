@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { markdownToSearchText, safeMarkdownUrl } from './markdown';
+import { markdownToPlainText, markdownToSearchText, safeMarkdownUrl } from './markdown';
 
 describe('safeMarkdownUrl', () => {
   it('allows the protocols a note legitimately links to', () => {
@@ -265,5 +265,23 @@ describe('markdownToSearchText', () => {
 
   it('leaves plain prose untouched apart from trimming', () => {
     assert.equal(markdownToSearchText('  just a normal note  '), 'just a normal note');
+  });
+});
+
+describe('markdownToPlainText', () => {
+  it('drops a link destination, keeping the visible text', () => {
+    assert.equal(markdownToPlainText('see [docs](https://example.com/a/b)'), 'see docs');
+  });
+
+  it('drops an image destination, keeping the alt text', () => {
+    assert.equal(markdownToPlainText('![a diagram](https://example.com/x.png)'), 'a diagram');
+  });
+
+  it('keeps a bare URL, which the reader does see', () => {
+    assert.equal(markdownToPlainText('go to https://example.com now'), 'go to https://example.com now');
+  });
+
+  it('strips emphasis like the search flattener does', () => {
+    assert.equal(markdownToPlainText('**buy** _milk_'), 'buy milk');
   });
 });

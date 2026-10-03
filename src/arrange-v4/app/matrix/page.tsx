@@ -1368,7 +1368,7 @@ function MatrixPageContent() {
                               type="button"
                               className={styles.quadrantZoomButton}
                               aria-pressed={zoomed}
-                              aria-label={zoomed ? 'Show all quadrants' : `Zoom into ${q.title}`}
+                              aria-label={`Zoom into ${q.title}`}
                               title={zoomed ? 'Show all quadrants (Esc)' : `Zoom into ${q.title} (hides the other quadrants, so cards cannot be dragged between them)`}
                               onClick={() => setZoomedQuadrant(zoomed ? null : q.key)}
                             >
