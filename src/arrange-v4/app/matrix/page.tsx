@@ -339,19 +339,33 @@ function MatrixPageContent() {
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  // Escape leaves the zoomed quadrant, but a dialog on top of the board owns
-  // Escape first. Dialogs in this app are all `role="dialog"`, including the
-  // quadrant's own add form, which manages its own open state.
+  // Escape leaves the zoomed quadrant, but anything layered on top of the board
+  // owns the key first: dialogs, the dismissible filter panels, and dnd-kit's
+  // "Escape cancels the drag". Ownership is only knowable once every listener
+  // has run, so the decision is deferred to after the event has been dispatched
+  // and skipped when someone else consumed it.
   useEffect(() => {
     if (zoomedQuadrant === null) return;
+    let pending: ReturnType<typeof setTimeout> | null = null;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (document.querySelector('[role="dialog"]')) return;
-      setZoomedQuadrant(null);
+      if (event.key !== 'Escape') return;
+      // dnd-kit's pointer sensor cancels a drag on Escape without marking the
+      // event, so collapsing the board mid-gesture has to be ruled out here.
+      if (draggedItem !== null) return;
+      if (pending !== null) clearTimeout(pending);
+      pending = setTimeout(() => {
+        pending = null;
+        if (event.defaultPrevented) return;
+        if (document.querySelector('[role="dialog"]')) return;
+        setZoomedQuadrant(null);
+      }, 0);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [zoomedQuadrant]);  const sensors = useSensors(
+    return () => {
+      if (pending !== null) clearTimeout(pending);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [zoomedQuadrant, draggedItem]);  const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
@@ -1358,7 +1372,7 @@ function MatrixPageContent() {
                               className={styles.quadrantZoomButton}
                               aria-pressed={zoomed}
                               aria-label={zoomed ? 'Show all quadrants' : `Zoom into ${q.title}`}
-                              title={zoomed ? 'Show all quadrants (Esc)' : `Zoom into ${q.title}`}
+                              title={zoomed ? 'Show all quadrants (Esc)' : `Zoom into ${q.title} (hides the other quadrants, so cards cannot be dragged between them)`}
                               onClick={() => setZoomedQuadrant(zoomed ? null : q.key)}
                             >
                               {zoomed ? '\u2715' : '\u26F6'}

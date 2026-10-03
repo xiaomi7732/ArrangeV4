@@ -1,5 +1,12 @@
 .wrapper {
   position: relative;
+  /* The whole card is the touch drag surface now, so the native long-press
+     callout and selection magnifier must not compete with the touch sensor's
+     press-and-hold. Vertical panning over the card is still allowed. */
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .content {

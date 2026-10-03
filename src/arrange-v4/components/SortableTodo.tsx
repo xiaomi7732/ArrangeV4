@@ -51,6 +51,7 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
 
   useEffect(() => {
     if (isDragging) suppressor.current.noteDragging();
+    else suppressor.current.noteDragEnded();
   }, [isDragging]);
 
   const handleClickCapture = (event: React.MouseEvent) => {

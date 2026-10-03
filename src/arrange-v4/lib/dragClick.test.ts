@@ -1,6 +1,14 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
-import { createClickSuppressor } from './dragClick';
+import { createClickSuppressor, DRAG_CLICK_WINDOW_MS } from './dragClick';
+
+function fakeClock() {
+  let value = 1000;
+  return {
+    now: () => value,
+    advance: (ms: number) => { value += ms; },
+  };
+}
 
 describe('createClickSuppressor', () => {
   it('lets a plain click through', () => {
@@ -9,18 +17,46 @@ describe('createClickSuppressor', () => {
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
 
-  it('swallows the click that ends a drag', () => {
-    const suppressor = createClickSuppressor();
-    suppressor.notePointerDown();
-    suppressor.noteDragging();
-    assert.equal(suppressor.shouldSuppressClick(), true);
+  it('swallows the click that ends a drag, whichever order it arrives in', () => {
+    const beforeEnd = createClickSuppressor();
+    beforeEnd.notePointerDown();
+    beforeEnd.noteDragging();
+    assert.equal(beforeEnd.shouldSuppressClick(), true);
+
+    const afterEnd = createClickSuppressor();
+    afterEnd.notePointerDown();
+    afterEnd.noteDragging();
+    afterEnd.noteDragEnded();
+    assert.equal(afterEnd.shouldSuppressClick(), true);
   });
 
   it('swallows only the first click after a drag', () => {
     const suppressor = createClickSuppressor();
     suppressor.notePointerDown();
     suppressor.noteDragging();
+    suppressor.noteDragEnded();
     assert.equal(suppressor.shouldSuppressClick(), true);
+    assert.equal(suppressor.shouldSuppressClick(), false);
+  });
+
+  it('still swallows the click after a long drag', () => {
+    const clock = fakeClock();
+    const suppressor = createClickSuppressor(clock.now);
+    suppressor.notePointerDown();
+    suppressor.noteDragging();
+    clock.advance(30_000);
+    suppressor.noteDragEnded();
+    assert.equal(suppressor.shouldSuppressClick(), true);
+  });
+
+  it('forgets a drag whose click never arrived', () => {
+    const clock = fakeClock();
+    const suppressor = createClickSuppressor(clock.now);
+    suppressor.notePointerDown();
+    suppressor.noteDragging();
+    suppressor.noteDragEnded();
+    // dnd-kit ate the click itself; much later the user activates the card.
+    clock.advance(DRAG_CLICK_WINDOW_MS + 1);
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
 
@@ -28,7 +64,7 @@ describe('createClickSuppressor', () => {
     const suppressor = createClickSuppressor();
     suppressor.notePointerDown();
     suppressor.noteDragging();
-    // The drag ended without a click, e.g. dropped outside the card.
+    suppressor.noteDragEnded();
     suppressor.notePointerDown();
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
@@ -38,6 +74,7 @@ describe('createClickSuppressor', () => {
     for (let i = 0; i < 3; i += 1) {
       suppressor.notePointerDown();
       suppressor.noteDragging();
+      suppressor.noteDragEnded();
       assert.equal(suppressor.shouldSuppressClick(), true);
     }
   });
@@ -45,6 +82,7 @@ describe('createClickSuppressor', () => {
   it('ignores a keyboard drag, which never ends in a click', () => {
     const suppressor = createClickSuppressor();
     suppressor.noteDragging();
+    suppressor.noteDragEnded();
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
 
@@ -52,9 +90,10 @@ describe('createClickSuppressor', () => {
     const suppressor = createClickSuppressor();
     suppressor.notePointerDown();
     assert.equal(suppressor.shouldSuppressClick(), false);
-    // Keyboard drag: no pointer gesture of its own.
     suppressor.noteDragging();
+    suppressor.noteDragEnded();
     suppressor.notePointerDown();
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
 });
+
