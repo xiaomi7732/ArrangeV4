@@ -95,5 +95,19 @@ describe('createClickSuppressor', () => {
     suppressor.notePointerDown();
     assert.equal(suppressor.shouldSuppressClick(), false);
   });
+
+  it('does not let an undelivered pointer-drag click arm a later keyboard drag', () => {
+    const clock = fakeClock();
+    const suppressor = createClickSuppressor(clock.now);
+    // Pointer drag whose click dnd-kit ate, so it is never consumed here.
+    suppressor.notePointerDown();
+    suppressor.noteDragging();
+    suppressor.noteDragEnded();
+    clock.advance(DRAG_CLICK_WINDOW_MS + 1);
+    // Keyboard drag some time later, then a keyboard activation on the card.
+    suppressor.noteDragging();
+    suppressor.noteDragEnded();
+    assert.equal(suppressor.shouldSuppressClick(), false);
+  });
 });
 

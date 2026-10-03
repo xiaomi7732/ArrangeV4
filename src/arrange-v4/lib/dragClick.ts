@@ -51,6 +51,9 @@ export function createClickSuppressor(now: () => number = () => Date.now()): Cli
     noteDragEnded() {
       if (dragging) endedAt = now();
       dragging = false;
+      // The gesture is over whether or not its click is ever delivered, so a
+      // later keyboard drag must not inherit it.
+      pointerGesture = false;
     },
     shouldSuppressClick() {
       pointerGesture = false;

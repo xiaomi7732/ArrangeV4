@@ -352,11 +352,14 @@ function MatrixPageContent() {
       // dnd-kit's pointer sensor cancels a drag on Escape without marking the
       // event, so collapsing the board mid-gesture has to be ruled out here.
       if (draggedItem !== null) return;
+      // Dialogs own Escape, but they close themselves without marking the
+      // event, so their presence has to be sampled now rather than after they
+      // have already been unmounted.
+      const dialogOpen = document.querySelector('[role="dialog"]') !== null;
       if (pending !== null) clearTimeout(pending);
       pending = setTimeout(() => {
         pending = null;
-        if (event.defaultPrevented) return;
-        if (document.querySelector('[role="dialog"]')) return;
+        if (dialogOpen || event.defaultPrevented) return;
         setZoomedQuadrant(null);
       }, 0);
     };
