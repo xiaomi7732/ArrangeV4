@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { ReactNode } from 'react';
 import { safeMarkdownUrl } from '@/lib/markdown';
 import styles from './MarkdownView.module.css';
 
@@ -14,6 +15,40 @@ interface MarkdownViewProps {
    */
   inline?: boolean;
 }
+
+const Unwrapped = ({ children }: { children?: ReactNode }) => <>{children}</>;
+const Spaced = ({ children }: { children?: ReactNode }) => <span>{children} </span>;
+
+/**
+ * Inline mode only promises inline formatting, but Markdown can always produce
+ * block constructs, and a checklist item is rendered inside the `<label>` of
+ * its own checkbox. Left alone, an item such as `- [ ] buy milk` would render a
+ * second checkbox inside that label, and a heading or table would break the row
+ * apart. Block containers are therefore flattened to text, and the task-list
+ * checkbox GFM generates is dropped entirely.
+ */
+const INLINE_BLOCK_OVERRIDES = {
+  p: Unwrapped,
+  h1: Unwrapped,
+  h2: Unwrapped,
+  h3: Unwrapped,
+  h4: Unwrapped,
+  h5: Unwrapped,
+  h6: Unwrapped,
+  blockquote: Unwrapped,
+  pre: Unwrapped,
+  ul: Unwrapped,
+  ol: Unwrapped,
+  li: Spaced,
+  table: Unwrapped,
+  thead: Unwrapped,
+  tbody: Unwrapped,
+  tr: Spaced,
+  th: Spaced,
+  td: Spaced,
+  hr: () => null,
+  input: () => null,
+} as const;
 
 /**
  * Renders a remark written in Markdown.
@@ -37,9 +72,7 @@ export default function MarkdownView({ content, className, inline = false }: Mar
         remarkPlugins={[remarkGfm]}
         urlTransform={url => safeMarkdownUrl(url) ?? ''}
         components={{
-          // A one-liner carries no paragraph of its own: the block wrapper
-          // would break the line out of its label and add vertical space.
-          ...(inline ? { p: ({ children }) => <>{children}</> } : {}),
+          ...(inline ? INLINE_BLOCK_OVERRIDES : {}),
           // Only known-safe props are forwarded; react-markdown also passes its
           // internal `node`, which must not reach the DOM.
           a: ({ href, title, children }) => {

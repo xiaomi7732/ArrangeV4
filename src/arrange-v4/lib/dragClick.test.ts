@@ -41,4 +41,20 @@ describe('createClickSuppressor', () => {
       assert.equal(suppressor.shouldSuppressClick(), true);
     }
   });
+
+  it('ignores a keyboard drag, which never ends in a click', () => {
+    const suppressor = createClickSuppressor();
+    suppressor.noteDragging();
+    assert.equal(suppressor.shouldSuppressClick(), false);
+  });
+
+  it('does not let a keyboard drag swallow a later pointer click', () => {
+    const suppressor = createClickSuppressor();
+    suppressor.notePointerDown();
+    assert.equal(suppressor.shouldSuppressClick(), false);
+    // Keyboard drag: no pointer gesture of its own.
+    suppressor.noteDragging();
+    suppressor.notePointerDown();
+    assert.equal(suppressor.shouldSuppressClick(), false);
+  });
 });

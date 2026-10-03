@@ -9,7 +9,11 @@
 export interface ClickSuppressor {
   /** Call on pointer down: a new gesture starts with nothing to suppress. */
   notePointerDown(): void;
-  /** Call while a drag is in progress. */
+  /**
+   * Call while a drag is in progress. Only a drag that began with a pointer
+   * gesture arms the suppression: a keyboard drag ends on a key press, not on
+   * a click, so arming it there would swallow an unrelated later click.
+   */
   noteDragging(): void;
   /**
    * Whether the click that just happened belongs to a finished drag. Consumes
@@ -19,15 +23,18 @@ export interface ClickSuppressor {
 }
 
 export function createClickSuppressor(): ClickSuppressor {
+  let pointerGesture = false;
   let dragged = false;
   return {
     notePointerDown() {
+      pointerGesture = true;
       dragged = false;
     },
     noteDragging() {
-      dragged = true;
+      if (pointerGesture) dragged = true;
     },
     shouldSuppressClick() {
+      pointerGesture = false;
       if (!dragged) return false;
       dragged = false;
       return true;

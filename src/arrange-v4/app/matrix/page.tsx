@@ -339,16 +339,19 @@ function MatrixPageContent() {
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  // Escape leaves the zoomed quadrant, but only when no dialog is on top of it.
+  // Escape leaves the zoomed quadrant, but a dialog on top of the board owns
+  // Escape first. Dialogs in this app are all `role="dialog"`, including the
+  // quadrant's own add form, which manages its own open state.
   useEffect(() => {
-    if (zoomedQuadrant === null || selectedTodo !== null || showManageTags) return;
+    if (zoomedQuadrant === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"]')) return;
       setZoomedQuadrant(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [zoomedQuadrant, selectedTodo, showManageTags]);  const sensors = useSensors(
+  }, [zoomedQuadrant]);  const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
