@@ -428,6 +428,47 @@
     flex: 1;
     min-height: 0;
   }
+
+  .matrix.matrixZoomed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+}
+
+.quadrantHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.quadrantZoomButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1;
+  color: #1f2937;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.quadrantZoomButton:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+  transform: scale(1.08);
+}
+
+.quadrantZoomButton[aria-pressed='true'] {
+  background-color: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
 }
 
 .quadrant {
