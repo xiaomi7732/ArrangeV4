@@ -73,7 +73,9 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
       // configured with a distance (mouse) and delay (touch) threshold, so a
       // plain click on the card or on a button inside it still works; the grip
       // stays as the visual hint and the keyboard-reachable activator.
-      onPointerDownCapture={() => suppressor.current?.notePointerDown()}
+      onPointerDownCapture={() => suppressor.current.notePointerDown()}
+      onPointerUpCapture={() => suppressor.current.notePointerUp()}
+      onPointerCancelCapture={() => suppressor.current.notePointerUp()}
       onClickCapture={handleClickCapture}
       {...listeners}
     >

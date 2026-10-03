@@ -21,6 +21,12 @@ export interface ClickSuppressor {
    */
   noteDragEnded(): void;
   /**
+   * Call when the pointer is released or the gesture is cancelled. This, not
+   * the drag end, is when the click is about to be dispatched, so it is where
+   * the suppression window starts.
+   */
+  notePointerUp(): void;
+  /**
    * Whether the click that just happened belongs to a finished drag. Consumes
    * the flag, so only the one click that follows the drag is swallowed.
    */
@@ -28,44 +34,49 @@ export interface ClickSuppressor {
 }
 
 /**
- * How long after a drag ends a click still counts as that drag's tail. dnd-kit
- * installs its own capture-phase click eater on drag start and removes it
- * shortly after the drop, so the click often never reaches React at all and
- * the flag would otherwise stay armed until some unrelated later click.
+ * How long after the pointer is released a click still counts as that drag's
+ * tail. dnd-kit installs its own capture-phase click eater on drag start and
+ * removes it shortly after the drop, so the click often never reaches React at
+ * all and the flag would otherwise stay armed until some unrelated later click.
  */
 export const DRAG_CLICK_WINDOW_MS = 500;
 
 export function createClickSuppressor(now: () => number = () => Date.now()): ClickSuppressor {
   let pointerGesture = false;
   let dragging = false;
+  let draggedThisGesture = false;
   let endedAt: number | null = null;
+  const reset = () => {
+    pointerGesture = false;
+    dragging = false;
+    draggedThisGesture = false;
+    endedAt = null;
+  };
   return {
     notePointerDown() {
+      reset();
       pointerGesture = true;
-      dragging = false;
-      endedAt = null;
     },
     noteDragging() {
-      if (pointerGesture) dragging = true;
+      if (!pointerGesture) return;
+      dragging = true;
+      draggedThisGesture = true;
     },
     noteDragEnded() {
       if (dragging) endedAt = now();
       dragging = false;
-      // The gesture is over whether or not its click is ever delivered, so a
-      // later keyboard drag must not inherit it.
+    },
+    notePointerUp() {
+      // A drag cancelled with Escape can end long before the button is let go,
+      // so the window is restarted here rather than trusted from the drag end.
+      if (draggedThisGesture) endedAt = now();
       pointerGesture = false;
+      draggedThisGesture = false;
     },
     shouldSuppressClick() {
-      pointerGesture = false;
-      if (dragging) {
-        dragging = false;
-        endedAt = null;
-        return true;
-      }
-      if (endedAt === null) return false;
-      const fresh = now() - endedAt <= DRAG_CLICK_WINDOW_MS;
-      endedAt = null;
-      return fresh;
+      const suppress = dragging || (endedAt !== null && now() - endedAt <= DRAG_CLICK_WINDOW_MS);
+      reset();
+      return suppress;
     },
   };
 }
