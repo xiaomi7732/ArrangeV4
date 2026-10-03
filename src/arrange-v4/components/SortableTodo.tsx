@@ -48,6 +48,29 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
   // The whole card is the drag surface, so the click that ends a drag has to be
   // swallowed or dropping a card would also open it.
   const suppressor = useRef<ClickSuppressor>(createClickSuppressor());
+  // The pointer may be released anywhere — over another card, or off the board
+  // entirely — so the end of the gesture is watched globally rather than on
+  // this card, which would otherwise stay armed for ever.
+  const detachRelease = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => detachRelease.current?.(), []);
+
+  const handlePointerDownCapture = () => {
+    suppressor.current.notePointerDown();
+    detachRelease.current?.();
+    const onRelease = () => {
+      detachRelease.current?.();
+      suppressor.current.notePointerUp();
+    };
+    const detach = () => {
+      window.removeEventListener('pointerup', onRelease);
+      window.removeEventListener('pointercancel', onRelease);
+      detachRelease.current = null;
+    };
+    detachRelease.current = detach;
+    window.addEventListener('pointerup', onRelease);
+    window.addEventListener('pointercancel', onRelease);
+  };
 
   useEffect(() => {
     if (isDragging) suppressor.current.noteDragging();
@@ -73,9 +96,7 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
       // configured with a distance (mouse) and delay (touch) threshold, so a
       // plain click on the card or on a button inside it still works; the grip
       // stays as the visual hint and the keyboard-reachable activator.
-      onPointerDownCapture={() => suppressor.current.notePointerDown()}
-      onPointerUpCapture={() => suppressor.current.notePointerUp()}
-      onPointerCancelCapture={() => suppressor.current.notePointerUp()}
+      onPointerDownCapture={handlePointerDownCapture}
       onClickCapture={handleClickCapture}
       {...listeners}
     >
