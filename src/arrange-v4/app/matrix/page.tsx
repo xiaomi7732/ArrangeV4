@@ -36,6 +36,7 @@ import {
   sortByPersistedOrder,
 } from '@/lib/orderUtils';
 import { describeSkippedUnwritable, dropUnwritableUpdates, partitionWritableItems, restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { countCheckedEntries } from '@/lib/checklist';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
@@ -66,6 +67,24 @@ import styles from './page.module.css';
 type FetchEventsOptions = StoreOperationOptions & {
   preserveError?: boolean;
 };
+
+type QuadrantKey = 'doFirst' | 'schedule' | 'delegate' | 'eliminate';
+
+type QuadrantConfig = {
+  key: QuadrantKey;
+  title: string;
+  subtitle: string;
+  urgent: boolean;
+  important: boolean;
+  className: string;
+};
+
+const MATRIX_QUADRANTS: QuadrantConfig[] = [
+  { key: 'doFirst', title: 'Do First', subtitle: 'Urgent & Important', urgent: true, important: true, className: 'quadrantUrgentImportant' },
+  { key: 'schedule', title: 'Schedule', subtitle: 'Important, Not Urgent', urgent: false, important: true, className: 'quadrantImportant' },
+  { key: 'delegate', title: 'Delegate', subtitle: 'Urgent, Not Important', urgent: true, important: false, className: 'quadrantUrgent' },
+  { key: 'eliminate', title: 'Eliminate', subtitle: 'Not Urgent, Not Important', urgent: false, important: false, className: 'quadrantNeither' },
+];
 
 function compareMatrixLegacy(a: TodoItemWithId, b: TodoItemWithId) {
   return (a.etsDateTime || '').localeCompare(b.etsDateTime || '') ||
@@ -231,7 +250,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       )}
       
       {todo.checklist && todo.checklist.length > 0 && (() => {
-        const done = todo.checklist.filter(i => i.startsWith('-[x]')).length;
+        const done = countCheckedEntries(todo.checklist);
         const total = todo.checklist.length;
         return (
           <p className={styles.todoChecklistSummary}>
@@ -297,6 +316,7 @@ function MatrixPageContent() {
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
   const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
+  const [zoomedQuadrant, setZoomedQuadrant] = useState<QuadrantKey | null>(null);
   const taskQuery = useTaskQuery(bookId);
   const { query } = taskQuery;
   const [showFilters, setShowFilters] = useState(false);
@@ -318,6 +338,30 @@ function MatrixPageContent() {
   );
   const [showManageTags, setShowManageTags] = useState(false);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
+
+  // Escape leaves the zoomed quadrant, but anything layered on top of the board
+  // owns the key first: dialogs, the dismissible filter panels, and dnd-kit's
+  // "Escape cancels the drag". This listener is on the window in the bubble
+  // phase, i.e. last, so by the time it runs every other handler has had its
+  // say and the three cases below can be told apart.
+  useEffect(() => {
+    if (zoomedQuadrant === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      // Handlers that consume the key mark it; the dismissible panels do.
+      if (event.defaultPrevented) return;
+      // dnd-kit's pointer sensor cancels a drag on Escape without marking the
+      // event, so collapsing the board mid-gesture has to be ruled out here.
+      if (draggedItem !== null) return;
+      // Dialogs close themselves without marking the event either, but they
+      // are still mounted at this point.
+      if (document.querySelector('[role="dialog"]')) return;
+      setZoomedQuadrant(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zoomedQuadrant, draggedItem]);
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
@@ -1296,178 +1340,67 @@ function MatrixPageContent() {
                 onDragEnd={handleDragEnd}
                 onDragCancel={() => setDraggedItem(null)}
               >
-              <div className={styles.matrix}>
-                {/* Top-left: Urgent & Important */}
-                <div 
-                  className={`${styles.quadrant} ${styles.quadrantUrgentImportant}`}
-                >
-                  <div className={styles.quadrantHeader}>
-                    <div>
-                      <h3 className={styles.quadrantTitle}>Do First ({quadrants.doFirst.length})</h3>
-                      <p className={styles.quadrantSubtitle}>Urgent & Important</p>
-                    </div>
-                    <AddTodoItem 
-                      onAddTodo={handleAddTodo} 
-                      disabled={loading}
-                      defaultUrgent={true}
-                      defaultImportant={true}
-                      addLabel="Add item to Do First"
-                      compact={true}
-                      availableCategories={allCategories}
-                    />
-                  </div>
-                  <SortableTodoList
-                    id={quadrantId(true, true)}
-                    itemIds={quadrants.doFirst.map(todo => todo.id)}
-                    className={styles.quadrantContent}
-                  >
-                    {quadrants.doFirst.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
-                        <TodoCard
-                          todo={todo}
-                          onClick={isSavingOrder ? undefined : setSelectedTodo}
-                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
-                        />
-                      </SortableTodo>
-                    ))}
-                    {quadrants.doFirst.length === 0 && (
-                      <EmptyListMessage
-                        filtered={taskQuery.queryActive}
-                        onClearFilters={taskQuery.clearAll}
-                        className={styles.quadrantEmpty}
-                      />
-                    )}
-                  </SortableTodoList>
-                </div>
-
-                {/* Top-right: Important but not Urgent */}
-                <div 
-                  className={`${styles.quadrant} ${styles.quadrantImportant}`}
-                >
-                  <div className={styles.quadrantHeader}>
-                    <div>
-                      <h3 className={styles.quadrantTitle}>Schedule ({quadrants.schedule.length})</h3>
-                      <p className={styles.quadrantSubtitle}>Important, Not Urgent</p>
-                    </div>
-                    <AddTodoItem 
-                      onAddTodo={handleAddTodo} 
-                      disabled={loading}
-                      defaultUrgent={false}
-                      defaultImportant={true}
-                      addLabel="Add item to Schedule"
-                      compact={true}
-                      availableCategories={allCategories}
-                    />
-                  </div>
-                  <SortableTodoList
-                    id={quadrantId(false, true)}
-                    itemIds={quadrants.schedule.map(todo => todo.id)}
-                    className={styles.quadrantContent}
-                  >
-                    {quadrants.schedule.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, true)} disabled={isSavingOrder || todo.dataUnreadable === true}>
-                        <TodoCard
-                          todo={todo}
-                          onClick={isSavingOrder ? undefined : setSelectedTodo}
-                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
-                        />
-                      </SortableTodo>
-                    ))}
-                    {quadrants.schedule.length === 0 && (
-                      <EmptyListMessage
-                        filtered={taskQuery.queryActive}
-                        onClearFilters={taskQuery.clearAll}
-                        className={styles.quadrantEmpty}
-                      />
-                    )}
-                  </SortableTodoList>
-                </div>
-
-                {/* Bottom-left: Urgent but not Important */}
-                <div 
-                  className={`${styles.quadrant} ${styles.quadrantUrgent}`}
-                >
-                  <div className={styles.quadrantHeader}>
-                    <div>
-                      <h3 className={styles.quadrantTitle}>Delegate ({quadrants.delegate.length})</h3>
-                      <p className={styles.quadrantSubtitle}>Urgent, Not Important</p>
-                    </div>
-                    <AddTodoItem 
-                      onAddTodo={handleAddTodo} 
-                      disabled={loading}
-                      defaultUrgent={true}
-                      defaultImportant={false}
-                      addLabel="Add item to Delegate"
-                      compact={true}
-                      availableCategories={allCategories}
-                    />
-                  </div>
-                  <SortableTodoList
-                    id={quadrantId(true, false)}
-                    itemIds={quadrants.delegate.map(todo => todo.id)}
-                    className={styles.quadrantContent}
-                  >
-                    {quadrants.delegate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(true, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
-                        <TodoCard
-                          todo={todo}
-                          onClick={isSavingOrder ? undefined : setSelectedTodo}
-                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
-                        />
-                      </SortableTodo>
-                    ))}
-                    {quadrants.delegate.length === 0 && (
-                      <EmptyListMessage
-                        filtered={taskQuery.queryActive}
-                        onClearFilters={taskQuery.clearAll}
-                        className={styles.quadrantEmpty}
-                      />
-                    )}
-                  </SortableTodoList>
-                </div>
-
-                {/* Bottom-right: Neither Urgent nor Important */}
-                <div 
-                  className={`${styles.quadrant} ${styles.quadrantNeither}`}
-                >
-                  <div className={styles.quadrantHeader}>
-                    <div>
-                      <h3 className={styles.quadrantTitle}>Eliminate ({quadrants.eliminate.length})</h3>
-                      <p className={styles.quadrantSubtitle}>Not Urgent, Not Important</p>
-                    </div>
-                    <AddTodoItem 
-                      onAddTodo={handleAddTodo} 
-                      disabled={loading}
-                      defaultUrgent={false}
-                      defaultImportant={false}
-                      addLabel="Add item to Eliminate"
-                      compact={true}
-                      availableCategories={allCategories}
-                    />
-                  </div>
-                  <SortableTodoList
-                    id={quadrantId(false, false)}
-                    itemIds={quadrants.eliminate.map(todo => todo.id)}
-                    className={styles.quadrantContent}
-                  >
-                    {quadrants.eliminate.map((todo) => (
-                      <SortableTodo key={todo.id} id={todo.id} containerId={quadrantId(false, false)} disabled={isSavingOrder || todo.dataUnreadable === true}>
-                        <TodoCard
-                          todo={todo}
-                          onClick={isSavingOrder ? undefined : setSelectedTodo}
-                          onStatusChange={isSavingOrder ? undefined : handleStatusChange}
-                        />
-                      </SortableTodo>
-                    ))}
-                    {quadrants.eliminate.length === 0 && (
-                      <EmptyListMessage
-                        filtered={taskQuery.queryActive}
-                        onClearFilters={taskQuery.clearAll}
-                        className={styles.quadrantEmpty}
-                      />
-                    )}
-                  </SortableTodoList>
-                </div>
+              <div className={`${styles.matrix} ${zoomedQuadrant ? styles.matrixZoomed : ''}`}>
+                {MATRIX_QUADRANTS
+                  .filter(q => zoomedQuadrant === null || q.key === zoomedQuadrant)
+                  .map((q) => {
+                    const items = quadrants[q.key];
+                    const containerId = quadrantId(q.urgent, q.important);
+                    const zoomed = zoomedQuadrant === q.key;
+                    return (
+                      <div key={q.key} className={`${styles.quadrant} ${styles[q.className]}`}>
+                        <div className={styles.quadrantHeader}>
+                          <div>
+                            <h3 className={styles.quadrantTitle}>{q.title} ({items.length})</h3>
+                            <p className={styles.quadrantSubtitle}>{q.subtitle}</p>
+                          </div>
+                          <div className={styles.quadrantHeaderActions}>
+                            <AddTodoItem
+                              onAddTodo={handleAddTodo}
+                              disabled={loading}
+                              defaultUrgent={q.urgent}
+                              defaultImportant={q.important}
+                              addLabel={`Add item to ${q.title}`}
+                              compact={true}
+                              availableCategories={allCategories}
+                            />
+                            <button
+                              type="button"
+                              className={styles.quadrantZoomButton}
+                              aria-pressed={zoomed}
+                              aria-label={`Zoom into ${q.title}`}
+                              title={zoomed ? 'Show all quadrants (Esc)' : `Zoom into ${q.title} (hides the other quadrants, so cards cannot be dragged between them)`}
+                              onClick={() => setZoomedQuadrant(zoomed ? null : q.key)}
+                            >
+                              {zoomed ? '\u2715' : '\u26F6'}
+                            </button>
+                          </div>
+                        </div>
+                        <SortableTodoList
+                          id={containerId}
+                          itemIds={items.map(todo => todo.id)}
+                          className={styles.quadrantContent}
+                        >
+                          {items.map((todo) => (
+                            <SortableTodo key={todo.id} id={todo.id} containerId={containerId} disabled={isSavingOrder || todo.dataUnreadable === true}>
+                              <TodoCard
+                                todo={todo}
+                                onClick={isSavingOrder ? undefined : setSelectedTodo}
+                                onStatusChange={isSavingOrder ? undefined : handleStatusChange}
+                              />
+                            </SortableTodo>
+                          ))}
+                          {items.length === 0 && (
+                            <EmptyListMessage
+                              filtered={taskQuery.queryActive}
+                              onClearFilters={taskQuery.clearAll}
+                              className={styles.quadrantEmpty}
+                            />
+                          )}
+                        </SortableTodoList>
+                      </div>
+                    );
+                  })}
               </div>
               <DragOverlay>
                 {draggedItem ? (

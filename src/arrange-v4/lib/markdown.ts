@@ -42,6 +42,20 @@ export function safeMarkdownUrl(url: string | null | undefined): string | null {
  * syntax. Deliberately approximate: it only has to feed the search index.
  */
 export function markdownToSearchText(source: string): string {
+  return flattenMarkdown(source, true);
+}
+
+/**
+ * Flattens Markdown source to the words a reader actually sees, dropping link
+ * and image destinations. Used for accessible names, where a URL read aloud is
+ * noise; the search index keeps destinations instead, so it has its own entry
+ * point above.
+ */
+export function markdownToPlainText(source: string): string {
+  return flattenMarkdown(source, false);
+}
+
+function flattenMarkdown(source: string, keepDestinations: boolean): string {
   // A code span renders literally, so its contents must survive the marker
   // stripping below: `` `__init__` `` and `` `~/src` `` are text, not syntax.
   // They are lifted out first and put back once the stripping is done.
@@ -51,7 +65,7 @@ export function markdownToSearchText(source: string): string {
     return `${CODE_SPAN_SENTINEL}${codeSpans.length - 1}${CODE_SPAN_SENTINEL}`;
   };
 
-  const replaceLinks = (text: string): string => flattenLinks(text, liftCode);
+  const replaceLinks = (text: string): string => flattenLinks(text, liftCode, keepDestinations);
 
   const withCodeLifted = source
     // Any stray sentinel in the source would collide with the placeholders.
@@ -238,14 +252,15 @@ function isEscaped(text: string, index: number): boolean {
 }
 
 /**
- * Replaces every link and image with its visible text followed by its
- * destination, lifting the destination out of reach of the marker stripping.
+ * Replaces every link and image with its visible text, optionally followed by
+ * its destination, lifting the destination out of reach of the marker
+ * stripping.
  *
  * Hand-written rather than a regex: a destination may contain balanced
  * parentheses to any depth, and a regex that tries also backtracks badly over
  * malformed input.
  */
-function flattenLinks(text: string, liftCode: (code: string) => string): string {
+function flattenLinks(text: string, liftCode: (code: string) => string, keepDestinations: boolean): string {
   // Chunks rather than one growing string: an image drops the bang before it,
   // and rewriting the whole output to do that would cost O(n^2) in the number
   // of images in one remark.
@@ -289,8 +304,8 @@ function flattenLinks(text: string, liftCode: (code: string) => string): string 
     // `![alt](src)` is an image: the bang is syntax, not text. An escaped
     // `\!` is a bang the reader sees, so it stays.
     if (text[i - 1] === '!' && !isEscaped(text, i - 1)) out.pop();
-    const label = flattenLinks(text.slice(labelStart, j - 1), liftCode);
-    out.push(`${label} ${liftCode(destination.value)} `);
+    const label = flattenLinks(text.slice(labelStart, j - 1), liftCode, keepDestinations);
+    out.push(keepDestinations ? `${label} ${liftCode(destination.value)} ` : `${label} `);
     i = destination.end;
   }
 

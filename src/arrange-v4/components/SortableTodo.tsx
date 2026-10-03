@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   closestCenter,
   pointerWithin,
@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { createClickSuppressor, type ClickSuppressor } from '@/lib/dragClick';
 import styles from './SortableTodo.module.css';
 
 interface SortableTodoProps {
@@ -44,6 +45,44 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
     disabled,
   });
 
+  // The whole card is the drag surface, so the click that ends a drag has to be
+  // swallowed or dropping a card would also open it.
+  const suppressor = useRef<ClickSuppressor>(createClickSuppressor());
+  // The pointer may be released anywhere — over another card, or off the board
+  // entirely — so the end of the gesture is watched globally rather than on
+  // this card, which would otherwise stay armed for ever.
+  const detachRelease = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => detachRelease.current?.(), []);
+
+  const handlePointerDownCapture = () => {
+    suppressor.current.notePointerDown();
+    detachRelease.current?.();
+    const onRelease = () => {
+      detachRelease.current?.();
+      suppressor.current.notePointerUp();
+    };
+    const detach = () => {
+      window.removeEventListener('pointerup', onRelease);
+      window.removeEventListener('pointercancel', onRelease);
+      detachRelease.current = null;
+    };
+    detachRelease.current = detach;
+    window.addEventListener('pointerup', onRelease);
+    window.addEventListener('pointercancel', onRelease);
+  };
+
+  useEffect(() => {
+    if (isDragging) suppressor.current.noteDragging();
+    else suppressor.current.noteDragEnded();
+  }, [isDragging]);
+
+  const handleClickCapture = (event: React.MouseEvent) => {
+    if (!suppressor.current.shouldSuppressClick()) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -53,6 +92,13 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
         transition,
         opacity: isDragging ? 0.35 : 1,
       }}
+      // Dragging from anywhere on the card, not just the grip. The sensors are
+      // configured with a distance (mouse) and delay (touch) threshold, so a
+      // plain click on the card or on a button inside it still works; the grip
+      // stays as the visual hint and the keyboard-reachable activator.
+      onPointerDownCapture={handlePointerDownCapture}
+      onClickCapture={handleClickCapture}
+      {...listeners}
     >
       <div className={styles.content}>{children}</div>
       <button
@@ -61,7 +107,6 @@ export function SortableTodo({ id, containerId, disabled = false, children }: So
         className={styles.dragHandle}
         aria-label="Drag to reorder"
         {...attributes}
-        {...listeners}
       >
         <GripIcon />
       </button>

@@ -2,13 +2,53 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { ReactNode } from 'react';
 import { safeMarkdownUrl } from '@/lib/markdown';
 import styles from './MarkdownView.module.css';
 
 interface MarkdownViewProps {
   content: string;
   className?: string;
+  /**
+   * Render as a single line: no block wrapper around the text. Used for
+   * checklist items, which are one-liners.
+   */
+  inline?: boolean;
 }
+
+const Unwrapped = ({ children }: { children?: ReactNode }) => <>{children}</>;
+const Spaced = ({ children }: { children?: ReactNode }) => <span>{children} </span>;
+
+/**
+ * Inline mode only promises inline formatting, but Markdown can always produce
+ * block constructs, and a checklist item is rendered inside the `<label>` of
+ * its own checkbox. Left alone, an item such as `- [ ] buy milk` would render a
+ * second checkbox inside that label, and a heading or table would break the row
+ * apart. Block containers are therefore flattened to text, and the task-list
+ * checkbox GFM generates is dropped entirely.
+ */
+const INLINE_BLOCK_OVERRIDES = {
+  p: Spaced,
+  h1: Spaced,
+  h2: Spaced,
+  h3: Spaced,
+  h4: Spaced,
+  h5: Spaced,
+  h6: Spaced,
+  blockquote: Spaced,
+  pre: Spaced,
+  ul: Unwrapped,
+  ol: Unwrapped,
+  li: Spaced,
+  table: Unwrapped,
+  thead: Unwrapped,
+  tbody: Unwrapped,
+  tr: Spaced,
+  th: Spaced,
+  td: Spaced,
+  hr: () => null,
+  input: () => null,
+} as const;
 
 /**
  * Renders a remark written in Markdown.
@@ -24,13 +64,15 @@ interface MarkdownViewProps {
  * - Link and image URLs go through an allow-list, so `javascript:` and `data:`
  *   targets are dropped rather than rendered.
  */
-export default function MarkdownView({ content, className }: MarkdownViewProps) {
+export default function MarkdownView({ content, className, inline = false }: MarkdownViewProps) {
+  const Wrapper = inline ? 'span' : 'div';
   return (
-    <div className={`${styles.prose} ${className ?? ''}`}>
+    <Wrapper className={`${inline ? styles.inline : styles.prose} ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={url => safeMarkdownUrl(url) ?? ''}
         components={{
+          ...(inline ? INLINE_BLOCK_OVERRIDES : {}),
           // Only known-safe props are forwarded; react-markdown also passes its
           // internal `node`, which must not reach the DOM.
           a: ({ href, title, children }) => {
@@ -49,6 +91,6 @@ export default function MarkdownView({ content, className }: MarkdownViewProps) 
       >
         {content}
       </ReactMarkdown>
-    </div>
+    </Wrapper>
   );
 }

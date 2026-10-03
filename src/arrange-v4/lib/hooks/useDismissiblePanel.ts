@@ -104,6 +104,8 @@ export function useDismissiblePanel<P extends HTMLElement, T extends HTMLElement
       }
       entry.close();
       entry.focusTrigger();
+      // The panel consumed the key, so nothing further up may also act on it.
+      event.preventDefault();
     };
 
     const onPointerDown = (event: PointerEvent) => {

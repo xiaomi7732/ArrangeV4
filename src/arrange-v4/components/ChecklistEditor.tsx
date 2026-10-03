@@ -4,6 +4,9 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import SortableChecklistItem from './SortableChecklistItem';
+import MarkdownView from './MarkdownView';
+import { formatChecklistEntry, parseChecklistEntry, toggleChecklistEntry } from '@/lib/checklist';
+import { markdownToPlainText } from '@/lib/markdown';
 import styles from './AddTodoItem.module.css';
 
 interface ChecklistEditorProps {
@@ -111,11 +114,8 @@ export default function ChecklistEditor({
   }, [items, onChange, renderIds]);
 
   const handleToggle = (idx: number) => {
-    const item = items[idx];
-    const checked = item.startsWith('-[x]');
-    const text = item.replace(/^-\[x?\]\s*/, '');
     const updated = [...items];
-    updated[idx] = checked ? '-[] ' + text : '-[x] ' + text;
+    updated[idx] = toggleChecklistEntry(items[idx]);
     prevItemsRef.current = updated;
     onChange(updated);
   };
@@ -130,13 +130,14 @@ export default function ChecklistEditor({
   const handleAddSingle = (text: string) => {
     const newId = `cl-${nextIdCounter.current++}`;
     setItemIds(ids => [...ids, newId]);
-    const updated = [...items, '-[] ' + text];
+    const updated = [...items, formatChecklistEntry(false, text)];
     prevItemsRef.current = updated;
     onChange(updated);
   };
 
   const handleAddBulk = (text: string) => {
-    const newItems = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => '-[] ' + l);
+    const newItems = text.split('\n').map(l => l.trim()).filter(Boolean)
+      .map(l => formatChecklistEntry(false, l));
     if (newItems.length > 0) {
       const newIds = generateIds(newItems.length, nextIdCounter.current);
       nextIdCounter.current += newIds.length;
@@ -154,20 +155,23 @@ export default function ChecklistEditor({
           <SortableContext items={renderIds} strategy={verticalListSortingStrategy}>
             <ul className={styles.checklistEdit}>
               {items.map((item, idx) => {
-                const checked = item.startsWith('-[x]');
-                const text = item.replace(/^-\[x?\]\s*/, '');
+                const { checked, text } = parseChecklistEntry(item);
                 const id = renderIds[idx];
                 return (
-                  <SortableChecklistItem key={id} id={id} disabled={disabled} itemLabel={text}>
+                  <SortableChecklistItem key={id} id={id} disabled={disabled} itemLabel={markdownToPlainText(text)}>
                     {showCheckboxes ? (
                       <label className={styles.checklistCheckLabel}>
                         <input type="checkbox" checked={checked} disabled={disabled}
                           className={styles.checkbox}
                           onChange={() => handleToggle(idx)} />
-                        <span className={checked ? styles.checklistCheckedText : undefined}>{text}</span>
+                        <MarkdownView
+                          content={text}
+                          inline
+                          className={checked ? styles.checklistCheckedText : undefined}
+                        />
                       </label>
                     ) : (
-                      <span className={styles.checklistItemText}>{text}</span>
+                      <MarkdownView content={text} inline className={styles.checklistItemText} />
                     )}
                     {showRemoveButton && (
                       <button type="button" className={styles.checklistRemove}
@@ -191,7 +195,7 @@ export default function ChecklistEditor({
               <textarea
                 value={bulkAddText}
                 onChange={(e) => setBulkAddText(e.target.value)}
-                placeholder="Enter one item per line..."
+                placeholder="Enter one item per line (Markdown)..."
                 aria-label="Bulk add checklist items"
                 className={styles.textarea}
                 disabled={disabled}
@@ -224,7 +228,7 @@ export default function ChecklistEditor({
                     setNewChecklistItem('');
                   }
                 }}
-                placeholder="Add checklist item..."
+                placeholder="Add checklist item (Markdown)..."
                 aria-label="Add checklist item"
                 className={styles.input} disabled={disabled} />
               <button type="button" className={`${styles.button} ${styles.buttonSecondary} ${styles.checklistAddBtn}`}
