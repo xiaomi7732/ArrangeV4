@@ -65,6 +65,9 @@ export function createClickSuppressor(now: () => number = () => Date.now()): Cli
     noteDragEnded() {
       if (dragging) endedAt = now();
       dragging = false;
+      // Belt and braces: even if the release is somehow never seen, the next
+      // keyboard drag must not be able to arm the suppressor.
+      pointerGesture = false;
     },
     notePointerUp() {
       // A drag cancelled with Escape can end long before the button is let go,

@@ -341,34 +341,28 @@ function MatrixPageContent() {
 
   // Escape leaves the zoomed quadrant, but anything layered on top of the board
   // owns the key first: dialogs, the dismissible filter panels, and dnd-kit's
-  // "Escape cancels the drag". Ownership is only knowable once every listener
-  // has run, so the decision is deferred to after the event has been dispatched
-  // and skipped when someone else consumed it.
+  // "Escape cancels the drag". This listener is on the window in the bubble
+  // phase, i.e. last, so by the time it runs every other handler has had its
+  // say and the three cases below can be told apart.
   useEffect(() => {
     if (zoomedQuadrant === null) return;
-    let pending: ReturnType<typeof setTimeout> | null = null;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      // Handlers that consume the key mark it; the dismissible panels do.
+      if (event.defaultPrevented) return;
       // dnd-kit's pointer sensor cancels a drag on Escape without marking the
       // event, so collapsing the board mid-gesture has to be ruled out here.
       if (draggedItem !== null) return;
-      // Dialogs own Escape, but they close themselves without marking the
-      // event, so their presence has to be sampled now rather than after they
-      // have already been unmounted.
-      const dialogOpen = document.querySelector('[role="dialog"]') !== null;
-      if (pending !== null) clearTimeout(pending);
-      pending = setTimeout(() => {
-        pending = null;
-        if (dialogOpen || event.defaultPrevented) return;
-        setZoomedQuadrant(null);
-      }, 0);
+      // Dialogs close themselves without marking the event either, but they
+      // are still mounted at this point.
+      if (document.querySelector('[role="dialog"]')) return;
+      setZoomedQuadrant(null);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => {
-      if (pending !== null) clearTimeout(pending);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [zoomedQuadrant, draggedItem]);  const sensors = useSensors(
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [zoomedQuadrant, draggedItem]);
+
+  const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableTodoKeyboardCoordinates }),
