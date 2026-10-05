@@ -274,7 +274,7 @@ function TimelinePageContent() {
     isAuthenticated && !requiresAuthRecovery && !busy && !!bookId && !loading,
   );
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     setError(null);
     try {
       await auth.login();
@@ -282,7 +282,7 @@ function TimelinePageContent() {
       console.error('Login failed:', err);
       setError('Login failed. Please try again.');
     }
-  };
+  }, [auth]);
 
   const handleAuthRecovery = async () => {
     if (isAuthenticated) {
@@ -397,7 +397,8 @@ function TimelinePageContent() {
         {loading ? 'Loading...' : 'Refresh'}
       </button>
     ),
-    [isAuthenticated, requiresAuthRecovery, busy, loading, bookId, books],
+    [isAuthenticated, requiresAuthRecovery, busy, loading, bookId, books,
+      handleBookSwitch, handleLogin, fetchEvents],
   );
 
   if (!bookId && isAuthenticated && !requiresAuthRecovery) {

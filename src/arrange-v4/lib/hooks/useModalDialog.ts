@@ -63,23 +63,31 @@ export function useModalDialog<T extends HTMLElement>(
 
   // Focus entry and restoration are kept apart from the Tab trap so pausing
   // the trap cannot trigger the restore and move focus out of the dialog.
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Keyed on `isOpen` alone: a `contentKey` change swaps the container while
+  // the dialog is still up, and restoring focus to the opener then would throw
+  // focus out of the dialog and straight back in.
   useEffect(() => {
     if (!isOpen) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    // Focus the container rather than the first control so screen readers
-    // announce the dialog's name and role before its contents.
-    container.focus();
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
 
     return () => {
+      const previouslyFocused = previouslyFocusedRef.current;
+      previouslyFocusedRef.current = null;
       if (previouslyFocused && document.contains(previouslyFocused)) {
         previouslyFocused.focus();
       }
     };
-  }, [isOpen, contentKey]);
+  }, [isOpen]);
+
+  // Focus the container rather than the first control so screen readers
+  // announce the dialog's name and role before its contents — again when the
+  // content swaps, because the focused node has just left the document.
+  useEffect(() => {
+    if (!isOpen || paused) return;
+    containerRef.current?.focus();
+  }, [isOpen, contentKey, paused]);
 
   useEffect(() => {
     if (!isOpen || paused) return;

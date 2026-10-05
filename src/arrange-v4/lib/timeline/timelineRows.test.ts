@@ -90,6 +90,9 @@ test('buildTimelineRows tooltips name the task, its status and its dates', () =>
   assert.equal(lines[1], 'In Progress');
   assert.ok(lines[2].startsWith('ETS: '));
   assert.ok(lines[3].startsWith('ETA: '));
+  // The accessible name carries the same detail on one line, because a bar's
+  // `title` is not reliably announced and cannot be reached by touch.
+  assert.equal(row.accessibleLabel, lines.join('. '));
 });
 
 test('buildTimelineRows keeps the same order when a bar is clipped by the window', () => {

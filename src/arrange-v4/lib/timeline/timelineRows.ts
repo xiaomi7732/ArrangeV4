@@ -11,6 +11,11 @@ export interface TimelineRow {
   clippedStart: boolean;
   clippedEnd: boolean;
   tooltip: string;
+  /**
+   * The same detail as the tooltip, for the bar's accessible name: `title` is
+   * announced unreliably and is out of reach on a touch screen.
+   */
+  accessibleLabel: string;
 }
 function toMs(value: string | undefined): number | null {
   if (!value) return null;
@@ -47,6 +52,7 @@ export function buildTimelineRows(
         clippedStart: geometry.clippedStart,
         clippedEnd: geometry.clippedEnd,
         tooltip: parts.join('\n'),
+        accessibleLabel: parts.join('. '),
       },
     });
   }

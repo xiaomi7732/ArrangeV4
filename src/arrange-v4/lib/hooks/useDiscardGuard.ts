@@ -43,6 +43,11 @@ export function useDiscardGuard({ dirty, busy = false, onDiscard }: DiscardGuard
   // shown, with no effect needed to chase the change.
   const confirming = confirmRequested && dirty;
 
+  // The request is dropped as soon as there is nothing to lose, so a later edit
+  // cannot revive a prompt the user never asked for a second time. This is the
+  // documented way to adjust state from a change, and costs no extra commit.
+  if (confirmRequested && !dirty) setConfirmRequested(false);
+
   const requestClose = useCallback(() => {
     const intent = resolveCloseIntent({ dirty, busy });
     if (intent === 'ignore') return;

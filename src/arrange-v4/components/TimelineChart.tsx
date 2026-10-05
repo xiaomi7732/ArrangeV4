@@ -285,6 +285,7 @@ export default function TimelineChart({
                   ].filter(Boolean).join(' ')}
                   style={{ left: `${row.left}%`, width: `${row.width}%` }}
                   title={row.tooltip}
+                  aria-label={row.accessibleLabel}
                   onClick={() => onSelectItem(row.item)}
                 >
                   {/*
