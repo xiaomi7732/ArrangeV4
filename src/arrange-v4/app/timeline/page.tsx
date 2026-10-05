@@ -87,6 +87,28 @@ function TimelinePageContent() {
   // The range a request already in flight will cover. Without it, every frame
   // of a drag past the edge would start another identical read.
   const pendingRangeRef = useRef<LoadedRange | null>(null);
+  // Counts local edits. A read that started before one must not commit: its
+  // reply predates the edit and would put the old row back on screen.
+  const mutationVersionRef = useRef(0);
+  const pendingMutationCountRef = useRef(0);
+  // A read discarded for that reason is replayed once the writes settle,
+  // otherwise the window would stay on whatever was loaded before.
+  const pendingReplayRef = useRef<{ preserveError: boolean } | null>(null);
+  const fetchEventsRef = useRef<((
+    window: TimelineWindow,
+    options?: FetchEventsOptions,
+  ) => Promise<void>) | null>(null);
+
+  const flushPendingReplay = useCallback(() => {
+    if (pendingMutationCountRef.current > 0) return;
+    const pending = pendingReplayRef.current;
+    if (!pending) return;
+    pendingReplayRef.current = null;
+    void fetchEventsRef.current?.(timelineWindowRef.current, {
+      preserveError: pending.preserveError,
+      interaction: 'silent-only',
+    });
+  }, []);
 
   bookIdRef.current = bookId;
 
@@ -141,6 +163,7 @@ function TimelinePageContent() {
     const requestedBookId = bookIdRef.current;
     if (!isAuthenticated || !requestedBookId) return;
     const fetchSequence = ++fetchSequenceRef.current;
+    const requestedMutationVersion = mutationVersionRef.current;
     const range = fetchRangeFor(window);
     pendingRangeRef.current = { bookId: requestedBookId, ...range };
 
@@ -158,6 +181,15 @@ function TimelinePageContent() {
         fetchSequenceRef.current !== fetchSequence ||
         bookIdRef.current !== requestedBookId
       ) return;
+      if (mutationVersionRef.current !== requestedMutationVersion) {
+        // The reply predates a local edit, so committing it would undo the
+        // edit on screen. Read again once the writes are done.
+        pendingReplayRef.current = {
+          preserveError: preserveError || pendingReplayRef.current?.preserveError === true,
+        };
+        flushPendingReplay();
+        return;
+      }
       setItems(loaded);
       setItemsBookId(requestedBookId);
       setNowMs(Date.now());
@@ -201,7 +233,11 @@ function TimelinePageContent() {
         setLoading(false);
       }
     }
-  }, [isAuthenticated, store]);
+  }, [isAuthenticated, store, flushPendingReplay]);
+
+  useEffect(() => {
+    fetchEventsRef.current = fetchEvents;
+  }, [fetchEvents]);
 
   useEffect(() => {
     if (bookId && bookId !== itemsBookId) {
@@ -298,6 +334,9 @@ function TimelinePageContent() {
       item.id === targetId ? { ...item, ...optimisticFields } : item
     )));
     setSelectedTodo(previous => (previous ? { ...previous, ...optimisticFields } : previous));
+    // Anything already in flight now holds a pre-edit copy of this row.
+    mutationVersionRef.current += 1;
+    pendingMutationCountRef.current += 1;
 
     try {
       const updated = await store.updateItem(operationBookId, targetId, persistedFields);
@@ -312,13 +351,13 @@ function TimelinePageContent() {
       setSelectedTodo(null);
       const writeMessage = describeFailure('Could not save your changes.', err);
       setError(writeMessage);
-      // The restored row is a guess until a read confirms it, so the next load
-      // keeps the banner rather than quietly replacing it.
-      void fetchEvents(timelineWindowRef.current, {
-        preserveError: true,
-        interaction: 'silent-only',
-      });
+      // The restored row is a guess until a read confirms it, so a read is
+      // queued below, and it keeps the banner rather than quietly replacing it.
+      pendingReplayRef.current = { preserveError: true };
       throw err;
+    } finally {
+      pendingMutationCountRef.current -= 1;
+      flushPendingReplay();
     }
   };
 
