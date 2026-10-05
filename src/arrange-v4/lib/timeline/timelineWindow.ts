@@ -199,7 +199,9 @@ const MAX_TICKS = 400;
  *
  * Ticks land on local calendar boundaries rather than on even multiples of the
  * span, so "Mar 3" sits where March 3rd actually starts, including across a
- * daylight-saving change.
+ * daylight-saving change. The window end is exclusive, so a tick exactly at
+ * `endMs` is left out: it would sit on the right edge and label a moment that
+ * is not in view.
  */
 export function buildTimeAxisTicks(window: TimelineWindow): TimeAxisTick[] {
   const span = spanOf(window);
@@ -214,7 +216,7 @@ export function buildTimeAxisTicks(window: TimelineWindow): TimeAxisTick[] {
     // the previous one: on a spring-forward day, adding two hours to a 1am
     // tick lands on 3am and every later tick that day sits on an odd hour.
     let day = startOfLocalDay(window.startMs);
-    while (day.getTime() <= window.endMs && ticks.length < MAX_TICKS) {
+    while (day.getTime() < window.endMs && ticks.length < MAX_TICKS) {
       for (let hour = 0; hour < 24; hour += step) {
         const at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour);
         // The hour a spring-forward skips does not exist: asking for 2am on
@@ -222,7 +224,7 @@ export function buildTimeAxisTicks(window: TimelineWindow): TimeAxisTick[] {
         // duplicate the React key the chart draws it with.
         if (at.getHours() !== hour) continue;
         if (at.getTime() < window.startMs) continue;
-        if (at.getTime() > window.endMs || ticks.length >= MAX_TICKS) break;
+        if (at.getTime() >= window.endMs || ticks.length >= MAX_TICKS) break;
         if (ticks.length > 0 && at.getTime() <= ticks[ticks.length - 1].timeMs) continue;
         ticks.push({
           positionPercent: positionPercent(at.getTime(), window),
@@ -242,7 +244,7 @@ export function buildTimeAxisTicks(window: TimelineWindow): TimeAxisTick[] {
     if (cursor.getTime() < window.startMs) {
       cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
     }
-    while (cursor.getTime() <= window.endMs && ticks.length < MAX_TICKS) {
+    while (cursor.getTime() < window.endMs && ticks.length < MAX_TICKS) {
       ticks.push({
         positionPercent: positionPercent(cursor.getTime(), window),
         timeMs: cursor.getTime(),
@@ -266,7 +268,7 @@ export function buildTimeAxisTicks(window: TimelineWindow): TimeAxisTick[] {
   if (cursor.getTime() < window.startMs) {
     cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + stepDays);
   }
-  while (cursor.getTime() <= window.endMs && ticks.length < MAX_TICKS) {
+  while (cursor.getTime() < window.endMs && ticks.length < MAX_TICKS) {
     ticks.push({
       positionPercent: positionPercent(cursor.getTime(), window),
       timeMs: cursor.getTime(),

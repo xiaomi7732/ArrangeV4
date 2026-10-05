@@ -31,6 +31,10 @@ const BASE = new Date(2026, 2, 10, 0, 0, 0).getTime();
 /**
  * Runs a check in a zone that really observes daylight saving, so the clock-change
  * tests mean something on a machine (or CI runner) set to UTC.
+ *
+ * The override is global to the process, but it cannot leak: `node --test` runs
+ * every test file in its own child process, `run` is synchronous, and the
+ * previous value is restored in `finally`.
  */
 function inTimeZone(timeZone: string, run: () => void): void {
   const previous = process.env.TZ;
@@ -296,6 +300,19 @@ describe('granularityFor', () => {
 describe('buildTimeAxisTicks', () => {
   test('returns nothing for an empty window', () => {
     assert.deepEqual(buildTimeAxisTicks({ startMs: BASE, endMs: BASE }), []);
+  });
+
+  test('leaves out a tick that lands exactly on the exclusive end', () => {
+    // Midnight-to-midnight windows at every granularity: the closing midnight
+    // is not in view, so it must not be labelled.
+    for (const days of [1, 10, 60, 400]) {
+      const start = new Date(2024, 4, 1).getTime();
+      const end = new Date(2024, 4, 1 + days).getTime();
+      for (const tick of buildTimeAxisTicks({ startMs: start, endMs: end })) {
+        assert.ok(tick.timeMs < end, `tick at the exclusive end for ${days} days`);
+        assert.ok(tick.positionPercent < 100, `tick on the right edge for ${days} days`);
+      }
+    }
   });
 
   test('puts every tick inside the window', () => {

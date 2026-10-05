@@ -322,8 +322,10 @@ function TimelinePageContent() {
     }
   };
 
-  const goToToday = useCallback(() => {    setNowMs(Date.now());
-    setTimelineWindow(current => centerWindowOn(current, Date.now()));
+  const goToToday = useCallback(() => {
+    const now = Date.now();
+    setNowMs(now);
+    setTimelineWindow(current => centerWindowOn(current, now));
   }, []);
 
   useSetTopBarActions(

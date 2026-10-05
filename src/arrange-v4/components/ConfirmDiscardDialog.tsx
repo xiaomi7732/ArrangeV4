@@ -68,7 +68,8 @@ export default function ConfirmDiscardDialog({
         aria-describedby={messageId}
         onClick={e => e.stopPropagation()}
         tabIndex={-1}
-      >        <h2 id={titleId} className={styles.title}>Discard unsaved changes?</h2>
+      >
+        <h2 id={titleId} className={styles.title}>Discard unsaved changes?</h2>
         <p id={messageId} className={styles.message}>
           Your edits to {subject} have not been saved. Closing now will lose them.
         </p>
