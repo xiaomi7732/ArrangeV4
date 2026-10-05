@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useId, useRef } from 'react';
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react';
 import { TodoItem, TodoStatus } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
+import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
+import { hasUnsavedChanges, type FormSnapshot } from '@/lib/unsavedChanges';
 import {
   TODO_DIALOG_TABS,
   tabElementId,
@@ -10,6 +12,7 @@ import {
   type TodoDialogTab,
 } from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
+import ConfirmDiscardDialog from './ConfirmDiscardDialog';
 import DialogTabs from './DialogTabs';
 import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
@@ -41,37 +44,121 @@ function getDateTimeString(hoursOffset: number = 0) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+interface AddTodoFormValues {
+  subject: string;
+  urgent: boolean;
+  important: boolean;
+  status: TodoStatus;
+  remarks: string;
+  checklist: string[];
+  etsDateTime: string;
+  etaDateTime: string;
+  categories: string[];
+}
+
+/**
+ * The form's starting point, built in one go so the baseline the discard
+ * prompt compares against is exactly what was put on screen. Reading the clock
+ * twice could straddle a minute boundary and make an untouched form look
+ * edited.
+ */
+function initialFormValues(
+  defaultUrgent: boolean,
+  defaultImportant: boolean,
+  defaultStatus: TodoStatus,
+): AddTodoFormValues {
+  return {
+    subject: '',
+    urgent: defaultUrgent,
+    important: defaultImportant,
+    status: defaultStatus,
+    remarks: '',
+    checklist: [],
+    etsDateTime: getDateTimeString(),
+    etaDateTime: getDateTimeString(24), // 24 hours from now
+    categories: [],
+  };
+}
+
+/**
+ * The form values as the save would see them.
+ *
+ * Whitespace alone never reaches the stored item — the subject is trimmed and
+ * blank remarks are dropped — so it must not count as an unsaved change
+ * either. Remarks that survive are compared verbatim, because Markdown is
+ * whitespace-significant.
+ */
+function comparableValues(values: AddTodoFormValues): AddTodoFormValues {
+  return {
+    ...values,
+    subject: values.subject.trim(),
+    remarks: values.remarks.trim() ? values.remarks : '',
+  };
+}
+
 export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false, defaultImportant = false, defaultStatus = 'new', addLabel, buttonText = 'Add TODO', compact = false, availableCategories = [] }: AddTodoItemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
-  const [subject, setSubject] = useState('');
-  const [urgent, setUrgent] = useState(defaultUrgent);
-  const [important, setImportant] = useState(defaultImportant);
-  const [status, setStatus] = useState<TodoStatus>(defaultStatus);
-  const [remarks, setRemarks] = useState('');
-  const [checklist, setChecklist] = useState<string[]>([]);
-  const [etaDateTime, setEtaDateTime] = useState(() => getDateTimeString(24)); // 24 hours from now
-  const [etsDateTime, setEtsDateTime] = useState(() => getDateTimeString());
-  const [categories, setCategories] = useState<string[]>([]);
+  // Form state, seeded from one snapshot that is also kept as the baseline the
+  // unsaved-changes check compares against.
+  const initialValuesRef = useRef<AddTodoFormValues>(
+    initialFormValues(defaultUrgent, defaultImportant, defaultStatus),
+  );
+  const [subject, setSubject] = useState(initialValuesRef.current.subject);
+  const [urgent, setUrgent] = useState(initialValuesRef.current.urgent);
+  const [important, setImportant] = useState(initialValuesRef.current.important);
+  const [status, setStatus] = useState<TodoStatus>(initialValuesRef.current.status);
+  const [remarks, setRemarks] = useState(initialValuesRef.current.remarks);
+  const [checklist, setChecklist] = useState<string[]>(initialValuesRef.current.checklist);
+  const [etaDateTime, setEtaDateTime] = useState(initialValuesRef.current.etaDateTime);
+  const [etsDateTime, setEtsDateTime] = useState(initialValuesRef.current.etsDateTime);
+  const [categories, setCategories] = useState<string[]>(initialValuesRef.current.categories);
   const [activeTab, setActiveTab] = useState<TodoDialogTab>('essentials');
+  // Bumped on every reset so the dirty check re-reads the new baseline; a ref
+  // alone would not re-render, leaving a stale "unsaved changes" verdict.
+  const [baselineVersion, setBaselineVersion] = useState(0);
   const tabsId = useId();
 
   const resetForm = useCallback(() => {
-    setSubject('');
-    setUrgent(defaultUrgent);
-    setImportant(defaultImportant);
-    setStatus(defaultStatus);
-    setRemarks('');
-    setChecklist([]);
-    setEtaDateTime(getDateTimeString(24)); // 24 hours from now
-    setEtsDateTime(getDateTimeString());
-    setCategories([]);
+    const values = initialFormValues(defaultUrgent, defaultImportant, defaultStatus);
+    initialValuesRef.current = values;
+    setSubject(values.subject);
+    setUrgent(values.urgent);
+    setImportant(values.important);
+    setStatus(values.status);
+    setRemarks(values.remarks);
+    setChecklist(values.checklist);
+    setEtaDateTime(values.etaDateTime);
+    setEtsDateTime(values.etsDateTime);
+    setCategories(values.categories);
     setActiveTab('essentials');
     setError(null);
+    setBaselineVersion(version => version + 1);
   }, [defaultUrgent, defaultImportant, defaultStatus]);
+
+  const currentValues: AddTodoFormValues = {
+    subject,
+    urgent,
+    important,
+    status,
+    remarks,
+    checklist,
+    etsDateTime,
+    etaDateTime,
+    categories,
+  };
+  const dirty = useMemo(
+    () => hasUnsavedChanges(
+      comparableValues(currentValues) as unknown as FormSnapshot,
+      comparableValues(initialValuesRef.current) as unknown as FormSnapshot,
+    ),
+    // The baseline lives in a ref, so the version counter is what tells this
+    // memo that it moved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [subject, urgent, important, status, remarks, checklist, etsDateTime, etaDateTime, categories, baselineVersion],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,12 +208,18 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
     }
   };
 
-  const handleCancel = () => {
+  const discardAndClose = useCallback(() => {
     resetForm();
     setIsOpen(false);
-  };
+  }, [resetForm]);
 
-  const dialogRef = useModalDialog<HTMLDivElement>(isOpen);
+  const { confirming, requestClose, confirmDiscard, cancelDiscard } = useDiscardGuard({
+    dirty,
+    busy: isSubmitting,
+    onDiscard: discardAndClose,
+  });
+
+  const dialogRef = useModalDialog<HTMLDivElement>(isOpen, undefined, { paused: confirming });
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const wasOpenRef = useRef(false);
 
@@ -138,22 +231,26 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    // The discard prompt owns Escape while it is up, so this handler stands
+    // down rather than closing the form out from under the question.
+    if (!isOpen || confirming) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmitting) {
-        resetForm();
-        setIsOpen(false);
-      }
+      if (e.key === 'Escape') requestClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, isSubmitting, resetForm]);
+  }, [isOpen, confirming, requestClose]);
 
   if (!isOpen) {
     return (
       <button
         ref={triggerRef}
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          // Reset on the way in, so the baseline the discard prompt compares
+          // against matches the form actually being shown.
+          resetForm();
+          setIsOpen(true);
+        }}
         disabled={disabled}
         className={compact ? styles.addButtonCompact : styles.addButton}
         title={addLabel}
@@ -323,7 +420,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           )}
 
           <div className={styles.actions}>
-            <button type="button" onClick={handleCancel} disabled={isSubmitting}
+            <button type="button" onClick={requestClose} disabled={isSubmitting}
               className={`${styles.button} ${styles.buttonSecondary}`}>
               Cancel
             </button>
@@ -334,6 +431,14 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           </div>
         </form>
       </div>
+
+      {confirming && (
+        <ConfirmDiscardDialog
+          subject="this new TODO item"
+          onKeepEditing={cancelDiscard}
+          onDiscard={confirmDiscard}
+        />
+      )}
     </div>
   );
 }

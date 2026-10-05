@@ -23,10 +23,15 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: '/books', label: 'My Books', icon: '📚' },
   { href: '/matrix', label: 'Matrix', icon: '📊', matchPrefix: true },
   { href: '/scrum', label: 'Scrum Board', icon: '🏃', matchPrefix: true },
+  { href: '/timeline', label: 'Timeline', icon: '📅', matchPrefix: true },
   { href: '/cancelled', label: 'Cancelled Tasks', icon: '🗑️', matchPrefix: true },
 ];
 
-function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isOnScrum: boolean }) {
+function ViewSwitcherInner({ isOnMatrix, isOnScrum, isOnTimeline }: {
+  isOnMatrix: boolean;
+  isOnScrum: boolean;
+  isOnTimeline: boolean;
+}) {
   const searchParams = useSearchParams();
   const auth = useAuthClient();
   const bookId = searchParams.get('bookId')
@@ -51,6 +56,14 @@ function ViewSwitcherInner({ isOnMatrix, isOnScrum }: { isOnMatrix: boolean; isO
       >
         🏃
       </Link>
+      <Link
+        href={`/timeline${query}`}
+        className={`${styles.viewSwitcherButton} ${isOnTimeline ? styles.viewSwitcherActive : ''}`}
+        aria-label="Timeline view"
+        aria-current={isOnTimeline ? 'page' : undefined}
+      >
+        📅
+      </Link>
     </div>
   );
 }
@@ -68,9 +81,10 @@ export default function HamburgerMenu() {
 
   const isOnMatrix = pathname.startsWith('/matrix');
   const isOnScrum = pathname.startsWith('/scrum');
+  const isOnTimeline = pathname.startsWith('/timeline');
   // Cancelled is a task view too, so it keeps the switcher: returning to a
   // board should take one interaction, not a trip through the sidebar.
-  const showViewSwitcher = isOnMatrix || isOnScrum || pathname.startsWith('/cancelled');
+  const showViewSwitcher = isOnMatrix || isOnScrum || isOnTimeline || pathname.startsWith('/cancelled');
   const navItems = useMemo(() => {
     void isOpen;
     const savedBookId = getLastBookId(backendForAuthProvider(auth.provider));
@@ -163,7 +177,7 @@ export default function HamburgerMenu() {
           <h1 className={styles.pageLabel}>{pageLabel}</h1>
           {showViewSwitcher && (
             <Suspense fallback={null}>
-              <ViewSwitcherInner isOnMatrix={isOnMatrix} isOnScrum={isOnScrum} />
+              <ViewSwitcherInner isOnMatrix={isOnMatrix} isOnScrum={isOnScrum} isOnTimeline={isOnTimeline} />
             </Suspense>
           )}
           {leftActions}

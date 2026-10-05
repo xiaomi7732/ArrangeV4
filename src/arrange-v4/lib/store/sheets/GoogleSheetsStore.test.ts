@@ -367,6 +367,44 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
+  it('keeps a terminal task dated only at one end inside the window', async () => {
+    // The timeline draws a task with just an ETA as an instant, so a windowed
+    // read has to return it rather than require a start date.
+    const etaOnlyFinished = [
+      'todo-eta', 'Finished, ETA only', '', '2026-01-15T11:00:00.000Z',
+      'finished', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const etsOnlyCancelled = [
+      'todo-ets', 'Cancelled, ETS only', '2026-01-16T11:00:00.000Z', '',
+      'cancelled', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const etaOnlyOutside = [
+      'todo-far', 'Finished elsewhere', '', '2026-09-15T11:00:00.000Z',
+      'finished', false, false, '', '', '', '', '', '', '', '', '', '', '',
+    ];
+    const mock = installFetchMock([
+      () => jsonResponse({
+        values: [
+          Array.from(TODO_HEADERS),
+          etaOnlyFinished,
+          etsOnlyCancelled,
+          etaOnlyOutside,
+        ],
+      }),
+      () => todoSheetResponse(731),
+    ]);
+    try {
+      const items = await createStore().listItems('sheet:sheet-1', {
+        range: 'window',
+        fromDate: '2026-01-01T00:00:00.000Z',
+        toDate: '2026-02-01T00:00:00.000Z',
+      });
+      assert.deepEqual(items.map(item => item.id), ['todo-eta', 'todo-ets']);
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('filters windowed item queries by event overlap', async () => {
     const inWindow = [
       'todo-1', 'In range', '2026-01-15T10:00:00.000Z', '2026-01-15T11:00:00.000Z',

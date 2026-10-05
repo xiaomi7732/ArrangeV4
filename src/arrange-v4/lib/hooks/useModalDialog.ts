@@ -33,6 +33,16 @@ export function nextFocusTarget({ focusable, active, shiftKey }: FocusTrapState)
   return null;
 }
 
+export interface ModalDialogOptions {
+  /**
+   * Suspends the Tab trap without unmounting it, for when a nested dialog
+   * (such as a discard confirmation) owns the focus. Closing the dialog would
+   * also release the trap, but it would hand focus back to whatever opened the
+   * dialog — pulling it out from under the prompt the user is answering.
+   */
+  paused?: boolean;
+}
+
 /**
  * Gives a modal dialog the focus behaviour assistive technology expects:
  * focus moves into the dialog on open, Tab cannot leave it, and focus returns
@@ -44,9 +54,15 @@ export function nextFocusTarget({ focusable, active, shiftKey }: FocusTrapState)
  * Pass `contentKey` when the dialog swaps its container element (for example
  * a view/edit switch) so the trap re-binds to the new node.
  */
-export function useModalDialog<T extends HTMLElement>(isOpen: boolean, contentKey?: unknown) {
+export function useModalDialog<T extends HTMLElement>(
+  isOpen: boolean,
+  contentKey?: unknown,
+  { paused = false }: ModalDialogOptions = {},
+) {
   const containerRef = useRef<T | null>(null);
 
+  // Focus entry and restoration are kept apart from the Tab trap so pausing
+  // the trap cannot trigger the restore and move focus out of the dialog.
   useEffect(() => {
     if (!isOpen) return;
     const container = containerRef.current;
@@ -54,13 +70,25 @@ export function useModalDialog<T extends HTMLElement>(isOpen: boolean, contentKe
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
-    const focusableElements = () =>
-      Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-        .filter(el => el.getClientRects().length > 0);
-
     // Focus the container rather than the first control so screen readers
     // announce the dialog's name and role before its contents.
     container.focus();
+
+    return () => {
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [isOpen, contentKey]);
+
+  useEffect(() => {
+    if (!isOpen || paused) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const focusableElements = () =>
+      Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+        .filter(el => el.getClientRects().length > 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
@@ -86,11 +114,8 @@ export function useModalDialog<T extends HTMLElement>(isOpen: boolean, contentKe
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
-      if (previouslyFocused && document.contains(previouslyFocused)) {
-        previouslyFocused.focus();
-      }
     };
-  }, [isOpen, contentKey]);
+  }, [isOpen, contentKey, paused]);
 
   return containerRef;
 }
