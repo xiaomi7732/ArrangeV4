@@ -22,9 +22,10 @@ const PRESET_KEY_PREFIX = 'arrange_filterPresets';
  * Views that expose the same filter controls share presets. The boards
  * (Matrix and Scrum) offer status, tag, and priority filters; Cancelled is
  * search-only, so its presets are kept apart — otherwise a preset saved there
- * would silently strip criteria from a board preset of the same name.
+ * would silently strip criteria from a board preset of the same name. Timeline
+ * is search-only over live tasks, which is neither of the other two.
  */
-export type PresetScope = 'board' | 'cancelled';
+export type PresetScope = 'board' | 'cancelled' | 'timeline';
 
 export const MAX_PRESET_NAME_LENGTH = 60;
 export const MAX_PRESETS_PER_BOOK = 50;
@@ -87,10 +88,11 @@ export function sanitizeTaskQuery(value: unknown, scope: PresetScope = 'board'):
   if (!value || typeof value !== 'object') return query;
   const source = value as Record<string, unknown>;
 
-  // Cancelled is search-only: it renders no tag or priority controls, so a
-  // preset carrying those criteria (hand-edited storage, or written by an
-  // older release) would filter by something the user cannot see or clear.
-  if (scope === 'cancelled') {
+  // Cancelled and Timeline are search-only: they render no tag or priority
+  // controls, so a preset carrying those criteria (hand-edited storage, or
+  // written by an older release) would filter by something the user cannot
+  // see or clear.
+  if (scope === 'cancelled' || scope === 'timeline') {
     return {
       ...query,
       text: typeof source.text === 'string' ? source.text : '',

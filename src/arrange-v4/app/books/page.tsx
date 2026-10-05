@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store/useStore';
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
+import { insertBookSorted } from '@/lib/books/sortBooks';
 import { backendForAuthProvider } from '@/lib/store/types';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -93,7 +94,7 @@ export default function BooksPage() {
       const newBook = await store.createBook(name, {
         backend: backendForAuthProvider(auth.provider),
       });
-      setBooks(prev => [...prev, newBook]);
+      setBooks(prev => insertBookSorted(prev, newBook));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create book';
       console.error('Error creating book:', err);

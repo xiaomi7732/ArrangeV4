@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useId } from 'react';
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react';
 import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
+import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
+import { hasUnsavedChanges, type FormSnapshot } from '@/lib/unsavedChanges';
 import { formatAbsoluteDateTime } from '@/lib/dateUtils';
 import { describeDateBump } from '@/lib/bumpNotice';
 import {
@@ -12,6 +14,7 @@ import {
   type TodoDialogTab,
 } from '@/lib/dialogTabs';
 import ChecklistEditor from './ChecklistEditor';
+import ConfirmDiscardDialog from './ConfirmDiscardDialog';
 import DialogTabs from './DialogTabs';
 import MarkdownView from './MarkdownView';
 import RemarksEditor from './RemarksEditor';
@@ -117,7 +120,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const sameValue = (left: unknown, right: unknown) =>
         JSON.stringify(left) === JSON.stringify(right);
 
-      if (subject !== todo.subject) updatedFields.subject = nextSubject;
+      if (nextSubject !== todo.subject) updatedFields.subject = nextSubject;
       if (urgent !== (todo.urgent ?? false)) updatedFields.urgent = urgent;
       if (important !== (todo.important ?? false)) updatedFields.important = important;
       if (status !== (todo.status || 'new')) updatedFields.status = status;
@@ -168,16 +171,99 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     setEditing(false);
   }, [todo]);
 
+  // The same values `handleCancelEdit` restores, which is exactly what closing
+  // the editor would throw away.
+  const baselineValues = useMemo(() => ({
+    // Trimmed on both sides: the save stores a trimmed subject, so trailing
+    // spaces are not a change worth warning about.
+    subject: todo.subject.trim(),
+    urgent: todo.urgent ?? false,
+    important: todo.important ?? false,
+    status: todo.status || 'new',
+    etsDateTime: formatLocalDateTime(todo.etsDateTime),
+    etaDateTime: formatLocalDateTime(todo.etaDateTime),
+    remarks: todo.remarks?.content || '',
+    // Only meaningful while there is a remark to format: the save ignores a
+    // type change on an empty remark, so reporting one as unsaved would nag
+    // about something that could never be stored.
+    remarksMarkdown: (todo.remarks?.content || '').trim()
+      ? (!todo.remarks || todo.remarks.type === 'markdown')
+      : null,
+    checklist: todo.checklist || [],
+    categories: todo.categories || [],
+  }), [todo]);
+
+  const dirty = useMemo(
+    () => editing && hasUnsavedChanges(
+      {
+        subject: subject.trim(),
+        urgent,
+        important,
+        status,
+        etsDateTime,
+        etaDateTime,
+        remarks,
+        remarksMarkdown: remarks.trim() ? remarksMarkdown : null,
+        checklist,
+        categories,
+      } as FormSnapshot,
+      baselineValues as FormSnapshot,
+    ),
+    [
+      editing,
+      subject,
+      urgent,
+      important,
+      status,
+      etsDateTime,
+      etaDateTime,
+      remarks,
+      remarksMarkdown,
+      checklist,
+      categories,
+      baselineValues,
+    ],
+  );
+
+  /*
+   * Leaving the editor means two different things depending on how it is done:
+   * Cancel and Escape drop back to the read-only view, while clicking the
+   * overlay closes the dialog outright. Both lose the edits, so both go
+   * through the one guard, which remembers which was asked for.
+   */
+  const pendingDiscardRef = useRef<() => void>(() => {});
+  const runPendingDiscard = useCallback(() => {
+    pendingDiscardRef.current();
+  }, []);
+
+  const { confirming, requestClose, confirmDiscard, cancelDiscard } = useDiscardGuard({
+    dirty,
+    busy: isSubmitting,
+    onDiscard: runPendingDiscard,
+  });
+
+  const requestCancelEdit = useCallback(() => {
+    pendingDiscardRef.current = handleCancelEdit;
+    requestClose();
+  }, [handleCancelEdit, requestClose]);
+
+  const requestCloseDialog = useCallback(() => {
+    pendingDiscardRef.current = onClose;
+    requestClose();
+  }, [onClose, requestClose]);
+
   const handleEsc = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
-    if (editing && !isSubmitting) {
-      handleCancelEdit();
-    } else if (!editing) {
+    // The discard prompt claims Escape for itself while it is up.
+    if (confirming) return;
+    if (editing) {
+      requestCancelEdit();
+    } else {
       onClose();
     }
-  }, [editing, isSubmitting, onClose, handleCancelEdit]);
+  }, [editing, confirming, onClose, requestCancelEdit]);
 
-  const dialogRef = useModalDialog<HTMLDivElement>(true, editing);
+  const dialogRef = useModalDialog<HTMLDivElement>(true, editing, { paused: confirming });
   const bumpedFrom = describeDateBump(todo);
 
   useEffect(() => {
@@ -187,7 +273,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
   if (editing) {
     return (
-      <div className={styles.overlay} onClick={onClose}>
+      <div className={styles.overlay} onClick={requestCloseDialog}>
         <div
           ref={dialogRef}
           className={styles.modal}
@@ -338,7 +424,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             )}
 
             <div className={styles.actions}>
-              <button type="button" onClick={handleCancelEdit} disabled={isSubmitting}
+              <button type="button" onClick={requestCancelEdit} disabled={isSubmitting}
                 className={`${styles.button} ${styles.buttonSecondary}`}>
                 Cancel
               </button>
@@ -349,6 +435,14 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             </div>
           </form>
         </div>
+
+        {confirming && (
+          <ConfirmDiscardDialog
+            subject="this TODO item"
+            onKeepEditing={cancelDiscard}
+            onDiscard={confirmDiscard}
+          />
+        )}
       </div>
     );
   }

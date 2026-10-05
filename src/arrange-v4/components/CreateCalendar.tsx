@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { validateBookName } from '@/lib/books/bookName';
+import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
+import ConfirmDiscardDialog from './ConfirmDiscardDialog';
 import styles from './CreateCalendar.module.css';
 
 interface CreateCalendarProps {
@@ -52,24 +54,28 @@ export default function CreateCalendar({
     }
   };
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setIsOpen(false);
     setCalendarName('');
     setError(null);
-  };
+  }, []);
+
+  // Whitespace alone is nothing worth protecting, so the prompt waits for a
+  // name the user could actually submit.
+  const { confirming, requestClose, confirmDiscard, cancelDiscard } = useDiscardGuard({
+    dirty: calendarName.trim().length > 0,
+    busy: isCreating,
+    onDiscard: handleCancel,
+  });
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || confirming) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isCreating) {
-        setIsOpen(false);
-        setCalendarName('');
-        setError(null);
-      }
+      if (e.key === 'Escape') requestClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, isCreating]);
+  }, [isOpen, confirming, requestClose]);
 
   const liveValidation = validateBookName(calendarName, existingNames, { stripArrangeSuffix: appendArrangeSuffix });
   // Only surface the live message once the user has typed something, so the
@@ -128,7 +134,7 @@ export default function CreateCalendar({
               <div className={styles.modalActions}>
                 <button
                   type="button"
-                  onClick={handleCancel}
+                  onClick={requestClose}
                   disabled={isCreating}
                   className={styles.cancelButton}
                 >
@@ -144,6 +150,14 @@ export default function CreateCalendar({
               </div>
             </form>
           </div>
+
+          {confirming && (
+            <ConfirmDiscardDialog
+              subject="this new book"
+              onKeepEditing={cancelDiscard}
+              onDiscard={confirmDiscard}
+            />
+          )}
         </div>
       )}
     </>

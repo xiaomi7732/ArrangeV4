@@ -10,6 +10,7 @@ import type {
   TodoStore,
 } from './types';
 import { parseBookId } from './types';
+import { sortBooks } from '@/lib/books/sortBooks';
 import { CalendarStore } from './calendar/CalendarStore';
 import { GoogleSheetsStore } from './sheets/GoogleSheetsStore';
 
@@ -35,8 +36,12 @@ export class MultiBackendStore implements TodoStore {
     return this.calendarStore;
   }
 
+  /**
+   * Sorted here rather than in each page, so every book list and switcher in
+   * the app agrees on one order regardless of what the backend returned.
+   */
   async listBooks(options?: StoreOperationOptions): Promise<Book[]> {
-    return this.routeByBackend(this.activeBackend).listBooks(options);
+    return sortBooks(await this.routeByBackend(this.activeBackend).listBooks(options));
   }
 
   createBook(name: string, opts: CreateBookOptions): Promise<Book> {

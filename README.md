@@ -23,7 +23,9 @@ Every task you create is a **calendar event in your own Microsoft Outlook accoun
 
 ## ✨ Features
 
-- **Eisenhower Matrix** — drag-and-drop cards between four priority quadrants (more views coming soon).
+- **Eisenhower Matrix** — drag-and-drop cards between four priority quadrants.
+- **Scrum board** — the same tasks arranged by status.
+- **Timeline** — a Gantt chart of any period, with zoom and pan.
 - **Multiple books** — organize tasks into separate calendars (e.g. "Work" and "Personal").
 - **Status tracking** — mark tasks as New, In Progress, Blocked, Finished, or Cancelled.
 - **Checklists & remarks** — add sub-tasks and notes to any item.

@@ -1,0 +1,188 @@
+.chart {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Axis */
+.axis {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid #e5e7eb;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tickLabel {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: #6b7280;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tickMajor {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+/* Interaction surface */
+.surface {
+  position: relative;
+  min-height: 160px;
+  padding: 8px 0;
+  overflow: hidden;
+  touch-action: pan-y;
+  /* Zooming must not chain into a page scroll or a browser back-swipe. */
+  overscroll-behavior: contain;
+  cursor: grab;
+}
+
+.surface:active {
+  cursor: grabbing;
+}
+
+.surface:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.gridLines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gridLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: #f3f4f6;
+}
+
+.gridLineMajor {
+  background-color: #e5e7eb;
+}
+
+.nowLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background-color: #dc2626;
+  opacity: 0.7;
+}
+
+/* Rows */
+.rows {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  position: relative;
+  height: 28px;
+}
+
+.bar {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  /* A zero-length task is still a task, so it keeps a grabbable stub. */
+  min-width: 6px;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  color: white;
+  text-align: left;
+  transition: filter 0.15s;
+}
+
+.bar:hover {
+  filter: brightness(1.1);
+}
+
+.bar:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
+}
+
+.barLabel {
+  position: absolute;
+  left: calc(100% + 8px);
+  max-width: 40vw;
+  font-size: 0.8rem;
+  color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Near the right edge the label would be clipped, so it hangs to the left. */
+.barLabelBefore {
+  left: auto;
+  right: calc(100% + 8px);
+  text-align: right;
+}
+
+/* A bar wide enough to hold its own label keeps it inside. */
+.barLabelInside {
+  position: static;
+  max-width: none;
+  padding: 0 8px;
+  color: white;
+  flex: 1;
+  min-width: 0;
+}
+
+.clippedStart {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.clippedEnd {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: inset -3px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.clippedStart.clippedEnd {
+  box-shadow:
+    inset 3px 0 0 rgba(255, 255, 255, 0.65),
+    inset -3px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.barUrgent {
+  outline: 2px solid #f97316;
+  outline-offset: 1px;
+}
+
+/* Status colours, matching the Matrix and Scrum boards. */
+.status_new { background-color: #6b7280; }
+.status_inProgress { background-color: #2563eb; }
+.status_blocked { background-color: #dc2626; }
+.status_finished { background-color: #16a34a; }
+.status_cancelled { background-color: #9333ea; }
+
+.empty {
+  position: relative;
+  text-align: center;
+  padding: 48px 16px;
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}

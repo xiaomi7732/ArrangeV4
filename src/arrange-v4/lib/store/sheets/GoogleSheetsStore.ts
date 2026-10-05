@@ -119,12 +119,16 @@ function writePendingCleanup(ids: string[]): void {
 function itemOverlapsWindow(item: TodoItem, fromDate: string, toDate: string): boolean {
   const from = Date.parse(fromDate);
   const to = Date.parse(toDate);
-  const start = Date.parse(item.etsDateTime || '');
-  const end = Date.parse(item.etaDateTime || item.etsDateTime || '');
-  return Number.isFinite(start)
-    && Number.isFinite(end)
-    && start < to
-    && end > from;
+  const ets = Date.parse(item.etsDateTime || '');
+  const eta = Date.parse(item.etaDateTime || '');
+  // A task dated at only one end is an instant at that date — including one
+  // that has only an ETA, which the timeline draws and so must also read.
+  const first = Number.isFinite(ets) ? ets : eta;
+  const second = Number.isFinite(eta) ? eta : ets;
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return false;
+  const start = Math.min(first, second);
+  const end = Math.max(first, second);
+  return start < to && end >= from;
 }
 
 function dateFallsInWindow(dateTime: string | null | undefined, fromDate: string, toDate: string) {
