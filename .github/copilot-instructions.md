@@ -85,7 +85,7 @@ All state is React hooks (`useState`, `useMemo`) — no global state library. Pe
 
 ### Unsaved-edit guard
 
-Every dialog that holds edits (`AddTodoItem`, `ViewTodoItem` in edit mode, `CreateCalendar`) routes *all* of its close paths — Cancel, Escape, the overlay — through `useDiscardGuard` (`lib/hooks/useDiscardGuard.ts`), which shows the shared `ConfirmDiscardDialog` only when the form is genuinely dirty. Dirtiness is decided by `hasUnsavedChanges()` in `lib/unsavedChanges.ts` against a baseline captured when the dialog opened. A dialog that confirms when nothing changed is worse than no prompt at all, so the comparison is deliberately biased toward "clean". While the prompt is up, the host dialog passes `{ paused: true }` to `useModalDialog` so the focus trap does not fight the nested prompt.
+Every dialog that holds edits (`AddTodoItem`, `ViewTodoItem` in edit mode, `CreateCalendar`) routes *all* of the close paths it offers — Cancel and Escape everywhere, plus the overlay click in `ViewTodoItem`, which is the only one of the three whose overlay dismisses it — through `useDiscardGuard` (`lib/hooks/useDiscardGuard.ts`), which shows the shared `ConfirmDiscardDialog` only when the form is genuinely dirty. Dirtiness is decided by `hasUnsavedChanges()` in `lib/unsavedChanges.ts` against a baseline captured when the dialog opened. A dialog that confirms when nothing changed is worse than no prompt at all, so the comparison is deliberately biased toward "clean" and mirrors what that form's save actually writes. The two hosts that use `useModalDialog` (`AddTodoItem`, `ViewTodoItem`) pass `{ paused: true }` while the prompt is up so the focus trap does not fight the nested prompt; `CreateCalendar` has no trap to pause.
 
 ### Optimistic UI
 
@@ -141,7 +141,7 @@ Every one of them uses `useBookId`, `useTaskQuery`, `filterTasks`, `useRefreshOn
 - **Component files**: PascalCase (`AddTodoItem.tsx`). No barrel/index exports.
 - **Client components**: Pages and components use `'use client'` since there is no server runtime.
 - **basePath**: Configurable via `NEXT_PUBLIC_BASE_PATH` env var. Use Next.js `Link`/`useRouter` for navigation (never raw `<a href="/">`) to respect the base path.
-- **Shared UI for shared behavior**: Matrix, Scrum, Cancelled, and Timeline deliberately share `AuthRecoveryPanel`, `TaskSearchBar`, `ViewTodoItem`, `SortableTodo` (with its collision detection and keyboard coordinates), `useRefreshOnPageActivation`, and `useDiscardGuard`. Extend the shared piece rather than forking a per-page variant.
+- **Shared UI for shared behavior**: Matrix, Scrum, Cancelled, and Timeline deliberately share `AuthRecoveryPanel`, `TaskSearchBar`, `ViewTodoItem`, `useRefreshOnPageActivation`, and `useDiscardGuard`; `SortableTodo` (with its collision detection and keyboard coordinates) is shared by the two sortable boards, Matrix and Scrum, only. Extend the shared piece rather than forking a per-page variant.
 - **Don't add a second affordance** for something an existing gesture already expresses — duplicate paths make the UI clunky.
 - **Dates**: user-facing "today"/relative-day logic compares *local* calendar dates via `dateUtils.ts`, not UTC dates or elapsed 24-hour periods. (The calendar bump is the exception: it works in UTC against the Graph window.)
 - **Storage reads are untrusted**: everything read back from `localStorage`/`sessionStorage` is sanitized and normalized before use.

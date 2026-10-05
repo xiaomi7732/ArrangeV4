@@ -120,7 +120,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
       const sameValue = (left: unknown, right: unknown) =>
         JSON.stringify(left) === JSON.stringify(right);
 
-      if (subject !== todo.subject) updatedFields.subject = nextSubject;
+      if (nextSubject !== todo.subject) updatedFields.subject = nextSubject;
       if (urgent !== (todo.urgent ?? false)) updatedFields.urgent = urgent;
       if (important !== (todo.important ?? false)) updatedFields.important = important;
       if (status !== (todo.status || 'new')) updatedFields.status = status;
@@ -174,7 +174,9 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   // The same values `handleCancelEdit` restores, which is exactly what closing
   // the editor would throw away.
   const baselineValues = useMemo(() => ({
-    subject: todo.subject,
+    // Trimmed on both sides: the save stores a trimmed subject, so trailing
+    // spaces are not a change worth warning about.
+    subject: todo.subject.trim(),
     urgent: todo.urgent ?? false,
     important: todo.important ?? false,
     status: todo.status || 'new',
@@ -194,7 +196,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   const dirty = useMemo(
     () => editing && hasUnsavedChanges(
       {
-        subject,
+        subject: subject.trim(),
         urgent,
         important,
         status,

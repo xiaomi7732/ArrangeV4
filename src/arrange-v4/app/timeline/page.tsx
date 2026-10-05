@@ -6,6 +6,8 @@ import { useStore } from '@/lib/store/useStore';
 import type { StoreOperationOptions, TodoItem, TodoItemWithId } from '@/lib/store/types';
 import { filterTasks } from '@/lib/search/taskQuery';
 import { describeFailure } from '@/lib/failureMessage';
+import { restoreSnapshot, snapshotItems } from '@/lib/optimisticUpdate';
+import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
@@ -122,6 +124,15 @@ function TimelinePageContent() {
     () => countTimelineRows(items, timelineWindow),
     [items, timelineWindow],
   );
+
+  // The tags already in use in this book, offered when editing a task.
+  const availableCategories = useMemo(() => {
+    const names = new Set<string>();
+    for (const item of items) {
+      for (const category of item.categories || []) names.add(category);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [items]);
 
   const fetchEvents = useCallback(async (
     window: TimelineWindow,
@@ -251,8 +262,67 @@ function TimelinePageContent() {
     await handleLogin();
   };
 
-  const goToToday = useCallback(() => {
-    setNowMs(Date.now());
+  /*
+   * Editing from the chart.
+   *
+   * The timeline deliberately has no drag-to-reschedule, so opening the task
+   * is the one way to move its dates — which only works if the dialog can
+   * actually save. The change is applied locally first and rolled back if the
+   * write is rejected, as on the boards.
+   */
+  const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
+    const target = selectedTodo;
+    if (!target?.id || !bookId) return;
+    const operationBookId = bookId;
+    const targetId = target.id;
+    const snapshot = snapshotItems(items, [targetId]);
+
+    const persistedFields: Partial<TodoItem> = { ...updatedFields };
+    const nextStatus = updatedFields.status ?? target.status ?? 'new';
+    if (nextStatus !== (target.status || 'new')) {
+      // The stores derive these from the transition too, but only the caller
+      // can keep the item on screen in step with them.
+      Object.assign(
+        persistedFields,
+        statusTimestampUpdates(target, nextStatus, new Date().toISOString()),
+      );
+    }
+
+    // The stores drop the pre-bump original for a date the caller sets, so the
+    // "moved" notice has to go with the same edit rather than wait for a read.
+    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
+    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
+    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
+
+    setItems(current => current.map(item => (
+      item.id === targetId ? { ...item, ...optimisticFields } : item
+    )));
+    setSelectedTodo(previous => (previous ? { ...previous, ...optimisticFields } : previous));
+
+    try {
+      const updated = await store.updateItem(operationBookId, targetId, persistedFields);
+      if (bookIdRef.current !== operationBookId) return;
+      setItems(current => current.map(item => (
+        item.id === targetId ? { ...item, source: updated.source ?? item.source } : item
+      )));
+    } catch (err: unknown) {
+      console.error('Error updating TODO:', err);
+      if (bookIdRef.current !== operationBookId) return;
+      setItems(current => restoreSnapshot(current, snapshot));
+      setSelectedTodo(null);
+      const writeMessage = describeFailure('Could not save your changes.', err);
+      setError(writeMessage);
+      // The restored row is a guess until a read confirms it, so the next load
+      // keeps the banner rather than quietly replacing it.
+      void fetchEvents(timelineWindowRef.current, {
+        preserveError: true,
+        interaction: 'silent-only',
+      });
+      throw err;
+    }
+  };
+
+  const goToToday = useCallback(() => {    setNowMs(Date.now());
     setTimelineWindow(current => centerWindowOn(current, Date.now()));
   }, []);
 
@@ -427,6 +497,8 @@ function TimelinePageContent() {
           <ViewTodoItem
             todo={selectedTodo}
             onClose={() => setSelectedTodo(null)}
+            onUpdate={handleUpdateTodo}
+            availableCategories={availableCategories}
           />
         )}
       </div>

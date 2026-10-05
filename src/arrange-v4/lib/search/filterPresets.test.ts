@@ -357,6 +357,61 @@ describe('preset scopes', () => {
     assert.deepEqual(saved.preset!.query.categories, ['ops']);
     assert.equal(saved.preset!.query.urgentOnly, true);
   });
+
+  it('gives the timeline view a storage key of its own', () => {
+    const keys = [
+      presetStorageKey(calendarBook, 'board'),
+      presetStorageKey(calendarBook, 'cancelled'),
+      presetStorageKey(calendarBook, 'timeline'),
+    ];
+    assert.equal(new Set(keys).size, 3);
+  });
+
+  it('never leaks a preset between the timeline and the other views', () => {
+    savePreset(calendarBook, 'board', 'Urgent', query({ urgentOnly: true }));
+    savePreset(calendarBook, 'cancelled', 'Dropped', query({ text: 'dropped' }));
+    const timeline = savePreset(calendarBook, 'timeline', 'Release', query({ text: 'release' }));
+
+    assert.deepEqual(listPresets(calendarBook, 'timeline').map(p => p.name), ['Release']);
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
+    assert.equal(listPresets(calendarBook, 'cancelled').length, 1);
+
+    deletePreset(calendarBook, 'timeline', timeline.preset!.id);
+
+    assert.deepEqual(listPresets(calendarBook, 'timeline'), []);
+    assert.equal(listPresets(calendarBook, 'board').length, 1);
+    assert.equal(listPresets(calendarBook, 'cancelled').length, 1);
+  });
+
+  it('strips criteria the timeline cannot display, on save and on read', () => {
+    const saved = savePreset(
+      calendarBook,
+      'timeline',
+      'Release',
+      query({ text: 'release', categories: ['ops'], includeUncategorized: true, importantOnly: true }),
+    );
+
+    assert.deepEqual(saved.preset!.query.categories, []);
+    assert.equal(saved.preset!.query.includeUncategorized, false);
+    assert.equal(saved.preset!.query.importantOnly, false);
+    assert.equal(saved.preset!.query.text, 'release');
+
+    storage.setItem(
+      presetStorageKey(calendarBook, 'timeline')!,
+      JSON.stringify([
+        {
+          id: 'legacy',
+          name: 'Legacy',
+          query: { text: 'release', categories: ['ops'], urgentOnly: true },
+        },
+      ]),
+    );
+
+    const [preset] = listPresets(calendarBook, 'timeline');
+    assert.deepEqual(preset.query.categories, []);
+    assert.equal(preset.query.urgentOnly, false);
+    assert.equal(preset.query.text, 'release');
+  });
 });
 
 describe('unreadable storage', () => {

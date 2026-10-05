@@ -124,9 +124,11 @@ export default function TimelineChart({
       }
 
       // Horizontal intent — a trackpad swipe or shift+wheel — moves through
-      // time, which is what that gesture means everywhere else.
+      // time. A mostly vertical gesture with a little sideways jitter is still
+      // a page scroll, so the horizontal part has to dominate to count.
       const horizontal = e.shiftKey && !e.deltaX ? deltaY : deltaX;
       if (!horizontal) return;
+      if (!e.shiftKey && Math.abs(deltaX) <= Math.abs(deltaY)) return;
       e.preventDefault();
       const travel = rect.width > 0
         ? Math.max(-PAN_STEP, Math.min(PAN_STEP, horizontal / rect.width))
