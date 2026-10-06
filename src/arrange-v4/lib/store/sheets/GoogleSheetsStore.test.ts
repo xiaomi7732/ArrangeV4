@@ -551,6 +551,30 @@ describe('GoogleSheetsStore', () => {
     }
   });
 
+  it('leaves lifecycle timestamps empty when recreating a copied item', async () => {
+    const mock = installFetchMock([
+      () => jsonResponse({ values: [Array.from(TODO_HEADERS)] }),
+      () => todoSheetResponse(),
+      request => {
+        const body = JSON.parse(String(request.init.body)) as { values: unknown[][] };
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('startDateTime')], '');
+        assert.equal(body.values[0][TODO_HEADERS.indexOf('finishDateTime')], '');
+        return jsonResponse({ updates: { updatedRows: 1 } });
+      },
+    ]);
+    try {
+      const created = await createStore().createItem(
+        'sheet:sheet-1',
+        { subject: 'Finished long ago', status: 'finished' },
+        { asCopy: true },
+      );
+      assert.equal(created.startDateTime, null);
+      assert.equal(created.finishDateTime, null);
+    } finally {
+      mock.restore();
+    }
+  });
+
   it('deletes an item by appending a stable-ID tombstone', async () => {
     const row = [
       'todo-1',

@@ -14,6 +14,7 @@ import {
 import ChecklistEditor from './ChecklistEditor';
 import ConfirmDiscardDialog from './ConfirmDiscardDialog';
 import DialogTabs from './DialogTabs';
+import ModalOverlay from './ModalOverlay';
 import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -267,7 +268,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
   }
 
   return (
-    <div className={styles.overlay}>
+    <ModalOverlay className={styles.overlay} onDismiss={confirming ? undefined : requestClose}>
       <div
         ref={dialogRef}
         className={styles.modal}
@@ -439,6 +440,6 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
           onDiscard={confirmDiscard}
         />
       )}
-    </div>
+    </ModalOverlay>
   );
 }

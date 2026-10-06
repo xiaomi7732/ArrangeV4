@@ -13,6 +13,7 @@ import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
@@ -111,6 +112,30 @@ function TimelinePageContent() {
   }, []);
 
   bookIdRef.current = bookId;
+
+  const { moveTodo, isMoveBlocked } = useMoveTodo({
+    bookId,
+    setItems,
+    setSelected: setSelectedTodo,
+    beginMutation: () => {
+      // Reads already in flight hold a copy of the row this move removes.
+      mutationVersionRef.current += 1;
+      pendingMutationCountRef.current += 1;
+    },
+    finishMutation: () => {
+      pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+      // A read may also have started mid-move and seen the row before the
+      // delete landed, so reads are retired at both ends of the move. This
+      // runs unconditionally: another pending mutation's finalizer will not
+      // retire it, and `flushPendingReplay` already waits for them all.
+      mutationVersionRef.current += 1;
+      flushPendingReplay();
+    },
+    isCurrentBook: id => bookIdRef.current === id,
+  });
+  // The open item carries an optional id, so the move control is only offered
+  // once it is known — an item without one has no row to remove in the backend.
+  const movableTodo = selectedTodo?.id ? { ...selectedTodo, id: selectedTodo.id } : null;
 
   // The top bar and the activation refresh need the current window, but must
   // not be rebuilt on every frame of a drag.
@@ -568,6 +593,10 @@ function TimelinePageContent() {
             todo={selectedTodo}
             onClose={() => setSelectedTodo(null)}
             onUpdate={handleUpdateTodo}
+            onMove={movableTodo ? targetBookId => moveTodo(movableTodo, targetBookId) : undefined}
+            moveBlocked={Boolean(movableTodo && isMoveBlocked(movableTodo.id))}
+            books={books}
+            currentBookId={bookId}
             availableCategories={availableCategories}
           />
         )}

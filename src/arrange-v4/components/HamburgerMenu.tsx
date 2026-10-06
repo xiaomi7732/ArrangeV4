@@ -174,7 +174,6 @@ export default function HamburgerMenu() {
           >
             ☰
           </button>
-          <h1 className={styles.pageLabel}>{pageLabel}</h1>
           {showViewSwitcher && (
             <Suspense fallback={null}>
               <ViewSwitcherInner isOnMatrix={isOnMatrix} isOnScrum={isOnScrum} isOnTimeline={isOnTimeline} />
@@ -182,7 +181,15 @@ export default function HamburgerMenu() {
           )}
           {leftActions}
         </div>
-        <div className={styles.topBarMiddle} />
+        {/*
+          * The title sits in its own centred region rather than next to the
+          * left-hand controls: its width changes from page to page, and from
+          * the left it would shift the book selector sideways every time the
+          * user moved between views.
+          */}
+        <div className={styles.topBarMiddle}>
+          <h1 className={styles.pageLabel}>{pageLabel}</h1>
+        </div>
         <div className={styles.topBarRight}>
           {rightActions}
           <span className={styles.version} aria-label={`Build version ${version}`}>{version}</span>

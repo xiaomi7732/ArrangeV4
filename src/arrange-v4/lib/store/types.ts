@@ -116,13 +116,23 @@ export interface StoreOperationOptions {
   interaction?: AuthInteraction;
 }
 
+export interface CreateItemOptions {
+  /**
+   * The item already exists elsewhere and is only being recreated here, so the
+   * defaults a brand-new task gets must not be applied: an item finished
+   * without a recorded finish time keeps that gap instead of being stamped
+   * with the time it was copied.
+   */
+  asCopy?: boolean;
+}
+
 export interface TodoStore {
   listBooks(options?: StoreOperationOptions): Promise<Book[]>;
   createBook(name: string, opts: CreateBookOptions): Promise<Book>;
   deleteBook(bookId: string): Promise<void>;
 
   listItems(bookId: string, opts: ListItemsOptions): Promise<TodoItemWithId[]>;
-  createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId>;
+  createItem(bookId: string, item: TodoItem, options?: CreateItemOptions): Promise<TodoItemWithId>;
   updateItem(
     bookId: string,
     itemId: string,

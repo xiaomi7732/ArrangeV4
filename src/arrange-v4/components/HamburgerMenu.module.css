@@ -32,8 +32,11 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: #374151;
-  flex-shrink: 0;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .version {
@@ -52,6 +55,9 @@
 
 .topBarMiddle {
   flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
 }
 
 .topBarRight {
@@ -237,6 +243,29 @@
  * the right edge. The page itself does not scroll horizontally, so anything
  * that overflows here is simply unreachable.
  */
+/*
+ * Above the wrap breakpoint the bar is a three-column grid so the title is
+ * centred on the bar itself rather than on whatever gap the two side groups
+ * happen to leave. The side tracks never shrink below their content, so the
+ * controls cannot be drawn over; it is the title that gives way, truncating
+ * once the two sides need the room. Below the breakpoint the bar falls back to
+ * the wrapping flex row.
+ */
+@media (min-width: 641px) {
+  .topBar {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  }
+
+  .topBarMiddle {
+    overflow: hidden;
+  }
+
+  .topBarRight {
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 640px) {
   .topBar {
     flex-wrap: wrap;
@@ -255,9 +284,14 @@
     max-width: 55vw;
   }
 
-  /* The spacer would consume the first row and force every action to wrap. */
+  /*
+   * Centring the title here would push the actions past the right edge, so on
+   * narrow screens it just flows with them and gives up its share of the row
+   * first.
+   */
   .topBarMiddle {
-    display: none;
+    flex: 0 1 auto;
+    justify-content: flex-start;
   }
 
   .topBarRight {

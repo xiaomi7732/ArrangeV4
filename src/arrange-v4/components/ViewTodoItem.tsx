@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react';
-import { TodoItem, TodoStatus, STATUS_LABELS } from '@/lib/store/types';
+import { TodoItem, TodoStatus, STATUS_LABELS, type Book } from '@/lib/store/types';
+import { PartialMoveError } from '@/lib/store/moveItem';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
 import { hasUnsavedChanges, type FormSnapshot } from '@/lib/unsavedChanges';
@@ -17,6 +18,7 @@ import ChecklistEditor from './ChecklistEditor';
 import ConfirmDiscardDialog from './ConfirmDiscardDialog';
 import DialogTabs from './DialogTabs';
 import MarkdownView from './MarkdownView';
+import ModalOverlay from './ModalOverlay';
 import RemarksEditor from './RemarksEditor';
 import TagPicker from './TagPicker';
 import styles from './AddTodoItem.module.css';
@@ -31,6 +33,21 @@ interface ViewTodoItemProps {
   };
   onClose: () => void;
   onUpdate?: (updatedFields: Partial<TodoItem>) => Promise<void>;
+  /**
+   * Moves this item to another book. Omit it to hide the control; it is also
+   * hidden when no other writable book exists or the item cannot be read.
+   */
+  onMove?: (targetBookId: string) => Promise<void>;
+  /**
+   * Set once a move copied this item but could not remove the original, so a
+   * second attempt would write a third copy. The page owns this: it outlives
+   * the dialog, which is unmounted when the user closes it.
+   */
+  moveBlocked?: boolean;
+  /** Books the item can be moved to, including the one it is in. */
+  books?: Book[];
+  /** The book the item currently lives in, excluded from the move targets. */
+  currentBookId?: string | null;
   availableCategories?: string[];
 }
 
@@ -43,12 +60,16 @@ function formatLocalDateTime(isoString?: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategories = [] }: ViewTodoItemProps) {
+export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBlocked = false, books = [], currentBookId = null, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ViewTab>('essentials');
+  const [moveTargetId, setMoveTargetId] = useState('');
+  const [moving, setMoving] = useState(false);
+  const [moveLeftDuplicate, setMoveLeftDuplicate] = useState(false);
+  const errorRef = useRef<HTMLDivElement | null>(null);
   const tabsId = useId();
   // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
   const [viewChecklist, setViewChecklist] = useState<string[] | null>(null);
@@ -57,6 +78,8 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
   // Reset optimistic state when the todo changes (different item selected)
   useEffect(() => {
     setViewChecklist(null);
+    setMoveTargetId('');
+    setMoveLeftDuplicate(false);
   }, [todo.id]);
 
   // Edit form state
@@ -256,15 +279,56 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
     if (e.key !== 'Escape') return;
     // The discard prompt claims Escape for itself while it is up.
     if (confirming) return;
+    // A move in flight has to be able to report back, including the warning
+    // that the item now exists in both books, so the dialog stays put.
+    if (moving) return;
     if (editing) {
       requestCancelEdit();
     } else {
       onClose();
     }
-  }, [editing, confirming, onClose, requestCancelEdit]);
+  }, [editing, confirming, moving, onClose, requestCancelEdit]);
 
   const dialogRef = useModalDialog<HTMLDivElement>(true, editing, { paused: confirming });
   const bumpedFrom = describeDateBump(todo);
+
+  // Books the backend refuses to write to are no destination, and an item in
+  // one cannot be moved out either: the copy would land and the delete would
+  // be refused, leaving a guaranteed duplicate.
+  const currentBookWritable = books.every(
+    book => book.id !== currentBookId || book.canEdit !== false,
+  );
+  const moveTargets = useMemo(
+    () => books.filter(book => book.id !== currentBookId && book.canEdit !== false),
+    [books, currentBookId],
+  );
+  // An unreadable item is shown with defaults, so copying it into another book
+  // would write those defaults over data the backend still holds.
+  const canMove = Boolean(onMove)
+    && !todo.dataUnreadable
+    && currentBookWritable
+    && moveTargets.length > 0
+    // A move that copied but could not delete must not be repeated: a second
+    // run would make a second copy. The warning stays on screen instead.
+    && !moveLeftDuplicate
+    && !moveBlocked;
+
+  const handleMove = useCallback(async () => {
+    if (!onMove || !moveTargetId) return;
+    setMoving(true);
+    setError(null);
+    try {
+      await onMove(moveTargetId);
+    } catch (err: unknown) {
+      if (err instanceof PartialMoveError) setMoveLeftDuplicate(true);
+      setError(err instanceof Error ? err.message : 'Failed to move this item');
+      // The Move button is disabled or gone by now, so focus would be left on
+      // nothing: send it to the message that explains what happened.
+      requestAnimationFrame(() => errorRef.current?.focus());
+    } finally {
+      setMoving(false);
+    }
+  }, [onMove, moveTargetId]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleEsc);
@@ -273,11 +337,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
 
   if (editing) {
     return (
-      <div className={styles.overlay} onClick={requestCloseDialog}>
+      <ModalOverlay className={styles.overlay} onDismiss={confirming ? undefined : requestCloseDialog}>
         <div
           ref={dialogRef}
           className={styles.modal}
-          onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
           aria-labelledby="todo-dialog-title"
@@ -443,16 +506,15 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             onDiscard={confirmDiscard}
           />
         )}
-      </div>
+      </ModalOverlay>
     );
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <ModalOverlay className={styles.overlay} onDismiss={moving ? undefined : onClose}>
       <div
         ref={dialogRef}
         className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="todo-dialog-title"
@@ -461,7 +523,14 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
         <h2 id="todo-dialog-title" className={styles.title}>{todo.subject}</h2>
 
         {error && (
-          <div className={styles.error} role="alert">{error}</div>
+          <div className={styles.error} role="alert" tabIndex={-1} ref={errorRef}>{error}</div>
+        )}
+
+        {!canMove && (moveBlocked || moveLeftDuplicate) && (
+          <p className={styles.moveNotice}>
+            This item was copied to another book but could not be removed from this one.
+            Delete whichever copy you do not want before moving it again.
+          </p>
         )}
 
         {todo.dataUnreadable && (
@@ -618,13 +687,43 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
                         setChecklistUpdating(false);
                       }
                     }}
-                    disabled={!onUpdate || checklistUpdating}
+                    disabled={!onUpdate || checklistUpdating || moving}
                     showCheckboxes
                   />
                 </div>
               ) : (
                 <p className={styles.tabPlaceholder}>No checklist items</p>
               )}
+            </div>
+          )}
+
+          {canMove && (
+            <div className={styles.moveRow}>
+              <label className={styles.label} htmlFor={`${tabsId}-move-target`}>
+                Move to another book
+              </label>
+              <div className={styles.moveControls}>
+                <select
+                  id={`${tabsId}-move-target`}
+                  className={styles.select}
+                  value={moveTargetId}
+                  onChange={e => setMoveTargetId(e.target.value)}
+                  disabled={moving}
+                >
+                  <option value="">Choose a book…</option>
+                  {moveTargets.map(book => (
+                    <option key={book.id} value={book.id}>{book.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleMove}
+                  disabled={!moveTargetId || moving || checklistUpdating}
+                  className={`${styles.button} ${styles.buttonSecondary}`}
+                >
+                  {moving ? 'Moving…' : 'Move'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -642,21 +741,23 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, availableCategor
             {onUpdate && (
               <button type="button"
                 onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
-                disabled={checklistUpdating || todo.dataUnreadable}
+                disabled={checklistUpdating || moving || todo.dataUnreadable}
                 title={todo.dataUnreadable
                   ? 'Editing is disabled while this item\u2019s saved data cannot be read'
-                  : undefined}
+                  : moving
+                    ? 'Editing is disabled while this item is being moved'
+                    : undefined}
                 className={`${styles.button} ${styles.buttonPrimary}`}>
                 Edit
               </button>
             )}
-            <button type="button" onClick={onClose}
+            <button type="button" onClick={onClose} disabled={moving}
               className={`${styles.button} ${styles.buttonSecondary}`}>
               Close
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
