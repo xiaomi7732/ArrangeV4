@@ -534,6 +534,12 @@ function TimelinePageContent() {
             <div className={styles.loading}><div className={styles.spinner}></div></div>
           ) : (
             <TimelineChart
+              /*
+               * A new book gets a new chart: an unsaved keyboard nudge is
+               * flushed by the instance that started it, so it can never be
+               * written against the book the user has just switched to.
+               */
+              key={bookId ?? 'no-book'}
               items={visibleItems}
               window={timelineWindow}
               onWindowChange={setTimelineWindow}
