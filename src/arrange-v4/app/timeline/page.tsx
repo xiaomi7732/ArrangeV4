@@ -113,7 +113,7 @@ function TimelinePageContent() {
 
   bookIdRef.current = bookId;
 
-  const { moveTodo, moveBlockedIds } = useMoveTodo({
+  const { moveTodo, isMoveBlocked } = useMoveTodo({
     bookId,
     setItems,
     setSelected: setSelectedTodo,
@@ -125,8 +125,10 @@ function TimelinePageContent() {
     finishMutation: () => {
       pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
       // A read may also have started mid-move and seen the row before the
-      // delete landed, so reads are retired at both ends of the move.
-      if (pendingMutationCountRef.current === 0) mutationVersionRef.current += 1;
+      // delete landed, so reads are retired at both ends of the move. This
+      // runs unconditionally: another pending mutation's finalizer will not
+      // retire it, and `flushPendingReplay` already waits for them all.
+      mutationVersionRef.current += 1;
       flushPendingReplay();
     },
     isCurrentBook: id => bookIdRef.current === id,
@@ -592,7 +594,7 @@ function TimelinePageContent() {
             onClose={() => setSelectedTodo(null)}
             onUpdate={handleUpdateTodo}
             onMove={movableTodo ? targetBookId => moveTodo(movableTodo, targetBookId) : undefined}
-            moveBlocked={Boolean(movableTodo && moveBlockedIds.has(movableTodo.id))}
+            moveBlocked={Boolean(movableTodo && isMoveBlocked(movableTodo.id))}
             books={books}
             currentBookId={bookId}
             availableCategories={availableCategories}

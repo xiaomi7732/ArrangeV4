@@ -76,7 +76,7 @@ function CancelledPageContent() {
       return next;
     });
   }, []);
-  const { moveTodo, moveBlockedIds } = useMoveTodo({
+  const { moveTodo, isMoveBlocked } = useMoveTodo({
     bookId,
     setItems: setCancelledItems,
     setSelected: setSelectedTodo,
@@ -565,7 +565,7 @@ function CancelledPageContent() {
             todo={selectedTodo}
             onClose={() => setSelectedTodo(null)}
             onMove={movableTodo ? targetBookId => moveTodo(movableTodo, targetBookId) : undefined}
-            moveBlocked={Boolean(movableTodo && moveBlockedIds.has(movableTodo.id))}
+            moveBlocked={Boolean(movableTodo && isMoveBlocked(movableTodo.id))}
             books={books}
             currentBookId={bookId}
           />

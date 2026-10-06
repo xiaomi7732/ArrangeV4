@@ -638,7 +638,7 @@ function MatrixPageContent() {
     }
   };
 
-  const { moveTodo, moveBlockedIds } = useMoveTodo({
+  const { moveTodo, isMoveBlocked } = useMoveTodo({
     bookId,
     setItems: setTodoItems,
     setSelected: setSelectedTodo,
@@ -1434,7 +1434,7 @@ function MatrixPageContent() {
               onClose={() => setSelectedTodo(null)}
               onUpdate={handleUpdateTodo}
               onMove={targetBookId => moveTodo(selectedTodo, targetBookId)}
-              moveBlocked={moveBlockedIds.has(selectedTodo.id)}
+              moveBlocked={isMoveBlocked(selectedTodo.id)}
               books={books}
               currentBookId={bookId}
               availableCategories={allCategories}

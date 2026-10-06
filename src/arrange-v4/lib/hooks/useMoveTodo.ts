@@ -28,6 +28,14 @@ export interface UseMoveTodoOptions<TSelected extends { id?: string }> {
 }
 
 /**
+ * Item ids only identify a row inside their own book, so a remembered failure
+ * is keyed by both.
+ */
+function blockedKey(bookId: string, itemId: string): string {
+  return `${bookId}\u0000${itemId}`;
+}
+
+/**
  * Shared "move this item to another book" action for the task views.
  *
  * The write itself lives in `moveItemToBook`; this hook binds it to the page's
@@ -43,15 +51,16 @@ export function useMoveTodo<TSelected extends { id?: string }>(
   const store = useStore();
   // Items whose copy landed but whose original could not be removed. Moving
   // one again would write a third copy, so the page remembers them for as long
-  // as it is open — longer than the dialog, which is unmounted on close.
-  const [moveBlockedIds, setMoveBlockedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // as it is open — longer than the dialog, which is unmounted on close. Item
+  // ids only identify a row within its own book, so the book is part of the key.
+  const [moveBlockedKeys, setMoveBlockedKeys] = useState<ReadonlySet<string>>(() => new Set());
   // The pages rebuild these callbacks every render, so they are read through a
   // ref rather than listed as dependencies: the returned action stays stable
   // for the dialog that holds on to it.
   const optionsRef = useRef(options);
   optionsRef.current = options;
-  const moveBlockedIdsRef = useRef(moveBlockedIds);
-  moveBlockedIdsRef.current = moveBlockedIds;
+  const moveBlockedKeysRef = useRef(moveBlockedKeys);
+  moveBlockedKeysRef.current = moveBlockedKeys;
 
   const moveTodo = useCallback(async (item: TodoItemWithId, targetBookId: string) => {
     const {
@@ -64,13 +73,13 @@ export function useMoveTodo<TSelected extends { id?: string }>(
       isCurrentBook,
     } = optionsRef.current;
     if (!bookId) throw new Error('No book is selected.');
-    if (moveBlockedIdsRef.current.has(item.id)) {
+    const operationBookId = bookId;
+    if (moveBlockedKeysRef.current.has(blockedKey(operationBookId, item.id))) {
       throw new PartialMoveError(
         'This item was already copied to another book and could not be removed from this one. Delete whichever copy you do not want before moving it again.',
         item.id,
       );
     }
-    const operationBookId = bookId;
 
     beginMutation?.();
     try {
@@ -87,9 +96,9 @@ export function useMoveTodo<TSelected extends { id?: string }>(
       onMoved?.(item.id);
     } catch (error) {
       if (error instanceof PartialMoveError) {
-        setMoveBlockedIds(previous => {
+        setMoveBlockedKeys(previous => {
           const next = new Set(previous);
-          next.add(item.id);
+          next.add(blockedKey(operationBookId, item.id));
           return next;
         });
       }
@@ -99,5 +108,11 @@ export function useMoveTodo<TSelected extends { id?: string }>(
     }
   }, [store]);
 
-  return { moveTodo, moveBlockedIds };
+  const bookId = options.bookId;
+  const isMoveBlocked = useCallback(
+    (itemId: string) => Boolean(bookId) && moveBlockedKeys.has(blockedKey(bookId as string, itemId)),
+    [bookId, moveBlockedKeys],
+  );
+
+  return { moveTodo, isMoveBlocked };
 }
