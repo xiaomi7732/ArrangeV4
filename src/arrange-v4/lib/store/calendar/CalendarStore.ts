@@ -4,6 +4,7 @@ import type {
   Book,
   CreateBookOptions,
   ItemUpdate,
+  CreateItemOptions,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -148,12 +149,18 @@ export class CalendarStore implements TodoStore {
       .filter((i): i is TodoItemWithId => i !== null);
   }
 
-  async createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId> {
+  async createItem(
+    bookId: string,
+    item: TodoItem,
+    options: CreateItemOptions = {},
+  ): Promise<TodoItemWithId> {
     const calendarId = unwrap(bookId);
     const client = await this.client();
 
     const status = item.status || 'new';
-    const lifecycleNow = new Date().toISOString();
+    // A copy keeps the gaps the original had: stamping "started now" on an item
+    // that was moved between books would invent history.
+    const lifecycleDefault = options.asCopy ? null : new Date().toISOString();
     const stored: StoredTodoBody = {
       status,
       urgent: item.urgent || false,
@@ -161,11 +168,13 @@ export class CalendarStore implements TodoStore {
       checklist: item.checklist || [],
       remarks: item.remarks || null,
       startDateTime: item.startDateTime
-        ?? (status === 'inProgress' || status === 'finished' ? lifecycleNow : null),
+        ?? (status === 'inProgress' || status === 'finished' ? lifecycleDefault : null),
       finishDateTime: item.finishDateTime
-        ?? (status === 'finished' ? lifecycleNow : null),
-      originalEtsDateTime: null,
-      originalEtaDateTime: null,
+        ?? (status === 'finished' ? lifecycleDefault : null),
+      // Carried over when the caller supplies them — a move recreates the item
+      // in another calendar and its "moved from" notice has to survive that.
+      originalEtsDateTime: item.originalEtsDateTime ?? null,
+      originalEtaDateTime: item.originalEtaDateTime ?? null,
       matrixOrder: item.matrixOrder,
       scrumOrder: item.scrumOrder,
     };

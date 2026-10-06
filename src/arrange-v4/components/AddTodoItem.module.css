@@ -328,6 +328,40 @@
   padding-top: 8px;
 }
 
+/*
+ * Moving an item out of the book is a separate kind of action from the
+ * dialog's Edit/Close pair, so it sits on its own row above them rather than
+ * competing for space in the button strip.
+ */
+.moveNotice {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.moveRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.moveControls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.moveControls .select {
+  flex: 1;
+  min-width: 0;
+}
+
+.moveControls .button {
+  flex: 0 0 auto;
+}
+
 .button {
   flex: 1;
   padding: 8px 16px;

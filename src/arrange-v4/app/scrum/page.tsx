@@ -40,6 +40,7 @@ import { statusTimestampUpdates } from '@/lib/statusTimestamps';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -346,6 +347,19 @@ function ScrumPageContent() {
       void fetchEvents({ preserveError, interaction: 'silent-only' });
     }
   };
+
+  const { moveTodo, moveBlockedIds } = useMoveTodo({
+    bookId,
+    setItems: setTodoItems,
+    setSelected: setSelectedTodo,
+    beginMutation: () => {
+      // Reads already in flight hold a copy of the row this move removes.
+      mutationVersionRef.current += 1;
+      beginMutation();
+    },
+    finishMutation,
+    isCurrentBook: id => bookIdRef.current === id,
+  });
 
   useEffect(() => {
     if (bookId && bookId !== itemsBookId) {
@@ -1064,6 +1078,10 @@ function ScrumPageContent() {
             todo={selectedTodo}
             onClose={() => setSelectedTodo(null)}
             onUpdate={handleUpdateTodo}
+            onMove={targetBookId => moveTodo(selectedTodo, targetBookId)}
+            moveBlocked={moveBlockedIds.has(selectedTodo.id)}
+            books={books}
+            currentBookId={bookId}
             availableCategories={allCategories}
           />
         )}

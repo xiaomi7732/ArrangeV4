@@ -2,6 +2,7 @@ import type {
   Book,
   CreateBookOptions,
   ItemUpdate,
+  CreateItemOptions,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -377,7 +378,11 @@ export class GoogleSheetsStore implements TodoStore {
     ));
   }
 
-  async createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId> {
+  async createItem(
+    bookId: string,
+    item: TodoItem,
+    options: CreateItemOptions = {},
+  ): Promise<TodoItemWithId> {
     const spreadsheetId = nativeSheetId(bookId);
     return this.enqueueMutation(spreadsheetId, async () => {
       const token = await this.tokenAcquisition.getToken();
@@ -389,7 +394,9 @@ export class GoogleSheetsStore implements TodoStore {
       const etaDateTime = item.etaDateTime
         || new Date(new Date(etsDateTime).getTime() + 30 * 60 * 1000).toISOString();
       const status = item.status || 'new';
-      const lifecycleNow = new Date().toISOString();
+      // A copy keeps the gaps the original had: stamping "started now" on an
+      // item that was moved between books would invent history.
+      const lifecycleDefault = options.asCopy ? null : new Date().toISOString();
       const created: TodoItemWithId = {
         ...item,
         id: crypto.randomUUID(),
@@ -399,9 +406,9 @@ export class GoogleSheetsStore implements TodoStore {
         urgent: item.urgent || false,
         important: item.important || false,
         startDateTime: item.startDateTime
-          ?? (status === 'inProgress' || status === 'finished' ? lifecycleNow : null),
+          ?? (status === 'inProgress' || status === 'finished' ? lifecycleDefault : null),
         finishDateTime: item.finishDateTime
-          ?? (status === 'finished' ? lifecycleNow : null),
+          ?? (status === 'finished' ? lifecycleDefault : null),
         originalEtsDateTime: item.originalEtsDateTime ?? null,
         originalEtaDateTime: item.originalEtaDateTime ?? null,
       };

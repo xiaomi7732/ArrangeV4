@@ -2,6 +2,7 @@ import type {
   Book,
   CreateBookOptions,
   ItemUpdate,
+  CreateItemOptions,
   ListItemsOptions,
   StoreOperationOptions,
   StoreOptions,
@@ -56,8 +57,8 @@ export class MultiBackendStore implements TodoStore {
     return this.routeByBookId(bookId).listItems(bookId, opts);
   }
 
-  createItem(bookId: string, item: TodoItem): Promise<TodoItemWithId> {
-    return this.routeByBookId(bookId).createItem(bookId, item);
+  createItem(bookId: string, item: TodoItem, options?: CreateItemOptions): Promise<TodoItemWithId> {
+    return this.routeByBookId(bookId).createItem(bookId, item, options);
   }
 
   updateItem(

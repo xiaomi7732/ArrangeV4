@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { TodoItem } from '@/lib/store/types';
+import ModalOverlay from './ModalOverlay';
 import styles from './ManageTags.module.css';
 
 interface ManageTagsProps {
@@ -123,8 +124,8 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
   };
 
   return (
-    <div className={styles.overlay} onClick={handleClose}>
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="manage-tags-title" onClick={(e) => e.stopPropagation()}>
+    <ModalOverlay className={styles.overlay} onDismiss={handleClose}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="manage-tags-title">
         <h2 id="manage-tags-title" className={styles.title}>Manage Tags</h2>
 
         {error && (
@@ -281,6 +282,6 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

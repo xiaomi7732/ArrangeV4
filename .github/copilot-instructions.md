@@ -104,6 +104,9 @@ User actions immediately update local state, then sync to the backend in the bac
 | `store/sheets/GoogleSheetsStore.ts` | Drive/Sheets CRUD with the append-only mutation queue |
 | `store/sheets/schema.ts` | `TODOs` column schema, row (de)serialization, operation-history resolution |
 | `store/tokenAcquisition.ts` | Deduplicating token coordinator honoring the silent-only policy |
+| `store/moveItem.ts` | Moves an item between books as copy-then-delete, since no backend has a move primitive |
+| `hooks/useMoveTodo.ts` | Binds `moveItemToBook` to a page's store and state; used by all four task views |
+| `modalOverlay.ts` | Decides when a backdrop press dismisses a dialog (both ends on the backdrop) |
 | `auth/AuthContext.tsx` | Active-provider selection, persistence, and login/logout |
 | `graphService.ts`, `msalConfig.ts` | Low-level Graph client and MSAL config used by the Microsoft auth client |
 | `optimisticUpdate.ts` | Snapshot/rollback plus the `dataUnreadable` write-barrier helpers |
@@ -144,7 +147,10 @@ Every one of them uses `useBookId`, `useTaskQuery`, `filterTasks`, `useRefreshOn
 - **Component files**: PascalCase (`AddTodoItem.tsx`). No barrel/index exports.
 - **Client components**: Pages and components use `'use client'` since there is no server runtime.
 - **basePath**: Configurable via `NEXT_PUBLIC_BASE_PATH` env var. Use Next.js `Link`/`useRouter` for navigation (never raw `<a href="/">`) to respect the base path.
-- **Shared UI for shared behavior**: Matrix, Scrum, Cancelled, and Timeline deliberately share `AuthRecoveryPanel`, `TaskSearchBar`, `ViewTodoItem`, `useRefreshOnPageActivation`, and `useDiscardGuard`; `SortableTodo` (with its collision detection and keyboard coordinates) is shared by the two sortable boards, Matrix and Scrum, only. Extend the shared piece rather than forking a per-page variant.
+- **Shared UI for shared behavior**: Matrix, Scrum, Cancelled, and Timeline deliberately share `AuthRecoveryPanel`, `TaskSearchBar`, `ViewTodoItem`, `ModalOverlay`, `useMoveTodo`, `useRefreshOnPageActivation`, and `useDiscardGuard`; `SortableTodo` (with its collision detection and keyboard coordinates) is shared by the two sortable boards, Matrix and Scrum, only. Extend the shared piece rather than forking a per-page variant.
+- **Dialogs dismiss alike**: every modal backdrop is `ModalOverlay`, which dismisses only when a press both starts and ends on the backdrop, and routes that dismissal through the same discard guard as Escape and Cancel.
+- **Moving an item between books** is a copy into the destination followed by a delete from the source (`store/moveItem.ts`). The copy goes first so a half-failed move leaves a visible duplicate rather than nothing; board positions are dropped and `dataUnreadable` items are refused. The copy is written with `createItem(..., { asCopy: true })` so the destination does not apply new-task defaults (an item finished without a recorded finish time keeps that gap), and a `PartialMoveError` blocks any further move of that item for as long as the page is open.
+- **The top bar's title is centred** in its own region: from the left it would shift the book selector every time the page name changed length.
 - **Don't add a second affordance** for something an existing gesture already expresses — duplicate paths make the UI clunky.
 - **Dates**: user-facing "today"/relative-day logic compares *local* calendar dates via `dateUtils.ts`, not UTC dates or elapsed 24-hour periods. (The calendar bump is the exception: it works in UTC against the Graph window.)
 - **Storage reads are untrusted**: everything read back from `localStorage`/`sessionStorage` is sanitized and normalized before use.

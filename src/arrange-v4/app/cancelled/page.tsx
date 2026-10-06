@@ -12,6 +12,7 @@ import { useTaskQuery } from '@/lib/search/useTaskQuery';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
+import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
@@ -60,8 +61,51 @@ function CancelledPageContent() {
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const bookIdRef = useRef(bookId);
   const fetchSequenceRef = useRef(0);
+  const pendingMoveCountRef = useRef(0);
+  // A move settles after the read it retired, so it replays one through a ref
+  // rather than depending on a callback declared further down.
+  const fetchEventsRef = useRef<((options?: FetchEventsOptions) => Promise<void>) | null>(null);
 
   bookIdRef.current = bookId;
+
+  const dropFromSelection = useCallback((itemId: string) => {
+    setSelectedIds(prev => {
+      if (!prev.has(itemId)) return prev;
+      const next = new Set(prev);
+      next.delete(itemId);
+      return next;
+    });
+  }, []);
+  const { moveTodo, moveBlockedIds } = useMoveTodo({
+    bookId,
+    setItems: setCancelledItems,
+    setSelected: setSelectedTodo,
+    onMoved: dropFromSelection,
+    // A read already in flight holds the row this move removes, so it is
+    // retired the same way a book switch retires one. A retired read never
+    // clears `loading`, so the move replays one once it settles: that read
+    // both reconciles the list and takes the page out of its loading state.
+    beginMutation: () => {
+      fetchSequenceRef.current += 1;
+      pendingMoveCountRef.current += 1;
+    },
+    finishMutation: () => {
+      pendingMoveCountRef.current = Math.max(0, pendingMoveCountRef.current - 1);
+      if (pendingMoveCountRef.current > 0) return;
+      // A read may also have started mid-move and seen the row before the
+      // delete landed, so reads are retired at both ends of the move.
+      fetchSequenceRef.current += 1;
+      void fetchEventsRef.current?.({
+        preserveError: true,
+        preserveSelection: true,
+        interaction: 'silent-only',
+      });
+    },
+    isCurrentBook: id => bookIdRef.current === id,
+  });
+  // The open item carries an optional id, so the move control is only offered
+  // once it is known — an item without one has no row to remove in the backend.
+  const movableTodo = selectedTodo?.id ? { ...selectedTodo, id: selectedTodo.id } : null;
 
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
@@ -188,6 +232,10 @@ function CancelledPageContent() {
       }
     }
   }, [isAuthenticated, store]);
+
+  useEffect(() => {
+    fetchEventsRef.current = fetchEvents;
+  }, [fetchEvents]);
 
   useEffect(() => {
     if (bookId && bookId !== itemsBookId) {
@@ -516,6 +564,10 @@ function CancelledPageContent() {
           <ViewTodoItem
             todo={selectedTodo}
             onClose={() => setSelectedTodo(null)}
+            onMove={movableTodo ? targetBookId => moveTodo(movableTodo, targetBookId) : undefined}
+            moveBlocked={Boolean(movableTodo && moveBlockedIds.has(movableTodo.id))}
+            books={books}
+            currentBookId={bookId}
           />
         )}
 
