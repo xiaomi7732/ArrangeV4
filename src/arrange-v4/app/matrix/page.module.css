@@ -773,53 +773,53 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-/* Status-specific colors */
+/* Status-specific colors, from the shared palette in globals.css */
 .status_new {
-  color: #6b7280;
-  border-color: #9ca3af;
-  background-color: #f3f4f6;
+  color: var(--status-new-fg);
+  border-color: var(--status-new-border);
+  background-color: var(--status-new-bg);
 }
 
 .status_new.statusActive {
-  background-color: #e5e7eb;
+  background-color: var(--status-new-bg-strong);
 }
 
 .status_inProgress {
-  color: #2563eb;
-  border-color: #3b82f6;
-  background-color: #eff6ff;
+  color: var(--status-inProgress-fg);
+  border-color: var(--status-inProgress-border);
+  background-color: var(--status-inProgress-bg);
 }
 
 .status_inProgress.statusActive {
-  background-color: #dbeafe;
+  background-color: var(--status-inProgress-bg-strong);
 }
 
 .status_blocked {
-  color: #dc2626;
-  border-color: #ef4444;
-  background-color: #fef2f2;
+  color: var(--status-blocked-fg);
+  border-color: var(--status-blocked-border);
+  background-color: var(--status-blocked-bg);
 }
 
 .status_blocked.statusActive {
-  background-color: #fee2e2;
+  background-color: var(--status-blocked-bg-strong);
 }
 
 .status_finished {
-  color: #16a34a;
-  border-color: #22c55e;
-  background-color: #f0fdf4;
+  color: var(--status-finished-fg);
+  border-color: var(--status-finished-border);
+  background-color: var(--status-finished-bg);
 }
 
 .status_finished.statusActive {
-  background-color: #dcfce7;
+  background-color: var(--status-finished-bg-strong);
 }
 
 .status_cancelled {
-  color: #9333ea;
-  border-color: #a855f7;
-  background-color: #faf5ff;
+  color: var(--status-cancelled-fg);
+  border-color: var(--status-cancelled-border);
+  background-color: var(--status-cancelled-bg);
 }
 
 .status_cancelled.statusActive {
-  background-color: #f3e8ff;
+  background-color: var(--status-cancelled-bg-strong);
 }

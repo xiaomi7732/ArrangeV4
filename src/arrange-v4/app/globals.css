@@ -1,6 +1,42 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /*
+   * One palette for task status and priority, shared by the Matrix badges,
+   * the Scrum lane labels and the Timeline bars, so the same task reads the
+   * same colour whichever view it is seen in. The `fg` tones are the darker
+   * end of each hue so that text on the matching tint clears AA contrast,
+   * which matters most on a bar carrying a long subject.
+   */
+  --status-new-fg: #4b5563;
+  --status-new-border: #9ca3af;
+  --status-new-bg: #f3f4f6;
+  --status-new-bg-strong: #e5e7eb;
+
+  --status-inProgress-fg: #1d4ed8;
+  --status-inProgress-border: #3b82f6;
+  --status-inProgress-bg: #eff6ff;
+  --status-inProgress-bg-strong: #dbeafe;
+
+  --status-blocked-fg: #b91c1c;
+  --status-blocked-border: #ef4444;
+  --status-blocked-bg: #fef2f2;
+  --status-blocked-bg-strong: #fee2e2;
+
+  --status-finished-fg: #15803d;
+  --status-finished-border: #22c55e;
+  --status-finished-bg: #f0fdf4;
+  --status-finished-bg-strong: #dcfce7;
+
+  --status-cancelled-fg: #7e22ce;
+  --status-cancelled-border: #a855f7;
+  --status-cancelled-bg: #faf5ff;
+  --status-cancelled-bg-strong: #f3e8ff;
+
+  /* The urgent badge's red, so urgency reads the same on a card and on a bar. */
+  --urgent-fg: #991b1b;
+  --urgent-bg: #fee2e2;
 }
 
 @media (prefers-color-scheme: dark) {
