@@ -93,10 +93,17 @@ function ResizeHandle({
     ? row.item.etsDateTime ?? row.item.etaDateTime
     : row.item.etaDateTime ?? row.item.etsDateTime;
   const valueMs = toMs(value);
-  // The real limit is the other end of the bar, which neither edge may pass;
-  // the window only stands in when the task is dated at one end alone.
-  const min = edge === 'start' ? timelineWindow.startMs : startMs ?? timelineWindow.startMs;
-  const max = edge === 'start' ? endMs ?? timelineWindow.endMs : timelineWindow.endMs;
+  /*
+   * The only real limit is the other end of the bar, which neither edge may
+   * pass; in the other direction a date can go as far as the user drags it,
+   * so the visible window stands in — widened if need be, because a value
+   * reported outside its own bounds is worse than a loose bound.
+   */
+  const opposite = edge === 'start' ? endMs ?? startMs : startMs ?? endMs;
+  const lower = edge === 'start' ? timelineWindow.startMs : opposite ?? timelineWindow.startMs;
+  const upper = edge === 'start' ? opposite ?? timelineWindow.endMs : timelineWindow.endMs;
+  const min = valueMs === null ? lower : Math.min(lower, valueMs);
+  const max = valueMs === null ? upper : Math.max(upper, valueMs);
   return (
     <button
       type="button"
@@ -615,6 +622,15 @@ export default function TimelineChart({
 
   const spanDays = Math.max(1, Math.round(spanOf(window) / DAY_MS));
 
+  /*
+   * A task whose stored block could not be parsed must not be written back —
+   * the stores refuse it — so it is given no grips at all rather than a
+   * gesture that can only end in a rollback and a banner.
+   */
+  const canReschedule = (item: TodoItemWithId) => (
+    Boolean(onRescheduleItem) && item.dataUnreadable !== true
+  );
+
   return (
     <div className={styles.chart}>
       <div
@@ -695,9 +711,11 @@ export default function TimelineChart({
                     A grip is dropped once its end of the bar leaves the
                     window — except on the task being moved right now, where
                     it stays (pinned to the edge) so a keyboard user doesn't
-                    lose their place mid-nudge.
+                    lose their place mid-nudge. A task whose stored data could
+                    not be read is never offered one: the write would be
+                    refused, leaving a preview to roll back.
                   */}
-                  {onRescheduleItem && (!row.clippedStart || preview?.id === row.item.id) && (
+                  {canReschedule(row.item) && (!row.clippedStart || preview?.id === row.item.id) && (
                     <ResizeHandle
                       edge="start"
                       row={row}
@@ -708,7 +726,7 @@ export default function TimelineChart({
                       onBlur={flushKeyNudge}
                     />
                   )}
-                  {onRescheduleItem && (!row.clippedEnd || preview?.id === row.item.id) && (
+                  {canReschedule(row.item) && (!row.clippedEnd || preview?.id === row.item.id) && (
                     <ResizeHandle
                       edge="end"
                       row={row}
