@@ -301,13 +301,14 @@ function TimelinePageContent() {
   /*
    * Editing from the chart.
    *
-   * The timeline deliberately has no drag-to-reschedule, so opening the task
-   * is the one way to move its dates — which only works if the dialog can
-   * actually save. The change is applied locally first and rolled back if the
-   * write is rejected, as on the boards.
+   * Both the dialog and a dragged bar end up here: they are the same write,
+   * and keeping one path means a drag inherits the optimistic patch, the
+   * rollback, and the guard against a read that started before the edit.
    */
-  const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
-    const target = selectedTodo;
+  const applyUpdate = async (
+    target: (TodoItem & { id?: string }) | null,
+    updatedFields: Partial<TodoItem>,
+  ) => {
     if (!target?.id || !bookId) return;
     const operationBookId = bookId;
     const targetId = target.id;
@@ -333,7 +334,9 @@ function TimelinePageContent() {
     setItems(current => current.map(item => (
       item.id === targetId ? { ...item, ...optimisticFields } : item
     )));
-    setSelectedTodo(previous => (previous ? { ...previous, ...optimisticFields } : previous));
+    setSelectedTodo(previous => (
+      previous && previous.id === targetId ? { ...previous, ...optimisticFields } : previous
+    ));
     // Anything already in flight now holds a pre-edit copy of this row.
     mutationVersionRef.current += 1;
     pendingMutationCountRef.current += 1;
@@ -348,7 +351,7 @@ function TimelinePageContent() {
       console.error('Error updating TODO:', err);
       if (bookIdRef.current !== operationBookId) return;
       setItems(current => restoreSnapshot(current, snapshot));
-      setSelectedTodo(null);
+      setSelectedTodo(previous => (previous && previous.id === targetId ? null : previous));
       const writeMessage = describeFailure('Could not save your changes.', err);
       setError(writeMessage);
       // The restored row is a guess until a read confirms it, so a read is
@@ -359,6 +362,23 @@ function TimelinePageContent() {
       pendingMutationCountRef.current -= 1;
       flushPendingReplay();
     }
+  };
+
+  // The dialog reports a failed save to the user itself, so the rejection is
+  // left to propagate here.
+  const handleUpdateTodo = (updatedFields: Partial<TodoItem>) =>
+    applyUpdate(selectedTodo, updatedFields);
+
+  /*
+   * A bar dragged by one of its ends. Nothing is listening for a rejection
+   * here — the error banner and the rollback have already happened — so it is
+   * swallowed rather than left as an unhandled rejection.
+   */
+  const handleRescheduleItem = (
+    item: TodoItemWithId,
+    next: { etsDateTime?: string; etaDateTime?: string },
+  ) => {
+    void applyUpdate(item, next).catch(() => {});
   };
 
   const goToToday = useCallback(() => {
@@ -518,6 +538,7 @@ function TimelinePageContent() {
               window={timelineWindow}
               onWindowChange={setTimelineWindow}
               onSelectItem={setSelectedTodo}
+              onRescheduleItem={handleRescheduleItem}
               nowMs={nowMs}
               emptyMessage={
                 loading
@@ -531,7 +552,8 @@ function TimelinePageContent() {
 
           <p className={styles.hint}>
             Drag or shift-scroll to move through time, and ctrl-scroll or pinch to zoom.
-            Select a bar to open the task.
+            Select a bar to open the task, or drag either end of it to change the
+            estimated start or finish.
           </p>
         </div>
 

@@ -114,6 +114,7 @@ User actions immediately update local state, then sync to the backend in the bac
 | `books/sortBooks.ts` | One name ordering for every book list; `MultiBackendStore.listBooks` applies it |
 | `timeline/timelineWindow.ts` | Pure zoom/pan/bar/tick geometry behind the Timeline view |
 | `timeline/timelineRows.ts` | Turns tasks into drawable bars; also the source of the Timeline's result counts |
+| `timeline/timelineDrag.ts` | Pure snap/resize arithmetic for dragging a bar's start or end |
 | `unsavedChanges.ts` | Dirty detection and close-intent resolution for the discard guard |
 | `hooks/useDiscardGuard.ts` | Routes every dialog close path through one confirmation |
 | `books/bookName.ts` | Book-name validation and `" by arrange"` suffix handling |
@@ -128,7 +129,7 @@ User actions immediately update local state, then sync to the backend in the bac
 |---|---|---|---|
 | `/matrix` | Eisenhower quadrants, drag-and-drop, sweeps stale dates | window, today ±30d | search, status, tags, priority (`board` presets) |
 | `/scrum` | Status columns, drag-and-drop | window, today ±30d | search, status, tags, priority (`board` presets) |
-| `/timeline` | Gantt chart; zoom and pan the period | window derived from the visible period, padded | search only (`timeline` presets) |
+| `/timeline` | Gantt chart; zoom and pan the period, drag a bar's ends to reschedule | window derived from the visible period, padded | search only (`timeline` presets) |
 | `/cancelled` | Review and bulk-delete cancelled tasks | all | search only (`cancelled` presets) |
 
 Every one of them uses `useBookId`, `useTaskQuery`, `filterTasks`, `useRefreshOnPageActivation`, `useSetTopBarActions`, `AuthRecoveryPanel`, and `ErrorBanner`, and guards fetches with a `fetchSequenceRef` + `bookIdRef` pair so a stale or cross-book response can never land. New task views should follow the same shape, and must be added to `BASE_NAV_ITEMS` and `ViewSwitcherInner` in `components/HamburgerMenu.tsx`.
@@ -138,6 +139,8 @@ Every one of them uses `useBookId`, `useTaskQuery`, `filterTasks`, `useRefreshOn
 - **TypeScript strict mode** with `isolatedModules`. Nullability must be modeled explicitly (e.g., `useRef<T | null>(null)`).
 - **Path alias**: `@/*` maps to the project root — use `@/lib/store/useStore` style imports. `tsconfig.test.json` mirrors this alias, so test files use it too.
 - **CSS Modules**: Every component has a colocated `.module.css` file. No global CSS beyond `globals.css`.
+- **Status colours are tokens**: the one palette lives in `globals.css` as `--status-<status>-{fg,border,bg,bg-strong}` and `--urgent-{fg,bg}` custom properties. Matrix badges, Scrum filters, and Timeline bars all reference them, so a status reads the same everywhere; never hard-code a status colour in a module.
+- **Board pages fill the viewport**: `/matrix`, `/scrum`, and `/timeline` keep the page itself unscrolled (`container`/`inner`/`card` are `overflow: hidden` flex columns from the `md` breakpoint up) and scroll only their inner surface, so the toolbar and hint stay put.
 - **Component files**: PascalCase (`AddTodoItem.tsx`). No barrel/index exports.
 - **Client components**: Pages and components use `'use client'` since there is no server runtime.
 - **basePath**: Configurable via `NEXT_PUBLIC_BASE_PATH` env var. Use Next.js `Link`/`useRouter` for navigation (never raw `<a href="/">`) to respect the base path.

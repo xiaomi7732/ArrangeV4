@@ -489,9 +489,9 @@
   background-color: #1d4ed8;
 }
 
-/* Status label colors in filter bar */
-.status_new { color: #6b7280; }
-.status_inProgress { color: #2563eb; }
-.status_blocked { color: #dc2626; }
-.status_finished { color: #16a34a; }
-.status_cancelled { color: #9333ea; }
+/* Status label colors in filter bar, from the shared palette in globals.css */
+.status_new { color: var(--status-new-fg); }
+.status_inProgress { color: var(--status-inProgress-fg); }
+.status_blocked { color: var(--status-blocked-fg); }
+.status_finished { color: var(--status-finished-fg); }
+.status_cancelled { color: var(--status-cancelled-fg); }

@@ -41,6 +41,8 @@
     "lib/timeline/timelineWindow.ts",
     "lib/timeline/timelineWindow.test.ts",
     "lib/timeline/timelineRows.test.ts",
+    "lib/timeline/timelineDrag.ts",
+    "lib/timeline/timelineDrag.test.ts",
     "lib/hooks/useRefreshOnPageActivation.ts",
     "lib/hooks/useRefreshOnPageActivation.test.ts",
     "lib/hooks/useModalDialog.ts",
