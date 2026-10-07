@@ -62,6 +62,13 @@ function formatLocalDateTime(isoString?: string) {
 
 export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBlocked = false, books = [], currentBookId = null, availableCategories = [] }: ViewTodoItemProps) {
   const [editing, setEditing] = useState(false);
+  /*
+   * The item as it stood when the editor opened. The pages now derive `todo`
+   * from each refreshed read, so the live prop can change mid-edit; both the
+   * patch and the unsaved-changes check are taken against this frozen copy so
+   * a refresh cannot be mistaken for the user's own edit.
+   */
+  const [editBaseline, setEditBaseline] = useState<TodoItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checklistUpdating, setChecklistUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     setMoveTargetId('');
     setMoveLeftDuplicate(false);
     setMoveOpen(false);
+    setEditBaseline(null);
   }, [todo.id]);
 
   // Edit form state
@@ -128,6 +136,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     setError(null);
 
     try {
+      const base = editBaseline ?? todo;
       const updatedFields: Partial<TodoItem> = {};
       const nextSubject = subject.trim();
       const nextEts = etsDateTime ? new Date(etsDateTime).toISOString() : undefined;
@@ -145,32 +154,37 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
       const sameValue = (left: unknown, right: unknown) =>
         JSON.stringify(left) === JSON.stringify(right);
 
-      if (nextSubject !== todo.subject) updatedFields.subject = nextSubject;
-      if (urgent !== (todo.urgent ?? false)) updatedFields.urgent = urgent;
-      if (important !== (todo.important ?? false)) updatedFields.important = important;
-      if (status !== (todo.status || 'new')) updatedFields.status = status;
-      if (etsDateTime !== formatLocalDateTime(todo.etsDateTime)) {
+      // Every comparison is against the item as it was when the editor opened,
+      // never against the live prop: a refresh landing mid-edit must not turn
+      // a field the user never touched into part of this patch (which would
+      // overwrite the refreshed value).
+      if (nextSubject !== base.subject) updatedFields.subject = nextSubject;
+      if (urgent !== (base.urgent ?? false)) updatedFields.urgent = urgent;
+      if (important !== (base.important ?? false)) updatedFields.important = important;
+      if (status !== (base.status || 'new')) updatedFields.status = status;
+      if (etsDateTime !== formatLocalDateTime(base.etsDateTime)) {
         updatedFields.etsDateTime = nextEts;
       }
-      if (etaDateTime !== formatLocalDateTime(todo.etaDateTime)) {
+      if (etaDateTime !== formatLocalDateTime(base.etaDateTime)) {
         updatedFields.etaDateTime = nextEta;
       }
       // Compared untrimmed: saving an unrelated field must not quietly rewrite
       // a remark the user never touched.
       const remarksChanged =
-        remarks !== (todo.remarks?.content || '') ||
-        (nextRemarks !== null && nextRemarks.type !== (todo.remarks?.type || 'text'));
+        remarks !== (base.remarks?.content || '') ||
+        (nextRemarks !== null && nextRemarks.type !== (base.remarks?.type || 'text'));
       if (remarksChanged) updatedFields.remarks = nextRemarks;
-      if (!sameValue(nextChecklist, todo.checklist || [])) {
+      if (!sameValue(nextChecklist, base.checklist || [])) {
         updatedFields.checklist = nextChecklist;
       }
-      if (!sameValue(nextCategories, todo.categories || [])) {
+      if (!sameValue(nextCategories, base.categories || [])) {
         updatedFields.categories = nextCategories;
       }
 
       if (Object.keys(updatedFields).length === 0) {
         // Nothing to write, but the user still asked to leave the editor.
         setViewChecklist(null);
+        setEditBaseline(null);
         setEditing(false);
         return;
       }
@@ -180,6 +194,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
       // the result of their own change. The optimistic view-mode checklist is
       // dropped so the saved item is the single source of truth again.
       setViewChecklist(null);
+      setEditBaseline(null);
       setEditing(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update TODO item');
@@ -188,51 +203,54 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     }
   };
 
-  // Seeds the editor from the item as it stands right now. The dialog no
-  // longer closes on save, and a background refresh can replace `todo` while
-  // it sits in view mode, so the form must be re-seeded every time the editor
-  // opens — otherwise a stale value is compared against the baseline (a false
-  // "discard changes?") or written back over fresher data.
-  const seedFormFromTodo = useCallback(() => {
-    setSubject(todo.subject);
-    setUrgent(todo.urgent ?? false);
-    setImportant(todo.important ?? false);
-    setStatus(todo.status || 'new');
-    setEtsDateTime(formatLocalDateTime(todo.etsDateTime));
-    setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
-    setRemarks(todo.remarks?.content || '');
-    setRemarksMarkdown(!todo.remarks || todo.remarks.type === 'markdown');
-    setChecklist(todo.checklist ?? []);
-    setCategories(todo.categories || []);
+  // Seeds the editor from a given copy of the item. The dialog no longer
+  // closes on save and the prop tracks refreshed reads, so the form is seeded
+  // afresh every time the editor opens — and from the same copy that becomes
+  // the edit baseline, so the two can never disagree.
+  const seedForm = useCallback((source: TodoItem) => {
+    setSubject(source.subject);
+    setUrgent(source.urgent ?? false);
+    setImportant(source.important ?? false);
+    setStatus(source.status || 'new');
+    setEtsDateTime(formatLocalDateTime(source.etsDateTime));
+    setEtaDateTime(formatLocalDateTime(source.etaDateTime));
+    setRemarks(source.remarks?.content || '');
+    setRemarksMarkdown(!source.remarks || source.remarks.type === 'markdown');
+    setChecklist(source.checklist ?? []);
+    setCategories(source.categories || []);
     setError(null);
-  }, [todo]);
+  }, []);
 
   const handleCancelEdit = useCallback(() => {
-    seedFormFromTodo();
+    seedForm(editBaseline ?? todo);
+    setEditBaseline(null);
     setEditing(false);
-  }, [seedFormFromTodo]);
+  }, [seedForm, editBaseline, todo]);
 
   // The same values `handleCancelEdit` restores, which is exactly what closing
   // the editor would throw away.
-  const baselineValues = useMemo(() => ({
-    // Trimmed on both sides: the save stores a trimmed subject, so trailing
-    // spaces are not a change worth warning about.
-    subject: todo.subject.trim(),
-    urgent: todo.urgent ?? false,
-    important: todo.important ?? false,
-    status: todo.status || 'new',
-    etsDateTime: formatLocalDateTime(todo.etsDateTime),
-    etaDateTime: formatLocalDateTime(todo.etaDateTime),
-    remarks: todo.remarks?.content || '',
-    // Only meaningful while there is a remark to format: the save ignores a
-    // type change on an empty remark, so reporting one as unsaved would nag
-    // about something that could never be stored.
-    remarksMarkdown: (todo.remarks?.content || '').trim()
-      ? (!todo.remarks || todo.remarks.type === 'markdown')
-      : null,
-    checklist: todo.checklist || [],
-    categories: todo.categories || [],
-  }), [todo]);
+  const baselineValues = useMemo(() => {
+    const base = editBaseline ?? todo;
+    return {
+      // Trimmed on both sides: the save stores a trimmed subject, so trailing
+      // spaces are not a change worth warning about.
+      subject: base.subject.trim(),
+      urgent: base.urgent ?? false,
+      important: base.important ?? false,
+      status: base.status || 'new',
+      etsDateTime: formatLocalDateTime(base.etsDateTime),
+      etaDateTime: formatLocalDateTime(base.etaDateTime),
+      remarks: base.remarks?.content || '',
+      // Only meaningful while there is a remark to format: the save ignores a
+      // type change on an empty remark, so reporting one as unsaved would nag
+      // about something that could never be stored.
+      remarksMarkdown: (base.remarks?.content || '').trim()
+        ? (!base.remarks || base.remarks.type === 'markdown')
+        : null,
+      checklist: base.checklist || [],
+      categories: base.categories || [],
+    };
+  }, [editBaseline, todo]);
 
   const dirty = useMemo(
     () => editing && hasUnsavedChanges(
@@ -779,7 +797,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
             {onUpdate && (
               <button type="button"
                 onClick={() => {
-                  seedFormFromTodo();
+                  // One copy serves as both the form's seed and the baseline
+                  // every later comparison is made against.
+                  setEditBaseline(todo);
+                  seedForm(todo);
                   // A destination chosen before the edit should not survive it.
                   setMoveOpen(false);
                   setMoveTargetId('');
