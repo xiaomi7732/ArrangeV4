@@ -26,7 +26,7 @@ export default function ScrumCard({ todo, onClick }: ScrumCardProps) {
         }
       }}
     >
-      <div className={styles.subject}>{todo.subject}</div>
+      <div className={styles.subject} title={todo.subject}>{todo.subject}</div>
       <div className={styles.badges}>
         {todo.important && <span className={`${styles.badge} ${styles.badgeImportant}`}>Important</span>}
         {todo.urgent && <span className={`${styles.badge} ${styles.badgeUrgent}`}>Urgent</span>}

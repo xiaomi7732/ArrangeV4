@@ -896,7 +896,11 @@ function MatrixPageContent() {
   };
 
   const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
-    if (!selectedTodo?.id || !bookId) return;
+    if (!selectedTodo?.id || !bookId) {
+      // Surfaced rather than swallowed: the dialog leaves edit mode on a
+      // resolved save, so a silent return would look like a successful write.
+      throw new Error('Could not save your changes: the item or book is unavailable.');
+    }
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     const updateMutationVersion = mutationVersionRef.current;
@@ -1456,3 +1460,4 @@ function MatrixPageContent() {
     </div>
   );
 }
+

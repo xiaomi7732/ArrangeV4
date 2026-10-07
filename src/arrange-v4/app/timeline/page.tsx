@@ -334,7 +334,14 @@ function TimelinePageContent() {
     target: (TodoItem & { id?: string }) | null,
     updatedFields: Partial<TodoItem>,
   ) => {
-    if (!target?.id || !bookId) return;
+    if (!target?.id || !bookId) {
+      // Surfaced rather than swallowed: the dialog leaves edit mode on a
+      // resolved save, so a silent return would look like a successful write.
+      // The banner is set here too because a dragged bar swallows rejections.
+      const unavailable = 'Could not save your changes: the item or book is unavailable.';
+      setError(unavailable);
+      throw new Error(unavailable);
+    }
     const operationBookId = bookId;
     const targetId = target.id;
     const snapshot = snapshotItems(items, [targetId]);

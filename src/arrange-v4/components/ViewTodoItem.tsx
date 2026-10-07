@@ -69,6 +69,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
   const [moveTargetId, setMoveTargetId] = useState('');
   const [moving, setMoving] = useState(false);
   const [moveLeftDuplicate, setMoveLeftDuplicate] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const errorRef = useRef<HTMLDivElement | null>(null);
   const tabsId = useId();
   // Optimistic local state for view-mode checklist (tracks pending changes before server confirms)
@@ -80,6 +81,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     setViewChecklist(null);
     setMoveTargetId('');
     setMoveLeftDuplicate(false);
+    setMoveOpen(false);
   }, [todo.id]);
 
   // Edit form state
@@ -167,11 +169,18 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
       }
 
       if (Object.keys(updatedFields).length === 0) {
-        onClose();
+        // Nothing to write, but the user still asked to leave the editor.
+        setViewChecklist(null);
+        setEditing(false);
         return;
       }
       await onUpdate?.(updatedFields);
-      onClose();
+      // The dialog stays open on the item that was just saved: the edit is
+      // rarely the last thing the user wants to do with it, and closing hid
+      // the result of their own change. The optimistic view-mode checklist is
+      // dropped so the saved item is the single source of truth again.
+      setViewChecklist(null);
+      setEditing(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update TODO item');
     } finally {
@@ -179,7 +188,12 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     }
   };
 
-  const handleCancelEdit = useCallback(() => {
+  // Seeds the editor from the item as it stands right now. The dialog no
+  // longer closes on save, and a background refresh can replace `todo` while
+  // it sits in view mode, so the form must be re-seeded every time the editor
+  // opens — otherwise a stale value is compared against the baseline (a false
+  // "discard changes?") or written back over fresher data.
+  const seedFormFromTodo = useCallback((nextChecklist?: string[]) => {
     setSubject(todo.subject);
     setUrgent(todo.urgent ?? false);
     setImportant(todo.important ?? false);
@@ -188,11 +202,15 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
     setRemarksMarkdown(!todo.remarks || todo.remarks.type === 'markdown');
-    setChecklist(todo.checklist || []);
+    setChecklist(nextChecklist ?? todo.checklist ?? []);
     setCategories(todo.categories || []);
     setError(null);
-    setEditing(false);
   }, [todo]);
+
+  const handleCancelEdit = useCallback(() => {
+    seedFormFromTodo();
+    setEditing(false);
+  }, [seedFormFromTodo]);
 
   // The same values `handleCancelEdit` restores, which is exactly what closing
   // the editor would throw away.
@@ -699,10 +717,26 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
 
           {canMove && (
             <div className={styles.moveRow}>
-              <label className={styles.label} htmlFor={`${tabsId}-move-target`}>
-                Move to another book
-              </label>
-              <div className={styles.moveControls}>
+              {/* Moving a task is a rare operation, so it is folded away: the
+                  dialog keeps its room for the things people do every day. */}
+              <button
+                type="button"
+                className={styles.moveToggle}
+                aria-expanded={moveOpen}
+                aria-controls={`${tabsId}-move-controls`}
+                disabled={moving}
+                onClick={() => setMoveOpen(open => !open)}
+              >
+                {moveOpen ? 'Move to another book' : 'Move to another book…'}
+              </button>
+              <div
+                id={`${tabsId}-move-controls`}
+                className={styles.moveControls}
+                hidden={!moveOpen}
+              >
+                <label className={styles.visuallyHidden} htmlFor={`${tabsId}-move-target`}>
+                  Destination book
+                </label>
                 <select
                   id={`${tabsId}-move-target`}
                   className={styles.select}
@@ -740,7 +774,13 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
             )}
             {onUpdate && (
               <button type="button"
-                onClick={() => { setChecklist(displayChecklist || []); setEditing(true); }}
+                onClick={() => {
+                  seedFormFromTodo(displayChecklist || []);
+                  // A destination chosen before the edit should not survive it.
+                  setMoveOpen(false);
+                  setMoveTargetId('');
+                  setEditing(true);
+                }}
                 disabled={checklistUpdating || moving || todo.dataUnreadable}
                 title={todo.dataUnreadable
                   ? 'Editing is disabled while this item\u2019s saved data cannot be read'

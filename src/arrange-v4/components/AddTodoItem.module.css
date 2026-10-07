@@ -331,8 +331,45 @@
 /*
  * Moving an item out of the book is a separate kind of action from the
  * dialog's Edit/Close pair, so it sits on its own row above them rather than
- * competing for space in the button strip.
+ * competing for space in the button strip. It stays folded away until asked
+ * for: the dialog keeps its room for the things people do every day.
  */
+.moveToggle {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.moveToggle:hover {
+  color: #374151;
+}
+
+.moveToggle:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Keeps the destination label available to screen readers once the toggle
+   above already names the section visually. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .moveNotice {
   margin: 0 0 12px;
   font-size: 13px;
@@ -351,6 +388,11 @@
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+/* `display: flex` would otherwise defeat the `hidden` attribute. */
+.moveControls[hidden] {
+  display: none;
 }
 
 .moveControls .select {
@@ -437,10 +479,21 @@
 .tabBar {
   display: flex;
   gap: 0;
-  border-bottom: 2px solid #e5e7eb;
+  /*
+   * The rule under the strip is an inset shadow, not a border: it occupies no
+   * box, so the active tab's own 2px accent replaces it instead of stacking
+   * into a 4px stripe, and the strip cannot overflow vertically.
+   */
+  box-shadow: inset 0 -2px 0 #e5e7eb;
   margin-bottom: 16px;
   flex-shrink: 0;
   overflow-x: auto;
+  /*
+   * The strip only ever scrolls sideways. Without this, the active tab's
+   * accent made the strip overflow vertically too, which both produced a
+   * stray scrollbar and clipped the accent out of view.
+   */
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -451,22 +504,34 @@
   color: #6b7280;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
+/* A tab paints over the strip, so it carries the rule across its own width. */
 .tab:hover {
   color: #374151;
   background-color: #f9fafb;
+  box-shadow: inset 0 -2px 0 #e5e7eb;
 }
 
-.tabActive {
+/* Inset so the ring is not clipped by the strip's own vertical clipping. */
+.tab:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: -2px;
+}
+
+/*
+ * Drawn as an inset shadow rather than a border pulled up over the strip's
+ * own rule: it takes no space, so it cannot make the scroll container
+ * overflow, and it stays visible however the strip is scrolled.
+ */
+.tabActive,
+.tabActive:hover {
   color: #2563eb;
-  border-bottom-color: #2563eb;
+  box-shadow: inset 0 -2px 0 #2563eb;
 }
 
 @media (max-width: 480px) {

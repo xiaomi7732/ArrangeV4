@@ -524,7 +524,7 @@ function CancelledPageContent() {
                           aria-label={`Select ${todo.subject}`}
                         />
                         <div className={styles.taskInfo}>
-                          <div className={styles.taskSubject}>{todo.subject}</div>
+                          <div className={styles.taskSubject} title={todo.subject}>{todo.subject}</div>
                           <div className={styles.taskMeta}>
                             {todo.etsDateTime && (() => {
                               const ets = formatRelativeDate(todo.etsDateTime);
