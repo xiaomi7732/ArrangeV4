@@ -126,7 +126,19 @@ function ScrumPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
-  const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
+  const [selectedSnapshot, setSelectedTodo] = useState<TodoItemWithId | null>(null);
+  /*
+   * The dialog follows the list, not the copy that opened it: a refresh
+   * replaces `todoItems` wholesale, and an edit seeded from the stale copy
+   * would write the refreshed fields back out. The snapshot is the fallback
+   * for an item a read no longer returns.
+   */
+  const selectedTodo = useMemo(
+    () => (selectedSnapshot
+      ? todoItems.find(item => item.id === selectedSnapshot.id) ?? selectedSnapshot
+      : null),
+    [selectedSnapshot, todoItems],
+  );
   const [showTags, setShowTags] = useState(true);
   const [showManageTags, setShowManageTags] = useState(false);
   const taskQuery = useTaskQuery(bookId);
@@ -650,7 +662,11 @@ function ScrumPageContent() {
   };
 
   const handleUpdateTodo = async (updatedFields: Partial<TodoItem>) => {
-    if (!selectedTodo?.id || !bookId) return;
+    if (!selectedTodo?.id || !bookId) {
+      // Surfaced rather than swallowed: the dialog leaves edit mode on a
+      // resolved save, so a silent return would look like a successful write.
+      throw new Error('Could not save your changes: the item or book is unavailable.');
+    }
     const operationBookId = bookId;
     mutationVersionRef.current += 1;
     const updateMutationVersion = mutationVersionRef.current;
@@ -1114,3 +1130,4 @@ export default function ScrumPage() {
     </Suspense>
   );
 }
+
