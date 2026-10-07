@@ -57,7 +57,18 @@ function CancelledPageContent() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
-  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [selectedSnapshot, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  /*
+   * The dialog follows the list, not the copy that opened it: a refresh
+   * replaces `cancelledItems` wholesale. The snapshot is the fallback for an
+   * item a read no longer returns.
+   */
+  const selectedTodo = useMemo(
+    () => (selectedSnapshot
+      ? cancelledItems.find(item => item.id === selectedSnapshot.id) ?? selectedSnapshot
+      : null),
+    [selectedSnapshot, cancelledItems],
+  );
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const bookIdRef = useRef(bookId);
   const fetchSequenceRef = useRef(0);

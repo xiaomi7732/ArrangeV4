@@ -70,7 +70,19 @@ function TimelinePageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
-  const [selectedTodo, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  const [selectedSnapshot, setSelectedTodo] = useState<(TodoItem & { id?: string }) | null>(null);
+  /*
+   * The dialog follows the list, not the copy that opened it: a refresh
+   * replaces `items` wholesale, and an edit seeded from the stale copy would
+   * write the refreshed fields back out. The snapshot is the fallback for an
+   * item a read no longer returns.
+   */
+  const selectedTodo = useMemo(
+    () => (selectedSnapshot
+      ? items.find(item => item.id === selectedSnapshot.id) ?? selectedSnapshot
+      : null),
+    [selectedSnapshot, items],
+  );
   const [timelineWindow, setTimelineWindow] = useState<TimelineWindow>(() => defaultWindow());
 
   // The "now" marker is read once per load rather than on every render, so the

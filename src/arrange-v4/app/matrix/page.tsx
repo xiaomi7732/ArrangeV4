@@ -316,7 +316,19 @@ function MatrixPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [draggedItem, setDraggedItem] = useState<TodoItemWithId | null>(null);
-  const [selectedTodo, setSelectedTodo] = useState<TodoItemWithId | null>(null);
+  const [selectedSnapshot, setSelectedTodo] = useState<TodoItemWithId | null>(null);
+  /*
+   * The dialog follows the list, not the copy that opened it: a refresh
+   * replaces `todoItems` wholesale, and an edit seeded from the stale copy
+   * would write the refreshed fields back out. The snapshot is the fallback
+   * for an item a read no longer returns.
+   */
+  const selectedTodo = useMemo(
+    () => (selectedSnapshot
+      ? todoItems.find(item => item.id === selectedSnapshot.id) ?? selectedSnapshot
+      : null),
+    [selectedSnapshot, todoItems],
+  );
   const [zoomedQuadrant, setZoomedQuadrant] = useState<QuadrantKey | null>(null);
   const taskQuery = useTaskQuery(bookId);
   const { query } = taskQuery;
