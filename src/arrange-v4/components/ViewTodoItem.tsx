@@ -193,7 +193,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
   // it sits in view mode, so the form must be re-seeded every time the editor
   // opens — otherwise a stale value is compared against the baseline (a false
   // "discard changes?") or written back over fresher data.
-  const seedFormFromTodo = useCallback((nextChecklist?: string[]) => {
+  const seedFormFromTodo = useCallback(() => {
     setSubject(todo.subject);
     setUrgent(todo.urgent ?? false);
     setImportant(todo.important ?? false);
@@ -202,7 +202,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
     setEtaDateTime(formatLocalDateTime(todo.etaDateTime));
     setRemarks(todo.remarks?.content || '');
     setRemarksMarkdown(!todo.remarks || todo.remarks.type === 'markdown');
-    setChecklist(nextChecklist ?? todo.checklist ?? []);
+    setChecklist(todo.checklist ?? []);
     setCategories(todo.categories || []);
     setError(null);
   }, [todo]);
@@ -697,6 +697,10 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
                       setError(null);
                       try {
                         await onUpdate?.({ checklist: updated });
+                        // The write landed, so the item itself is authoritative
+                        // again: holding the shadow would mask a refreshed
+                        // checklist and let a later save overwrite it.
+                        setViewChecklist(null);
                       } catch (err: unknown) {
                         setViewChecklist(null);
                         const message = err instanceof Error ? err.message : 'Failed to update checklist';
@@ -775,7 +779,7 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
             {onUpdate && (
               <button type="button"
                 onClick={() => {
-                  seedFormFromTodo(displayChecklist || []);
+                  seedFormFromTodo();
                   // A destination chosen before the edit should not survive it.
                   setMoveOpen(false);
                   setMoveTargetId('');
