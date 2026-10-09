@@ -42,6 +42,14 @@ export interface TodoItem {
   finishDateTime?: string | null;
   originalEtsDateTime?: string | null;
   originalEtaDateTime?: string | null;
+  /**
+   * Calendar-only, never user-visible: where the backing event currently sits.
+   * The Calendar backend rolls this forward for stale non-terminal items so
+   * they stay inside its ±30-day fetch window; the item's own ETS/ETA are left
+   * exactly as the user planned them. Sweeping reads it to tell which events
+   * have fallen behind.
+   */
+  windowAnchorDateTime?: string;
   matrixOrder?: number;
   scrumOrder?: number;
   checklist?: string[];

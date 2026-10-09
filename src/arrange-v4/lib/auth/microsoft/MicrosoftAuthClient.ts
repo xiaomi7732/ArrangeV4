@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { InteractionRequiredAuthError } from '@azure/msal-browser';
 import { loginRequest } from '@/lib/msalConfig';
+import { clearCachedBooks } from '@/lib/books/bookListCache';
 import { InteractiveAuthenticationRequiredError } from '../errors';
 import type { AcquireTokenOptions, AuthClient, AuthUser } from '../types';
 
@@ -52,6 +53,9 @@ export function useMicrosoftAuthClient(): AuthClient {
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
+    // The cached book list belongs to the account signing out; a different
+    // account signing in on this provider must not see it.
+    clearCachedBooks();
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
     const postLogoutRedirectUri =
       typeof window !== 'undefined'

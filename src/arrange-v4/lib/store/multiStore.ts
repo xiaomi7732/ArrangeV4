@@ -38,6 +38,16 @@ export class MultiBackendStore implements TodoStore {
   }
 
   /**
+   * Whether the active backend fetches through a date window and therefore
+   * needs its items' anchors swept forward to stay visible. Only the Calendar
+   * backend does: Google Sheets returns every item, so it has no window to
+   * compensate for and must never be swept.
+   */
+  get supportsWindowSweep(): boolean {
+    return this.activeBackend === 'calendar';
+  }
+
+  /**
    * Sorted here rather than in each page, so every book list and switcher in
    * the app agrees on one order regardless of what the backend returned.
    */

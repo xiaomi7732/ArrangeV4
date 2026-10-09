@@ -11,6 +11,7 @@ import {
   type TaskQuery,
 } from './taskQuery';
 import {
+  capabilitiesForScope,
   deletePreset as deleteStoredPreset,
   listPresets,
   renameCategoryInPresets,
@@ -34,6 +35,13 @@ export interface UseTaskQueryOptions {
 export interface UseTaskQueryResult {
   query: TaskQuery;
   queryActive: boolean;
+  /**
+   * Whether this view can express tag filters. Drives the controls a page
+   * renders so they match the criteria its presets are allowed to hold.
+   */
+  supportsCategoryFilters: boolean;
+  /** Whether this view can express urgent-only / important-only filters. */
+  supportsPriorityFilters: boolean;
   setText: (text: string) => void;
   setStatusFilter: (status: TodoStatus, mode: StatusFilterMode) => void;
   /** Switches the given statuses to "All", used to reveal status-hidden items. */
@@ -98,6 +106,7 @@ export function useTaskQuery(
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   const scope: PresetScope = options.presetScope ?? 'board';
+  const capabilities = capabilitiesForScope(scope);
 
   // Reset the query when the selected book (or the view's defaults) changes, so
   // filters can never leak across books or storage backends. Adjusting state
@@ -173,20 +182,22 @@ export function useTaskQuery(
   }, [defaultStatusFilters]);
 
   const toggleCategory = useCallback((category: string) => {
+    if (!capabilities.categories) return;
     setQuery(previous => ({
       ...previous,
       categories: previous.categories.includes(category)
         ? previous.categories.filter(entry => entry !== category)
         : [...previous.categories, category],
     }));
-  }, []);
+  }, [capabilities.categories]);
 
   const toggleUncategorized = useCallback(() => {
+    if (!capabilities.categories) return;
     setQuery(previous => ({
       ...previous,
       includeUncategorized: !previous.includeUncategorized,
     }));
-  }, []);
+  }, [capabilities.categories]);
 
   const clearCategoryFilters = useCallback(() => {
     setQuery(previous => ({ ...previous, categories: [], includeUncategorized: false }));
@@ -214,12 +225,16 @@ export function useTaskQuery(
   }, [bookId, scope]);
 
   const toggleUrgentOnly = useCallback(() => {
+    // A view without the control must not be able to acquire the criterion:
+    // the filter would narrow the board with nothing on screen to undo it.
+    if (!capabilities.priority) return;
     setQuery(previous => ({ ...previous, urgentOnly: !previous.urgentOnly }));
-  }, []);
+  }, [capabilities.priority]);
 
   const toggleImportantOnly = useCallback(() => {
+    if (!capabilities.priority) return;
     setQuery(previous => ({ ...previous, importantOnly: !previous.importantOnly }));
-  }, []);
+  }, [capabilities.priority]);
 
   const clearAll = useCallback(() => {
     setQuery(createDefaultTaskQuery(defaultStatusFilters));
@@ -276,6 +291,8 @@ export function useTaskQuery(
   return {
     query,
     queryActive,
+    supportsCategoryFilters: capabilities.categories,
+    supportsPriorityFilters: capabilities.priority,
     setText,
     setStatusFilter,
     revealStatuses,

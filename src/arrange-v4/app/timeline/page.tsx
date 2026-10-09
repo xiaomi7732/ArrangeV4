@@ -369,17 +369,11 @@ function TimelinePageContent() {
       );
     }
 
-    // The stores drop the pre-bump original for a date the caller sets, so the
-    // "moved" notice has to go with the same edit rather than wait for a read.
-    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
-    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
-    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
-
     setItems(current => current.map(item => (
-      item.id === targetId ? { ...item, ...optimisticFields } : item
+      item.id === targetId ? { ...item, ...persistedFields } : item
     )));
     setSelectedTodo(previous => (
-      previous && previous.id === targetId ? { ...previous, ...optimisticFields } : previous
+      previous && previous.id === targetId ? { ...previous, ...persistedFields } : previous
     ));
     // Anything already in flight now holds a pre-edit copy of this row.
     mutationVersionRef.current += 1;

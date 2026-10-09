@@ -19,13 +19,43 @@ import {
 const PRESET_KEY_PREFIX = 'arrange_filterPresets';
 
 /**
- * Views that expose the same filter controls share presets. The boards
- * (Matrix and Scrum) offer status, tag, and priority filters; Cancelled is
- * search-only, so its presets are kept apart — otherwise a preset saved there
- * would silently strip criteria from a board preset of the same name. Timeline
- * is search-only over live tasks, which is neither of the other two.
+ * Views that expose the same filter controls share presets. A view with
+ * different controls needs its own scope, so a preset can never carry criteria
+ * that view cannot display or edit: applying it would filter the board by
+ * something invisible with no way to clear it.
+ *
+ * - `board`   — Scrum: status, tag, and priority filters.
+ * - `matrix`  — Matrix: status and tag filters. The quadrants already separate
+ *               urgent from important, so filtering on them there is
+ *               meaningless.
+ * - `cancelled`, `timeline` — search-only views.
  */
-export type PresetScope = 'board' | 'cancelled' | 'timeline';
+export type PresetScope = 'board' | 'matrix' | 'cancelled' | 'timeline';
+
+/**
+ * Which criteria each scope can actually show. One table drives both the
+ * sanitising of stored presets and the controls a page renders, so the two can
+ * never disagree about what a view supports.
+ */
+export interface ScopeCapabilities {
+  /** Tag filters: specific categories plus "uncategorized". */
+  categories: boolean;
+  /** Urgent-only / important-only toggles. */
+  priority: boolean;
+}
+
+export const SCOPE_CAPABILITIES: Record<PresetScope, ScopeCapabilities> = {
+  board: { categories: true, priority: true },
+  matrix: { categories: true, priority: false },
+  cancelled: { categories: false, priority: false },
+  timeline: { categories: false, priority: false },
+};
+
+export const PRESET_SCOPES = Object.keys(SCOPE_CAPABILITIES) as PresetScope[];
+
+export function capabilitiesForScope(scope: PresetScope): ScopeCapabilities {
+  return SCOPE_CAPABILITIES[scope] ?? SCOPE_CAPABILITIES.board;
+}
 
 export const MAX_PRESET_NAME_LENGTH = 60;
 export const MAX_PRESETS_PER_BOOK = 50;
@@ -88,25 +118,19 @@ export function sanitizeTaskQuery(value: unknown, scope: PresetScope = 'board'):
   if (!value || typeof value !== 'object') return query;
   const source = value as Record<string, unknown>;
 
-  // Cancelled and Timeline are search-only: they render no tag or priority
-  // controls, so a preset carrying those criteria (hand-edited storage, or
-  // written by an older release) would filter by something the user cannot
-  // see or clear.
-  if (scope === 'cancelled' || scope === 'timeline') {
-    return {
-      ...query,
-      text: typeof source.text === 'string' ? source.text : '',
-      statusFilters: sanitizeStatusFilters(source.statusFilters),
-    };
-  }
+  // Criteria a scope cannot render are dropped rather than kept: a preset
+  // carrying them (hand-edited storage, an older release, or a view that has
+  // since lost a control) would filter by something the user cannot see or
+  // clear.
+  const capabilities = capabilitiesForScope(scope);
 
   return {
     text: typeof source.text === 'string' ? source.text : '',
     statusFilters: sanitizeStatusFilters(source.statusFilters),
-    categories: sanitizeCategories(source.categories),
-    includeUncategorized: source.includeUncategorized === true,
-    urgentOnly: source.urgentOnly === true,
-    importantOnly: source.importantOnly === true,
+    categories: capabilities.categories ? sanitizeCategories(source.categories) : [],
+    includeUncategorized: capabilities.categories && source.includeUncategorized === true,
+    urgentOnly: capabilities.priority && source.urgentOnly === true,
+    importantOnly: capabilities.priority && source.importantOnly === true,
   };
 }
 
@@ -128,6 +152,36 @@ interface PresetReadResult {
 const READ_FAILURE_MESSAGE = 'Could not read saved filters from browser storage.';
 
 /**
+ * Marks that Matrix has inherited the boards' presets. Without it, deleting
+ * every Matrix preset clears the key and the next read would resurrect them.
+ */
+function matrixMigrationKey(bookId: string): string | null {
+  const key = presetStorageKey(bookId, 'matrix');
+  return key ? `${key}_migrated` : null;
+}
+
+function hasInheritedBoardPresets(bookId: string): boolean {
+  const key = matrixMigrationKey(bookId);
+  if (!key) return true;
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return true;
+  }
+}
+
+function markBoardPresetsInherited(bookId: string): boolean {
+  const key = matrixMigrationKey(bookId);
+  if (!key) return false;
+  try {
+    localStorage.setItem(key, 'true');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reads presets, distinguishing "storage is unreadable" from "nothing saved".
  * Mutations must not report success when they never saw the stored list.
  * Corrupt or unparseable contents are *not* a failure: overwriting them is the
@@ -144,7 +198,27 @@ function readPresets(bookId: string, scope: PresetScope): PresetReadResult {
   } catch {
     return { presets: [], failed: true };
   }
-  if (!raw) return { presets: [], failed: false };
+  if (!raw) {
+    // Matrix used to share the boards' presets. The first time it reads its
+    // own pool, it inherits them with the priority criteria it cannot show
+    // stripped out, so saved filters do not appear to vanish.
+    if (scope === 'matrix' && !hasInheritedBoardPresets(bookId)) {
+      const inherited = readPresets(bookId, 'board');
+      if (inherited.failed) return { presets: [], failed: true };
+      const migrated = inherited.presets.map(preset => ({
+        ...preset,
+        query: sanitizeTaskQuery(preset.query, 'matrix'),
+      }));
+      // Only a completed copy may be marked done: marking a failed write would
+      // show the inherited presets once and then lose them for good.
+      if (migrated.length > 0 && !writePresets(bookId, 'matrix', migrated)) {
+        return { presets: migrated, failed: true };
+      }
+      markBoardPresetsInherited(bookId);
+      return { presets: migrated, failed: false };
+    }
+    return { presets: [], failed: false };
+  }
 
   let parsed: unknown;
   try {
@@ -179,6 +253,10 @@ function writePresets(bookId: string, scope: PresetScope, presets: FilterPreset[
 
   try {
     if (presets.length === 0) {
+      // Clearing the key makes the next read look like a first visit, so the
+      // marker has to be in place before the list goes: otherwise deleting the
+      // last Matrix preset resurrects the inherited board ones.
+      if (scope === 'matrix' && !markBoardPresetsInherited(bookId)) return false;
       localStorage.removeItem(key);
     } else {
       localStorage.setItem(key, JSON.stringify(presets));
@@ -298,8 +376,36 @@ export function deletePreset(bookId: string, scope: PresetScope, presetId: strin
  * Keeps saved presets consistent with tag management. Renaming a tag rewrites
  * it in every preset; deleting a tag (`to === null`) drops it. Without this a
  * preset would keep filtering on a tag that no longer exists and match nothing.
+ *
+ * A tag belongs to the book, not to one view, so the rewrite runs over every
+ * scope that can hold tags — otherwise renaming from Matrix would leave Scrum's
+ * presets pointing at a tag that no longer exists.
  */
 export function renameCategoryInPresets(
+  bookId: string,
+  scope: PresetScope,
+  from: string,
+  to: string | null,
+): PresetMutationResult {
+  const scopes: PresetScope[] = [
+    scope,
+    ...PRESET_SCOPES.filter(other => other !== scope && SCOPE_CAPABILITIES[other].categories),
+  ];
+
+  let own: PresetMutationResult = { presets: [] };
+  let otherScopeError: string | undefined;
+  for (const target of scopes) {
+    const outcome = rewriteCategoryInScope(bookId, target, from, to);
+    // Only the caller's own scope decides what it gets back, but a failure in
+    // any scope has to be reported: those presets still hold the old tag.
+    if (target === scope) own = outcome;
+    else if (outcome.error && !otherScopeError) otherScopeError = outcome.error;
+  }
+  if (own.error || !otherScopeError) return own;
+  return { ...own, error: otherScopeError };
+}
+
+function rewriteCategoryInScope(
   bookId: string,
   scope: PresetScope,
   from: string,

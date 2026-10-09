@@ -7,7 +7,6 @@ import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
 import { hasUnsavedChanges, type FormSnapshot } from '@/lib/unsavedChanges';
 import { formatAbsoluteDateTime } from '@/lib/dateUtils';
-import { describeDateBump } from '@/lib/bumpNotice';
 import {
   TODO_DIALOG_TABS,
   tabElementId,
@@ -326,7 +325,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
   }, [editing, confirming, moving, onClose, requestCancelEdit]);
 
   const dialogRef = useModalDialog<HTMLDivElement>(true, editing, { paused: confirming });
-  const bumpedFrom = describeDateBump(todo);
 
   // Books the backend refuses to write to are no destination, and an item in
   // one cannot be moved out either: the copy would land and the delete would
@@ -626,21 +624,6 @@ export default function ViewTodoItem({ todo, onClose, onUpdate, onMove, moveBloc
                 <span className={styles.label}>ETA (Estimated Time of Accomplishment)</span>
                 <span className={styles.value}>{formatDateTime(todo.etaDateTime)}</span>
               </div>
-
-              {bumpedFrom && (
-                <div className={styles.formGroup}>
-                  <span className={styles.label}>Originally planned</span>
-                  <span className={styles.value} title={bumpedFrom.tooltip}>
-                    {[todo.originalEtsDateTime, todo.originalEtaDateTime]
-                      .filter(Boolean)
-                      .map(value => formatDateTime(value as string))
-                      .join(' → ')}
-                  </span>
-                  <span className={styles.hint}>
-                    Arrange moved these dates forward so the task stays in view.
-                  </span>
-                </div>
-              )}
 
               <div className={styles.preview}>
                 <p className={styles.previewText}>

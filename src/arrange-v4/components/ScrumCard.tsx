@@ -2,7 +2,6 @@
 
 import { TodoItemWithId } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
-import { describeDateBump } from '@/lib/bumpNotice';
 import styles from './ScrumCard.module.css';
 
 interface ScrumCardProps {
@@ -11,8 +10,6 @@ interface ScrumCardProps {
 }
 
 export default function ScrumCard({ todo, onClick }: ScrumCardProps) {
-  const bumpedFrom = describeDateBump(todo);
-
   return (
     <div
       className={styles.card}
@@ -41,11 +38,6 @@ export default function ScrumCard({ todo, onClick }: ScrumCardProps) {
             </span>
           );
         })()}
-        {bumpedFrom && (
-          <span className={styles.bumped} title={bumpedFrom.tooltip} aria-label={bumpedFrom.tooltip}>
-            ↻ moved from {bumpedFrom.text}
-          </span>
-        )}
       </div>
       {todo.categories && todo.categories.length > 0 && (
         <div className={styles.categories}>

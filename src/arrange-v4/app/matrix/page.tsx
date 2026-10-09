@@ -16,7 +16,6 @@ import { useStore } from '@/lib/store/useStore';
 import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } from '@/lib/store/types';
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
-import { describeDateBump } from '@/lib/bumpNotice';
 import {
   FILTER_MODE_LABELS,
   FILTER_MODES,
@@ -100,7 +99,6 @@ function TodoCard({ todo, onClick, onStatusChange }: {
   onStatusChange?: (todo: TodoItemWithId, newStatus: TodoStatus) => void
 }) {
   const currentStatus = todo.status || 'new';
-  const bumpedFrom = describeDateBump(todo);
   // The backend refuses writes to an item whose saved data it could not read,
   // so offering the status buttons would only produce a failed save.
   const writesBlocked = todo.dataUnreadable === true;
@@ -156,7 +154,7 @@ function TodoCard({ todo, onClick, onStatusChange }: {
       </div>
       
       {/* Dates section - compact layout */}
-      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime || bumpedFrom) && (
+      {(todo.etsDateTime || todo.etaDateTime || todo.startDateTime || todo.finishDateTime) && (
         <div className={styles.todoDates}>
           {/* Planned times */}
           {(todo.etsDateTime || todo.etaDateTime) && (
@@ -186,23 +184,6 @@ function TodoCard({ todo, onClick, onStatusChange }: {
                   </span>
                 );
               })()}
-              {bumpedFrom && (
-                <span
-                  className={styles.todoDateBumped}
-                  title={bumpedFrom.tooltip}
-                  aria-label={bumpedFrom.tooltip}
-                >
-                  ↻ moved
-                </span>
-              )}
-            </div>
-          )}
-          {bumpedFrom && (
-            <div className={styles.todoDateRow}>
-              <span className={styles.todoDateLabel}>Originally:</span>
-              <span className={styles.todoDateValue} title={bumpedFrom.tooltip}>
-                {bumpedFrom.text}
-              </span>
             </div>
           )}
           {/* Actual times */}
@@ -330,7 +311,11 @@ function MatrixPageContent() {
     [selectedSnapshot, todoItems],
   );
   const [zoomedQuadrant, setZoomedQuadrant] = useState<QuadrantKey | null>(null);
-  const taskQuery = useTaskQuery(bookId);
+  // The quadrants already separate urgent from important, so Matrix renders no
+  // priority filters and keeps its own preset pool: a board preset carrying
+  // "urgent only" would otherwise hide half the grid with nothing on screen to
+  // explain or undo it.
+  const taskQuery = useTaskQuery(bookId, { presetScope: 'matrix' });
   const { query } = taskQuery;
   const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
@@ -530,9 +515,12 @@ function MatrixPageContent() {
       setItemsBookId(requestedBookId);
       setAuthRecoveryRequired(false);
 
-      // Sweep stale items across ALL books once per session (non-blocking; per-load ref prevents retries on failure)
+      // Roll stale window anchors forward across ALL books once per session so
+      // nothing drops out of the fetch window. Invisible to the user: it moves
+      // the backing events, never the tasks' ETS/ETA. Non-blocking; the
+      // per-load ref prevents retries on failure.
       if (
-        store.activeBackend === 'calendar' &&
+        store.supportsWindowSweep &&
         !hasSessionSweepRun() &&
         !isSessionSweepInProgress() &&
         !sweepAttemptedRef.current
@@ -946,18 +934,12 @@ function MatrixPageContent() {
       );
     }
 
-    // The stores drop the pre-bump original for a date the caller sets, so the
-    // "moved" notice has to go with the same edit rather than wait for a read.
-    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
-    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
-    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
-
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...optimisticFields } : item
+        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...optimisticFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
 
     try {
       const updated = await store.updateItem(
@@ -1258,7 +1240,7 @@ function MatrixPageContent() {
                 onRenamePreset={taskQuery.renamePreset}
                 onDeletePreset={taskQuery.deletePreset}
                 onDismissPresetError={taskQuery.dismissPresetError}
-                showPriorityFilters
+                showPriorityFilters={taskQuery.supportsPriorityFilters}
                 onToggleUrgentOnly={taskQuery.toggleUrgentOnly}
                 onToggleImportantOnly={taskQuery.toggleImportantOnly}
               />

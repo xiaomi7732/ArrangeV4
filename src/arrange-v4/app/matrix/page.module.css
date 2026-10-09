@@ -720,15 +720,6 @@
   color: #d1d5db;
 }
 
-.todoDateBumped {
-  color: #b45309;
-  background: #fef3c7;
-  border-radius: 4px;
-  padding: 0 4px;
-  font-size: 0.7rem;
-  cursor: help;
-}
-
 .todoCategories {
   display: flex;
   flex-wrap: wrap;

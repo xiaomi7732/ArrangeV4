@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InteractiveAuthenticationRequiredError } from '../errors';
+import { clearCachedBooks } from '@/lib/books/bookListCache';
 import type { AcquireTokenOptions, AuthClient, AuthUser } from '../types';
 
 const GIS_SCRIPT_ID = 'google-identity-services';
@@ -278,6 +279,9 @@ export function useGoogleAuthClient(enabled: boolean): AuthClient {
   }, [requestToken]);
 
   const logout = useCallback(async (): Promise<void> => {
+    // The cached book list belongs to the account signing out; a different
+    // account signing in on this provider must not see it.
+    clearCachedBooks();
     const cached = readCachedToken();
     clearGoogleSession();
     setUser(null);
