@@ -110,6 +110,9 @@ export function useBookId(routePrefix: string) {
     try {
       const all = await store.listBooks(options);
       if (fetchSequenceRef.current !== fetchSequence) return false;
+      // A sign-out or a book change while the read was in flight makes the
+      // answer obsolete on screen as well as in the cache.
+      if (cacheGeneration() !== generation) return false;
       setCachedBooks(store.activeBackend, all, generation);
       setBooks(all);
       setAuthRecoveryRequired(false);

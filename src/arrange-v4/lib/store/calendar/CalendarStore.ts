@@ -151,8 +151,13 @@ export class CalendarStore implements TodoStore {
       }
     }
 
+    const seenIds = new Set<string | undefined>();
     return events
-      .filter((event, index) => events.findIndex(e => e.id === event.id) === index)
+      .filter(event => {
+        if (seenIds.has(event.id)) return false;
+        seenIds.add(event.id);
+        return true;
+      })
       .map(eventToTodoItem)
       .filter((i): i is TodoItemWithId => i !== null);
   }

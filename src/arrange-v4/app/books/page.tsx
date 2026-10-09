@@ -66,6 +66,8 @@ export default function BooksPage() {
       // A create or delete that ran while this read was in flight makes its
       // answer obsolete, even though it is still the newest read.
       if (publishEpochRef.current !== publishEpoch) return;
+      // Likewise a sign-out: the list belongs to the account that just left.
+      if (cacheGeneration() !== generation) return;
       setCachedBooks(store.activeBackend, allBooks, generation);
       setUserName(user?.displayName || user?.email || '');
       setBooks(allBooks);
