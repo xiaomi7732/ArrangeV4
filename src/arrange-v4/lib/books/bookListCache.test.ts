@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 describe('bookListCache', () => {
-  it('keeps each backend s list apart', () => {
+  it("keeps each backend's list apart", () => {
     setCachedBooks('calendar', [book('calendar:1', 'Work')]);
     setCachedBooks('google', [book('google:1', 'Home')]);
 

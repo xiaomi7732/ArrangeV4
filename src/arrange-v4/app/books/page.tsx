@@ -102,6 +102,7 @@ export default function BooksPage() {
   };
 
   const handleCreateBook = async (name: string) => {
+    let nextBooks: Book[] | null = null;
     try {
       // The switcher on other pages renders from the cache while it refetches,
       // so a list this page is about to change must not survive the change —
@@ -111,25 +112,31 @@ export default function BooksPage() {
       const newBook = await store.createBook(name, {
         backend: backendForAuthProvider(auth.provider),
       });
-      setBooks(prev => insertBookSorted(prev, newBook));
+      nextBooks = insertBookSorted(books, newBook);
+      setBooks(nextBooks);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create book';
       console.error('Error creating book:', err);
       throw new Error(message);
     } finally {
       // A read that started *during* the change is just as obsolete — and it
-      // may already have refilled the cache, so drop that too.
+      // may already have refilled the cache, so drop that too. The list this
+      // page now shows is known-good, so hand it straight back: opening the
+      // new book must not blank the switcher, which is the whole point.
       publishEpochRef.current += 1;
       clearCachedBooks();
+      if (nextBooks) setCachedBooks(store.activeBackend, nextBooks);
     }
   };
 
   const handleDeleteBook = async (bookId: string) => {
+    let nextBooks: Book[] | null = null;
     try {
       publishEpochRef.current += 1;
       clearCachedBooks();
       await store.deleteBook(bookId);
-      setBooks(prev => prev.filter(b => b.id !== bookId));
+      nextBooks = books.filter(b => b.id !== bookId);
+      setBooks(nextBooks);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to delete book';
       console.error('Error deleting book:', err);
@@ -137,6 +144,7 @@ export default function BooksPage() {
     } finally {
       publishEpochRef.current += 1;
       clearCachedBooks();
+      if (nextBooks) setCachedBooks(store.activeBackend, nextBooks);
     }
   };
 
