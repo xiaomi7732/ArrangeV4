@@ -40,9 +40,9 @@ export class PartialMoveError extends Error {
  * The payload written into the destination book.
  *
  * Board positions are dropped: they order an item against its siblings, and
- * the siblings are different in the new book. Everything the user typed is
- * carried over verbatim, including the "moved from" dates, so the bump notice
- * still reads correctly after the move.
+ * the siblings are different in the new book. Everything else the user has is
+ * carried over verbatim, including the legacy pre-bump dates, which the
+ * destination folds back into the planned dates.
  */
 export function itemForMove(item: TodoItemWithId): TodoItem {
   const {

@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store/useStore';
 import type { Book, StoreOperationOptions } from '@/lib/store/types';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { insertBookSorted } from '@/lib/books/sortBooks';
+import { cacheGeneration, clearCachedBooks, setCachedBooks } from '@/lib/books/bookListCache';
 import { backendForAuthProvider } from '@/lib/store/types';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
@@ -25,6 +26,9 @@ export default function BooksPage() {
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const [userName, setUserName] = useState<string>('');
   const fetchSequenceRef = useRef(0);
+  // Bumped whenever this page changes the book list, or the account signs out:
+  // a read in flight across such a change must not publish its stale answer.
+  const publishEpochRef = useRef(0);
 
   const handleLogin = async () => {
     try {
@@ -48,6 +52,8 @@ export default function BooksPage() {
     options: StoreOperationOptions = { interaction: 'allow-interactive' },
   ) => {
     const fetchSequence = ++fetchSequenceRef.current;
+    const publishEpoch = publishEpochRef.current;
+    const generation = cacheGeneration();
     if (!isAuthenticated) return;
 
     setLoading(true);
@@ -57,6 +63,12 @@ export default function BooksPage() {
       const user = auth.getUser();
       const allBooks = await store.listBooks(options);
       if (fetchSequenceRef.current !== fetchSequence) return;
+      // A create or delete that ran while this read was in flight makes its
+      // answer obsolete, even though it is still the newest read.
+      if (publishEpochRef.current !== publishEpoch) return;
+      // Likewise a sign-out: the list belongs to the account that just left.
+      if (cacheGeneration() !== generation) return;
+      setCachedBooks(store.activeBackend, allBooks, generation);
       setUserName(user?.displayName || user?.email || '');
       setBooks(allBooks);
       setAuthRecoveryRequired(false);
@@ -90,28 +102,60 @@ export default function BooksPage() {
   };
 
   const handleCreateBook = async (name: string) => {
+    let nextBooks: Book[] | null = null;
     try {
+      // The switcher on other pages renders from the cache while it refetches,
+      // so a list this page is about to change must not survive the change —
+      // and neither may a read that started before the change and lands after.
+      publishEpochRef.current += 1;
+      clearCachedBooks();
       const newBook = await store.createBook(name, {
         backend: backendForAuthProvider(auth.provider),
       });
-      setBooks(prev => insertBookSorted(prev, newBook));
+      nextBooks = insertBookSorted(books, newBook);
+      setBooks(nextBooks);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to create book';
       console.error('Error creating book:', err);
       throw new Error(message);
+    } finally {
+      // A read that started *during* the change is just as obsolete — and it
+      // may already have refilled the cache, so drop that too. The list this
+      // page now shows is known-good, so hand it straight back: opening the
+      // new book must not blank the switcher, which is the whole point.
+      publishEpochRef.current += 1;
+      clearCachedBooks();
+      if (nextBooks) setCachedBooks(store.activeBackend, nextBooks);
     }
   };
 
   const handleDeleteBook = async (bookId: string) => {
+    let nextBooks: Book[] | null = null;
     try {
+      publishEpochRef.current += 1;
+      clearCachedBooks();
       await store.deleteBook(bookId);
-      setBooks(prev => prev.filter(b => b.id !== bookId));
+      nextBooks = books.filter(b => b.id !== bookId);
+      setBooks(nextBooks);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to delete book';
       console.error('Error deleting book:', err);
       throw new Error(message);
+    } finally {
+      publishEpochRef.current += 1;
+      clearCachedBooks();
+      if (nextBooks) setCachedBooks(store.activeBackend, nextBooks);
     }
   };
+
+  // Signing out ends the cache's usefulness and its right to exist: the next
+  // account must not catch a glimpse of this one's books.
+  useEffect(() => {
+    if (isAuthenticated || busy) return;
+    publishEpochRef.current += 1;
+    clearCachedBooks();
+    setBooks([]);
+  }, [isAuthenticated, busy]);
 
   useEffect(() => {
     if (isAuthenticated && !busy) {

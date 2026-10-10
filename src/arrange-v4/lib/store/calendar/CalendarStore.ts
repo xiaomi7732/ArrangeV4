@@ -15,7 +15,8 @@ import type {
 import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
 import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
-import { computeBumpedDates } from './bump';
+import { computeWindowAnchor, isWindowAnchorStale, anchorZoneRanges } from './windowAnchor';
+import { resolveIncomingDates, resolveItemDates, resolveStoredDates } from './itemDates';
 import {
   parseArrangeBody,
   serializeArrangeBody,
@@ -119,16 +120,22 @@ export class CalendarStore implements TodoStore {
       if (!opts.fromDate || !opts.toDate) {
         throw new Error("listItems with range='window' requires fromDate and toDate.");
       }
-      let response = await client
-        .api(`/me/calendars/${calendarId}/calendarView`)
-        .query({ startDateTime: opts.fromDate, endDateTime: opts.toDate })
-        .top(100)
-        .select('id,webLink,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
-        .get();
-      events.push(...(response.value || []));
-      while (response['@odata.nextLink']) {
-        response = await client.api(response['@odata.nextLink']).get();
+      // Graph matches on the event, which is only the window anchor. A task
+      // planned outside the requested period can therefore be anchored inside
+      // it and vice versa, so the anchor zone is always fetched too and the
+      // caller filters on the planned dates it gets back.
+      for (const range of anchorZoneRanges(opts.fromDate, opts.toDate)) {
+        let response = await client
+          .api(`/me/calendars/${calendarId}/calendarView`)
+          .query({ startDateTime: range.fromDate, endDateTime: range.toDate })
+          .top(100)
+          .select('id,webLink,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
+          .get();
         events.push(...(response.value || []));
+        while (response['@odata.nextLink']) {
+          response = await client.api(response['@odata.nextLink']).get();
+          events.push(...(response.value || []));
+        }
       }
     } else {
       // 'all'
@@ -144,7 +151,13 @@ export class CalendarStore implements TodoStore {
       }
     }
 
+    const seenIds = new Set<string | undefined>();
     return events
+      .filter(event => {
+        if (seenIds.has(event.id)) return false;
+        seenIds.add(event.id);
+        return true;
+      })
       .map(eventToTodoItem)
       .filter((i): i is TodoItemWithId => i !== null);
   }
@@ -161,6 +174,10 @@ export class CalendarStore implements TodoStore {
     // A copy keeps the gaps the original had: stamping "started now" on an item
     // that was moved between books would invent history.
     const lifecycleDefault = options.asCopy ? null : new Date().toISOString();
+    const now = new Date();
+    const incoming = resolveIncomingDates(item);
+    const start = incoming.etsDateTime ? new Date(incoming.etsDateTime) : new Date(now.getTime() + 60 * 60 * 1000);
+    const end = incoming.etaDateTime ? new Date(incoming.etaDateTime) : new Date(start.getTime() + 30 * 60 * 1000);
     const stored: StoredTodoBody = {
       status,
       urgent: item.urgent || false,
@@ -171,23 +188,44 @@ export class CalendarStore implements TodoStore {
         ?? (status === 'inProgress' || status === 'finished' ? lifecycleDefault : null),
       finishDateTime: item.finishDateTime
         ?? (status === 'finished' ? lifecycleDefault : null),
-      // Carried over when the caller supplies them — a move recreates the item
-      // in another calendar and its "moved from" notice has to survive that.
-      originalEtsDateTime: item.originalEtsDateTime ?? null,
-      originalEtaDateTime: item.originalEtaDateTime ?? null,
+      // The dates the user planned. The event's own start/end is only the
+      // window anchor and may sit elsewhere, so it cannot carry these.
+      etsDateTime: start.toISOString(),
+      etaDateTime: end.toISOString(),
+      // Filled in below, once the anchor is known.
+      anchorStartDateTime: null,
+      anchorEndDateTime: null,
+      // A legacy item's pre-bump dates were folded into the planned dates
+      // above by resolveIncomingDates, so nothing is left to carry over.
+      originalEtsDateTime: null,
+      originalEtaDateTime: null,
       matrixOrder: item.matrixOrder,
       scrumOrder: item.scrumOrder,
     };
 
-    const now = new Date();
-    const start = item.etsDateTime ? new Date(item.etsDateTime) : new Date(now.getTime() + 60 * 60 * 1000);
-    const end = item.etaDateTime ? new Date(item.etaDateTime) : new Date(start.getTime() + 30 * 60 * 1000);
+    // Anchoring keeps a stale item inside the ±30-day calendarView window
+    // without touching the planned dates above.
+    const anchor = isNonTerminalStatus(status)
+      ? computeWindowAnchor(stored.etsDateTime, stored.etaDateTime, now)
+      : null;
+    // A terminal item is never anchored, so it would land on a plan that may
+    // be months old and drop straight out of the window. Carrying the anchor
+    // the source event sat on keeps a moved or copied item visible.
+    const carried = !isNonTerminalStatus(status)
+        && item.windowAnchorDateTime
+        && item.windowAnchorEndDateTime
+      ? { start: item.windowAnchorDateTime, end: item.windowAnchorEndDateTime }
+      : null;
+    const anchorStart = anchor?.start ?? carried?.start ?? start.toISOString();
+    const anchorEnd = anchor?.end ?? carried?.end ?? end.toISOString();
+    stored.anchorStartDateTime = anchorStart;
+    stored.anchorEndDateTime = anchorEnd;
 
     const event = {
       subject: item.subject,
       body: { contentType: 'html', content: buildBodyHtml(stored) },
-      start: { dateTime: start.toISOString(), timeZone: 'UTC' },
-      end: { dateTime: end.toISOString(), timeZone: 'UTC' },
+      start: { dateTime: anchorStart, timeZone: 'UTC' },
+      end: { dateTime: anchorEnd, timeZone: 'UTC' },
       categories: item.categories || [],
       reminderMinutesBeforeStart: 0,
       isReminderOn: false,
@@ -269,6 +307,10 @@ export class CalendarStore implements TodoStore {
       remarks: null,
       startDateTime: null,
       finishDateTime: null,
+      etsDateTime: null,
+      etaDateTime: null,
+      anchorStartDateTime: null,
+      anchorEndDateTime: null,
       originalEtsDateTime: null,
       originalEtaDateTime: null,
       matrixOrder: undefined,
@@ -304,14 +346,12 @@ export class CalendarStore implements TodoStore {
         updates.startDateTime !== undefined ? updates.startDateTime ?? null : existingStored.startDateTime,
       finishDateTime:
         updates.finishDateTime !== undefined ? updates.finishDateTime ?? null : existingStored.finishDateTime,
-      originalEtsDateTime:
-        updates.originalEtsDateTime !== undefined
-          ? updates.originalEtsDateTime ?? null
-          : existingStored.originalEtsDateTime,
-      originalEtaDateTime:
-        updates.originalEtaDateTime !== undefined
-          ? updates.originalEtaDateTime ?? null
-          : existingStored.originalEtaDateTime,
+      // Legacy pre-bump dates: read above to recover the user's real dates,
+      // then dropped so there is only one source for them.
+      originalEtsDateTime: null,
+      originalEtaDateTime: null,
+      etsDateTime: existingStored.etsDateTime,
+      etaDateTime: existingStored.etaDateTime,
       matrixOrder: updates.matrixOrder !== undefined ? updates.matrixOrder : existingStored.matrixOrder,
       scrumOrder: updates.scrumOrder !== undefined ? updates.scrumOrder : existingStored.scrumOrder,
     };
@@ -337,49 +377,39 @@ export class CalendarStore implements TodoStore {
       }
     }
 
-    // Date-bump: move stale non-terminal items forward, preserving originals
+    // Dates: the payload carries what the user planned; the event's start/end
+    // is only the anchor that keeps a non-terminal item inside the ±30-day
+    // calendarView window. Anchoring therefore never changes ETS/ETA, and
+    // sweeping is invisible to the user.
     const effectiveStatus = (merged.status || 'new') as TodoItem['status'];
-    const callerSetDates = updates.etsDateTime !== undefined || updates.etaDateTime !== undefined;
-    const updateKeys = Object.keys(updates);
-    const orderOnlyUpdate = updateKeys.length > 0 && updateKeys.every(
-      key => key === 'matrixOrder' || key === 'scrumOrder',
-    );
-    let nextEts = updates.etsDateTime;
-    let nextEta = updates.etaDateTime;
-
-    // A caller-supplied date replaces whatever Arrange bumped for that field, so
-    // the remembered pre-bump value no longer describes anything. Cleared per
-    // field: rescheduling only the ETS leaves the bumped ETA — and therefore its
-    // original — still meaningful.
-    if (updates.etsDateTime !== undefined && updates.originalEtsDateTime === undefined) {
-      merged.originalEtsDateTime = null;
-    }
-    if (updates.etaDateTime !== undefined && updates.originalEtaDateTime === undefined) {
-      merged.originalEtaDateTime = null;
-    }
-
-    if (isNonTerminalStatus(effectiveStatus) && !callerSetDates && !orderOnlyUpdate) {
-      const currentEts = convertGraphDateTimeToISO(existingEvent.start);
-      const currentEta = convertGraphDateTimeToISO(existingEvent.end);
-      const bumped = computeBumpedDates(currentEts, currentEta);
-      if (bumped) {
-        if (!merged.originalEtsDateTime) merged.originalEtsDateTime = currentEts ?? null;
-        if (!merged.originalEtaDateTime) merged.originalEtaDateTime = currentEta ?? null;
-        nextEts = bumped.etsDateTime;
-        nextEta = bumped.etaDateTime;
-      }
-    }
+    const dates = resolveItemDates({
+      storedEts: existingStored.etsDateTime,
+      storedEta: existingStored.etaDateTime,
+      storedAnchorStart: existingStored.anchorStartDateTime,
+      storedAnchorEnd: existingStored.anchorEndDateTime,
+      legacyOriginalEts: existingStored.originalEtsDateTime,
+      legacyOriginalEta: existingStored.originalEtaDateTime,
+      eventStart: convertGraphDateTimeToISO(existingEvent.start),
+      eventEnd: convertGraphDateTimeToISO(existingEvent.end),
+      updatedEts: updates.etsDateTime,
+      updatedEta: updates.etaDateTime,
+      status: effectiveStatus,
+    });
+    merged.etsDateTime = dates.etsDateTime;
+    merged.etaDateTime = dates.etaDateTime;
+    merged.anchorStartDateTime = dates.storedAnchorStart;
+    merged.anchorEndDateTime = dates.storedAnchorEnd;
 
     const patch: Record<string, unknown> = {
       body: { contentType: 'html', content: buildBodyHtml(merged) },
     };
     if (updates.subject !== undefined) patch.subject = updates.subject;
     if (updates.categories !== undefined) patch.categories = updates.categories;
-    if (nextEts !== undefined) {
-      patch.start = { dateTime: new Date(nextEts).toISOString(), timeZone: 'UTC' };
+    if (dates.anchorStart !== undefined) {
+      patch.start = { dateTime: dates.anchorStart, timeZone: 'UTC' };
     }
-    if (nextEta !== undefined) {
-      patch.end = { dateTime: new Date(nextEta).toISOString(), timeZone: 'UTC' };
+    if (dates.anchorEnd !== undefined) {
+      patch.end = { dateTime: dates.anchorEnd, timeZone: 'UTC' };
     }
 
     const updated: CalendarEvent = await client
@@ -419,9 +449,11 @@ export class CalendarStore implements TodoStore {
   /* ---- Calendar-specific: not on the TodoStore interface ---- */
 
   /**
-   * Bumps stale non-terminal items forward to today. Returns the IDs of items
-   * that were bumped. Calendar-specific: compensates for the ±30-day
-   * calendarView window.
+   * Rolls the event anchor of stale non-terminal items forward to today so
+   * they keep coming back from the ±30-day calendarView window. Returns the
+   * IDs of the items whose anchor was moved. The items' ETS/ETA are not
+   * touched, so this is invisible to the user. Calendar-specific: backends
+   * that return every item have no window to compensate for.
    */
   async sweepStaleItems(
     bookId: string,
@@ -435,7 +467,10 @@ export class CalendarStore implements TodoStore {
         // every time and keep the session sweep from ever being marked done.
         !item.dataUnreadable &&
         isNonTerminalStatus(item.status) &&
-        computeBumpedDates(item.etsDateTime, item.etaDateTime) !== null,
+        // The item's own ETS may be long past on purpose; only the anchor
+        // falling behind means the event needs moving.
+        isWindowAnchorStale(item.windowAnchorDateTime) &&
+        computeWindowAnchor(item.etsDateTime, item.etaDateTime) !== null,
     );
     if (stale.length === 0) return [];
 
@@ -517,6 +552,8 @@ function parseStoredBody(
 
 function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
   if (!event.id) return null;
+  const eventStart = convertGraphDateTimeToISO(event.start);
+  const eventEnd = convertGraphDateTimeToISO(event.end);
   const item: TodoItemWithId = {
     id: event.id,
     ...(event.webLink
@@ -524,8 +561,10 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
       : {}),
     subject: event.subject || '',
     categories: event.categories || [],
-    etsDateTime: convertGraphDateTimeToISO(event.start),
-    etaDateTime: convertGraphDateTimeToISO(event.end),
+    etsDateTime: eventStart,
+    etaDateTime: eventEnd,
+    ...(eventStart ? { windowAnchorDateTime: eventStart } : {}),
+    ...(eventEnd ? { windowAnchorEndDateTime: eventEnd } : {}),
   };
 
   if (event.body?.content) {
@@ -549,8 +588,22 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
       item.remarks = stored.remarks;
       item.startDateTime = stored.startDateTime ?? undefined;
       item.finishDateTime = stored.finishDateTime ?? undefined;
-      item.originalEtsDateTime = stored.originalEtsDateTime ?? null;
-      item.originalEtaDateTime = stored.originalEtaDateTime ?? null;
+      // The event is only the anchor; the planned dates come from the payload,
+      // falling back to a legacy item's pre-bump originals.
+      const dates = resolveStoredDates({
+        storedEts: stored.etsDateTime,
+        storedEta: stored.etaDateTime,
+        storedAnchorStart: stored.anchorStartDateTime,
+        storedAnchorEnd: stored.anchorEndDateTime,
+        legacyOriginalEts: stored.originalEtsDateTime,
+        legacyOriginalEta: stored.originalEtaDateTime,
+        eventStart,
+        eventEnd,
+      });
+      item.etsDateTime = dates.etsDateTime ?? undefined;
+      item.etaDateTime = dates.etaDateTime ?? undefined;
+      item.originalEtsDateTime = null;
+      item.originalEtaDateTime = null;
       if (typeof stored.matrixOrder === 'number' && Number.isFinite(stored.matrixOrder)) {
         item.matrixOrder = stored.matrixOrder;
       }

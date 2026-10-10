@@ -700,18 +700,12 @@ function ScrumPageContent() {
       );
     }
 
-    // The stores drop the pre-bump original for a date the caller sets, so the
-    // "moved" notice has to go with the same edit rather than wait for a read.
-    const optimisticFields: Partial<TodoItem> = { ...persistedFields };
-    if (updatedFields.etsDateTime !== undefined) optimisticFields.originalEtsDateTime = null;
-    if (updatedFields.etaDateTime !== undefined) optimisticFields.originalEtaDateTime = null;
-
     setTodoItems(items =>
       items.map(item =>
-        item.id === selectedTodo.id ? { ...item, ...optimisticFields } : item
+        item.id === selectedTodo.id ? { ...item, ...persistedFields } : item
       )
     );
-    setSelectedTodo(prev => prev ? { ...prev, ...optimisticFields } : prev);
+    setSelectedTodo(prev => prev ? { ...prev, ...persistedFields } : prev);
 
     try {
       const updated = await store.updateItem(
@@ -909,7 +903,7 @@ function ScrumPageContent() {
               onRenamePreset={taskQuery.renamePreset}
               onDeletePreset={taskQuery.deletePreset}
               onDismissPresetError={taskQuery.dismissPresetError}
-              showPriorityFilters
+              showPriorityFilters={taskQuery.supportsPriorityFilters}
               onToggleUrgentOnly={taskQuery.toggleUrgentOnly}
               onToggleImportantOnly={taskQuery.toggleImportantOnly}
             />

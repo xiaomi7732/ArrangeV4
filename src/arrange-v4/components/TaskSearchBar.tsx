@@ -34,7 +34,11 @@ export interface TaskSearchBarProps {
   onRenamePreset: (presetId: string, name: string) => boolean;
   onDeletePreset: (presetId: string) => void;
   onDismissPresetError: () => void;
-  /** Matrix/Scrum expose urgency and importance; Cancelled does not. */
+  /**
+   * Whether this view can express urgency/importance filters. Pass the value
+   * from `useTaskQuery`, which derives it from the view's preset scope, so the
+   * controls and the saved presets always agree.
+   */
   showPriorityFilters?: boolean;
   onToggleUrgentOnly?: () => void;
   onToggleImportantOnly?: () => void;

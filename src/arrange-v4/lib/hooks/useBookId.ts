@@ -10,6 +10,7 @@ import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useHydrated } from './useHydrated';
 import { resolveBookRedirect } from './bookRedirect';
+import { cacheGeneration, clearCachedBooks, getCachedBooks, setCachedBooks } from '@/lib/books/bookListCache';
 
 /**
  * Shared hook for resolving the selected book.
@@ -38,10 +39,26 @@ export function useBookId(routePrefix: string) {
     : null;
   const store = useStore();
 
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<Book[]>(() => getCachedBooks(store.activeBackend));
   const [error, setError] = useState<string | null>(null);
   const [authRecoveryRequired, setAuthRecoveryRequired] = useState(false);
   const fetchSequenceRef = useRef(0);
+
+  // Switching backends must not leave the other one's books on screen. Adjusting
+  // state during render is the documented alternative to a reset effect.
+  const [booksBackend, setBooksBackend] = useState(store.activeBackend);
+  if (booksBackend !== store.activeBackend) {
+    setBooksBackend(store.activeBackend);
+    setBooks(getCachedBooks(store.activeBackend));
+  }
+
+  // Signing out ends the cache's usefulness and its right to exist: the next
+  // account must not catch a glimpse of this one's books.
+  useEffect(() => {
+    if (isAuthenticated || busy) return;
+    clearCachedBooks();
+    setBooks([]); // eslint-disable-line react-hooks/set-state-in-effect -- mirrors the cache clear above
+  }, [isAuthenticated, busy]);
 
   // Normalize unprefixed URL bookIds to their prefixed form for canonical URLs.
   useEffect(() => {
@@ -87,9 +104,16 @@ export function useBookId(routePrefix: string) {
     const fetchSequence = ++fetchSequenceRef.current;
     if (!isAuthenticated || busy) return false;
     setError(null);
+    // Captured before the read: a sign-out or a book change while it is in
+    // flight invalidates the answer as far as the cache is concerned.
+    const generation = cacheGeneration();
     try {
       const all = await store.listBooks(options);
       if (fetchSequenceRef.current !== fetchSequence) return false;
+      // A sign-out or a book change while the read was in flight makes the
+      // answer obsolete on screen as well as in the cache.
+      if (cacheGeneration() !== generation) return false;
+      setCachedBooks(store.activeBackend, all, generation);
       setBooks(all);
       setAuthRecoveryRequired(false);
 

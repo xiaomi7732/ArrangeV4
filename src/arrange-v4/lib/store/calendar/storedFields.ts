@@ -15,6 +15,26 @@ export interface StoredTodoBody {
   remarks: TodoItem['remarks'];
   startDateTime: string | null;
   finishDateTime: string | null;
+  /**
+   * The task's real ETS/ETA. The event's own start/end is only the window
+   * anchor, which Arrange rolls forward to keep stale items inside the
+   * calendarView window, so it cannot be trusted as the planned dates.
+   * Absent on items written before anchoring was separated from planning.
+   */
+  etsDateTime: string | null;
+  etaDateTime: string | null;
+  /**
+   * Where Arrange last put the event. When the event has since moved, it was
+   * rescheduled outside Arrange (in Outlook, say) and that wins over the
+   * planned dates above.
+   */
+  anchorStartDateTime: string | null;
+  anchorEndDateTime: string | null;
+  /**
+   * Pre-bump dates recorded by the old behaviour, where rolling an item
+   * forward overwrote its ETS/ETA. No longer written; still read so a legacy
+   * item hands back the dates the user actually chose.
+   */
   originalEtsDateTime: string | null;
   originalEtaDateTime: string | null;
   matrixOrder?: number;
@@ -29,6 +49,10 @@ export const STORED_BODY_FIELDS: readonly (keyof StoredTodoBody)[] = [
   'remarks',
   'startDateTime',
   'finishDateTime',
+  'etsDateTime',
+  'etaDateTime',
+  'anchorStartDateTime',
+  'anchorEndDateTime',
   'originalEtsDateTime',
   'originalEtaDateTime',
   'matrixOrder',
@@ -67,6 +91,10 @@ const FIELD_CHECKS: Record<keyof StoredTodoBody, (value: unknown) => boolean> = 
   remarks: isRemarks,
   startDateTime: isNullableString,
   finishDateTime: isNullableString,
+  etsDateTime: isNullableString,
+  etaDateTime: isNullableString,
+  anchorStartDateTime: isNullableString,
+  anchorEndDateTime: isNullableString,
   originalEtsDateTime: isNullableString,
   originalEtaDateTime: isNullableString,
   matrixOrder: isOrder,

@@ -22,13 +22,18 @@ class MemoryStorage {
   /** When set, reads throw to emulate storage blocked by browser settings. */
   failReads = false;
 
+  /** When set, writes to matching keys throw while others succeed. */
+  failWritesMatching: RegExp | null = null;
+
   getItem(key: string): string | null {
     if (this.failReads) throw new Error('SecurityError');
     return this.entries.has(key) ? this.entries.get(key)! : null;
   }
 
   setItem(key: string, value: string): void {
-    if (this.failWrites) throw new Error('QuotaExceededError');
+    if (this.failWrites || this.failWritesMatching?.test(key)) {
+      throw new Error('QuotaExceededError');
+    }
     this.entries.set(key, value);
   }
 
@@ -56,6 +61,7 @@ function query(overrides: Partial<TaskQuery> = {}): TaskQuery {
 beforeEach(() => {
   storage.clear();
   storage.failWrites = false;
+  storage.failWritesMatching = null;
   storage.failReads = false;
 });
 
@@ -102,6 +108,90 @@ describe('sanitizeTaskQuery', () => {
     assert.deepEqual(sanitized.categories, ['a']);
     assert.equal(sanitized.includeUncategorized, false);
     assert.equal(sanitized.urgentOnly, true);
+  });
+
+  it('drops priority criteria for a scope that cannot show them', () => {
+    const sanitized = sanitizeTaskQuery(
+      { text: 'hi', categories: ['a'], includeUncategorized: true, urgentOnly: true, importantOnly: true },
+      'matrix',
+    );
+
+    assert.equal(sanitized.text, 'hi');
+    // Matrix still filters by tag; the quadrants already express priority.
+    assert.deepEqual(sanitized.categories, ['a']);
+    assert.equal(sanitized.includeUncategorized, true);
+    assert.equal(sanitized.urgentOnly, false);
+    assert.equal(sanitized.importantOnly, false);
+  });
+
+  it('drops tag and priority criteria for search-only scopes', () => {
+    for (const scope of ['cancelled', 'timeline'] as const) {
+      const sanitized = sanitizeTaskQuery(
+        { categories: ['a'], includeUncategorized: true, urgentOnly: true, importantOnly: true },
+        scope,
+      );
+      assert.deepEqual(sanitized.categories, []);
+      assert.equal(sanitized.includeUncategorized, false);
+      assert.equal(sanitized.urgentOnly, false);
+      assert.equal(sanitized.importantOnly, false);
+    }
+  });
+});
+
+describe('matrix preset inheritance', () => {
+  it('inherits the board presets once, without their priority criteria', () => {
+    savePreset(calendarBook, 'board', 'Hot', query({ text: 'bug', categories: ['a'], urgentOnly: true }));
+
+    const inherited = listPresets(calendarBook, 'matrix');
+    assert.equal(inherited.length, 1);
+    assert.equal(inherited[0].name, 'Hot');
+    assert.equal(inherited[0].query.text, 'bug');
+    assert.deepEqual(inherited[0].query.categories, ['a']);
+    assert.equal(inherited[0].query.urgentOnly, false);
+
+    // The board pool keeps its own copy untouched.
+    assert.equal(listPresets(calendarBook, 'board')[0].query.urgentOnly, true);
+  });
+
+  it('does not resurrect inherited presets after they are deleted', () => {
+    savePreset(calendarBook, 'board', 'Hot', query({ text: 'bug' }));
+    const inherited = listPresets(calendarBook, 'matrix');
+    deletePreset(calendarBook, 'matrix', inherited[0].id);
+
+    assert.deepEqual(listPresets(calendarBook, 'matrix'), []);
+  });
+
+  it('retries inheritance when the copy could not be written', () => {
+    savePreset(calendarBook, 'board', 'Hot', query({ text: 'bug' }));
+    storage.failWrites = true;
+
+    assert.equal(listPresets(calendarBook, 'matrix').length, 1);
+
+    storage.failWrites = false;
+    // The failed copy was not marked done, so the presets are still there.
+    assert.equal(listPresets(calendarBook, 'matrix').length, 1);
+    assert.equal(listPresets(calendarBook, 'matrix')[0].name, 'Hot');
+  });
+
+  it('reports failure rather than losing the marker on the last delete', () => {
+    savePreset(calendarBook, 'board', 'Hot', query({ text: 'bug' }));
+    const inherited = listPresets(calendarBook, 'matrix');
+    // Emulate the marker being dropped while the list itself is writable, so
+    // emptying the list could not be told apart from a first visit.
+    storage.removeItem(`${presetStorageKey(calendarBook, 'matrix')}_migrated`);
+    storage.failWritesMatching = /_migrated$/;
+
+    const result = deletePreset(calendarBook, 'matrix', inherited[0].id);
+    assert.ok(result.error);
+    assert.equal(listPresets(calendarBook, 'matrix').length, 1);
+  });
+
+  it('keeps a preset saved on Matrix alongside the inherited ones', () => {
+    savePreset(calendarBook, 'board', 'Hot', query({ text: 'bug', urgentOnly: true }));
+    savePreset(calendarBook, 'matrix', 'Mine', query({ text: 'mine' }));
+
+    const names = listPresets(calendarBook, 'matrix').map(preset => preset.name);
+    assert.deepEqual(new Set(names), new Set(['Hot', 'Mine']));
   });
 });
 
@@ -266,6 +356,17 @@ describe('renameCategoryInPresets', () => {
     savePreset(calendarBook, 'board', 'Writing', query({ categories: ['writing'] }));
     const { presets: updated } = renameCategoryInPresets(calendarBook, 'board', 'infra', 'platform');
     assert.deepEqual(updated[0].query.categories, ['writing']);
+  });
+
+  it('rewrites the tag in every scope that can hold tags', () => {
+    savePreset(calendarBook, 'board', 'Infra', query({ categories: ['infra'] }));
+    // Materialise the Matrix pool from the board one before the rename.
+    assert.deepEqual(listPresets(calendarBook, 'matrix')[0].query.categories, ['infra']);
+
+    renameCategoryInPresets(calendarBook, 'matrix', 'infra', 'platform');
+
+    assert.deepEqual(listPresets(calendarBook, 'matrix')[0].query.categories, ['platform']);
+    assert.deepEqual(listPresets(calendarBook, 'board')[0].query.categories, ['platform']);
   });
 
   it('reports an error when the rewrite cannot be persisted', () => {
