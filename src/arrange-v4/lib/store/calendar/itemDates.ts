@@ -37,6 +37,8 @@ export interface StoredDatesInput {
   /** The event's current anchor. */
   eventStart?: string | null;
   eventEnd?: string | null;
+  /** Defaults to the real clock; injected by tests. */
+  now?: Date;
 }
 
 export interface ResolveItemDatesInput extends StoredDatesInput {
@@ -45,7 +47,6 @@ export interface ResolveItemDatesInput extends StoredDatesInput {
   updatedEta?: string | null;
   /** The status the item will have after this update. */
   status?: TodoStatus;
-  now?: Date;
 }
 
 export interface ResolvedItemDates {
@@ -88,6 +89,7 @@ function looksLikeBumpOf(
   eta: string | null,
   eventStart: string | null | undefined,
   eventEnd: string | null | undefined,
+  now: Date,
 ): boolean {
   if (!ets || !eta || !eventStart || !eventEnd) return false;
   const start = new Date(ets);
@@ -97,6 +99,10 @@ function looksLikeBumpOf(
   if ([start, end, anchorStart, anchorEnd].some(date => isNaN(date.getTime()))) return false;
 
   if (anchorStart.getTime() < start.getTime()) return false;
+  // Bumping could only ever move an event to the day it ran, so anything in
+  // the future is a reschedule however neatly it lines up.
+  const endOfToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  if (anchorStart.getTime() >= endOfToday) return false;
   if (Math.abs((anchorEnd.getTime() - anchorStart.getTime()) - (end.getTime() - start.getTime())) > INSTANT_TOLERANCE_MS) {
     return false;
   }
@@ -134,7 +140,13 @@ export function resolveStoredDates(
       etaDateTime: input.legacyOriginalEta ?? input.storedEta ?? eventDates.etaDateTime,
     };
     const usable = isUsablePair(restored.etsDateTime, restored.etaDateTime)
-      && looksLikeBumpOf(restored.etsDateTime, restored.etaDateTime, input.eventStart, input.eventEnd);
+      && looksLikeBumpOf(
+        restored.etsDateTime,
+        restored.etaDateTime,
+        input.eventStart,
+        input.eventEnd,
+        input.now ?? new Date(),
+      );
     return usable ? restored : eventDates;
   }
 

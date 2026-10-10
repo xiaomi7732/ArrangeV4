@@ -117,8 +117,10 @@ export default function BooksPage() {
       console.error('Error creating book:', err);
       throw new Error(message);
     } finally {
-      // A read that started *during* the change is just as obsolete.
+      // A read that started *during* the change is just as obsolete — and it
+      // may already have refilled the cache, so drop that too.
       publishEpochRef.current += 1;
+      clearCachedBooks();
     }
   };
 
@@ -134,6 +136,7 @@ export default function BooksPage() {
       throw new Error(message);
     } finally {
       publishEpochRef.current += 1;
+      clearCachedBooks();
     }
   };
 

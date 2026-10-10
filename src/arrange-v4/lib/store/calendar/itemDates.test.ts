@@ -20,13 +20,14 @@ describe('resolveStoredDates', () => {
     );
   });
 
-  it('recovers a legacy item s pre-bump dates', () => {
+  it("recovers a legacy item's pre-bump dates", () => {
     assert.deepEqual(
       resolveStoredDates({
         legacyOriginalEts: '2026-08-01T09:00:00.000Z',
         legacyOriginalEta: '2026-08-01T10:00:00.000Z',
         eventStart: '2026-10-08T09:00:00.000Z',
         eventEnd: '2026-10-08T10:00:00.000Z',
+        now: NOW,
       }),
       {
         etsDateTime: '2026-08-01T09:00:00.000Z',
@@ -115,6 +116,24 @@ describe('resolveStoredDates', () => {
     );
   });
 
+  it('takes a future reschedule of a legacy item as the new plan', () => {
+    // Bumping could only move an event to the day it ran, so a future date
+    // that happens to share the time of day is still a reschedule.
+    assert.deepEqual(
+      resolveStoredDates({
+        legacyOriginalEts: '2026-08-01T09:00:00.000Z',
+        legacyOriginalEta: '2026-08-01T10:00:00.000Z',
+        eventStart: '2026-11-02T09:00:00.000Z',
+        eventEnd: '2026-11-02T10:00:00.000Z',
+        now: NOW,
+      }),
+      {
+        etsDateTime: '2026-11-02T09:00:00.000Z',
+        etaDateTime: '2026-11-02T10:00:00.000Z',
+      },
+    );
+  });
+
   it('keeps the plan when an old client bumped the item again', () => {
     // An older tab still bumps: it leaves the payload dates in place, writes
     // the originals back, and moves the event off the anchor. That is not a
@@ -129,6 +148,7 @@ describe('resolveStoredDates', () => {
         legacyOriginalEta: '2026-08-01T10:00:00.000Z',
         eventStart: '2026-10-08T09:00:00.000Z',
         eventEnd: '2026-10-08T10:00:00.000Z',
+        now: NOW,
       }),
       {
         etsDateTime: '2026-08-01T09:00:00.000Z',
@@ -305,7 +325,7 @@ describe('resolveItemDates', () => {
     assert.equal(result.anchorEnd, undefined);
   });
 
-  it('records a terminal item s edited dates without moving the event', () => {
+  it("records a terminal item's edited dates without moving the event", () => {
     const result = resolveItemDates({
       storedEts: '2026-08-01T09:00:00.000Z',
       storedEta: '2026-08-01T10:00:00.000Z',

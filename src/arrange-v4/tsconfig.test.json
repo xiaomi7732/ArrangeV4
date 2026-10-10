@@ -78,6 +78,8 @@
     "lib/store/calendar/windowAnchor.test.ts",
     "lib/store/calendar/itemDates.ts",
     "lib/store/calendar/itemDates.test.ts",
+    "lib/books/bookListCache.ts",
+    "lib/books/bookListCache.test.ts",
     "lib/search/taskQuery.ts",
     "lib/search/taskQuery.test.ts",
     "lib/search/filterPresets.ts",
