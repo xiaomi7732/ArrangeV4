@@ -50,6 +50,8 @@ export interface TodoItem {
    * have fallen behind.
    */
   windowAnchorDateTime?: string;
+  /** The `end` counterpart of `windowAnchorDateTime`. Same handling. */
+  windowAnchorEndDateTime?: string;
   matrixOrder?: number;
   scrumOrder?: number;
   checklist?: string[];

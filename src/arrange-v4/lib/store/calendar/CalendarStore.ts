@@ -208,8 +208,16 @@ export class CalendarStore implements TodoStore {
     const anchor = isNonTerminalStatus(status)
       ? computeWindowAnchor(stored.etsDateTime, stored.etaDateTime, now)
       : null;
-    const anchorStart = anchor?.start ?? start.toISOString();
-    const anchorEnd = anchor?.end ?? end.toISOString();
+    // A terminal item is never anchored, so it would land on a plan that may
+    // be months old and drop straight out of the window. Carrying the anchor
+    // the source event sat on keeps a moved or copied item visible.
+    const carried = !isNonTerminalStatus(status)
+        && item.windowAnchorDateTime
+        && item.windowAnchorEndDateTime
+      ? { start: item.windowAnchorDateTime, end: item.windowAnchorEndDateTime }
+      : null;
+    const anchorStart = anchor?.start ?? carried?.start ?? start.toISOString();
+    const anchorEnd = anchor?.end ?? carried?.end ?? end.toISOString();
     stored.anchorStartDateTime = anchorStart;
     stored.anchorEndDateTime = anchorEnd;
 
@@ -556,6 +564,7 @@ function eventToTodoItem(event: CalendarEvent): TodoItemWithId | null {
     etsDateTime: eventStart,
     etaDateTime: eventEnd,
     ...(eventStart ? { windowAnchorDateTime: eventStart } : {}),
+    ...(eventEnd ? { windowAnchorEndDateTime: eventEnd } : {}),
   };
 
   if (event.body?.content) {
