@@ -474,6 +474,22 @@ describe('refreshAnchorScanProgress', () => {
     });
   });
 
+  it('restamps a completion dated in the future so the recheck comes due', () => {
+    // A future completedAt keeps the age below zero, so the 30-day recheck
+    // would never fire and an event dragged back into the scanned span would
+    // stay hidden.
+    const skewed: AnchorScanProgress = {
+      from: null,
+      to: CUTOFF,
+      complete: true,
+      completedAt: new Date(NOW.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    assert.deepEqual(refreshAnchorScanProgress(skewed, NOW), {
+      ...skewed,
+      completedAt: NOW.toISOString(),
+    });
+  });
+
   it('refuses progress written by a clock running ahead', () => {
     // Trusting a cutoff in the future would skip every event up to it.
     const skewed: AnchorScanProgress = {

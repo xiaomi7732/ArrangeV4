@@ -219,7 +219,12 @@ export function refreshAnchorScanProgress(
 
   if (progress.complete) {
     const completedAt = progress.completedAt ? new Date(progress.completedAt).getTime() : NaN;
-    if (isNaN(completedAt)) return { ...progress, completedAt: now.toISOString() };
+    // A completion stamped in the future keeps the age below zero, so the
+    // recheck would never come due. Treat it as unstamped and start the
+    // 30 days from now instead.
+    if (isNaN(completedAt) || completedAt > now.getTime()) {
+      return { ...progress, completedAt: now.toISOString() };
+    }
     if (now.getTime() - completedAt > ANCHOR_SCAN_RECHECK_DAYS * DAY_MS) return null;
   }
 
