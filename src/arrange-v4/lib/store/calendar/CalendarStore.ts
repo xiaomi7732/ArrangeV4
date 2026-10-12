@@ -28,6 +28,8 @@ import {
   initialAnchorHoleScanState,
   nextAnchorScanProgress,
   refreshAnchorScanProgress,
+  isStalledOnTie,
+  tieDrainLimits,
   shouldReadNextAnchorHolePage,
   DEFAULT_ANCHOR_HOLE_SCAN_LIMITS,
   type AnchorHoleScanLimits,
@@ -498,7 +500,6 @@ export class CalendarStore implements TodoStore {
     const slices = anchorHoleScanSlices(beforeDateTime, resumeFrom);
     let state = initialAnchorHoleScanState;
     let backlogExhausted = false;
-    let backlogTruncated = false;
     let freshTruncated = false;
     let truncated = false;
 
@@ -515,9 +516,22 @@ export class CalendarStore implements TodoStore {
         .get();
       state = foldAnchorHolePage(state, response, limits);
 
-      while (shouldReadNextAnchorHolePage(state, Boolean(response['@odata.nextLink']), limits)) {
+      let activeLimits = limits;
+      while (shouldReadNextAnchorHolePage(state, Boolean(response['@odata.nextLink']), activeLimits)) {
         response = await client.api(response['@odata.nextLink']).get();
-        state = foldAnchorHolePage(state, response, limits);
+        state = foldAnchorHolePage(state, response, activeLimits);
+
+        // Stopping here would mean resuming from the same instant next time
+        // and reading the same events again, so the backlog would never move
+        // past a run of events that all end together. Read through it.
+        if (
+          activeLimits === limits &&
+          Boolean(response['@odata.nextLink']) &&
+          !shouldReadNextAnchorHolePage(state, true, activeLimits) &&
+          isStalledOnTie(resumeFrom, slice, state)
+        ) {
+          activeLimits = tieDrainLimits(limits);
+        }
       }
 
       // A pass that stops short — out of pages, or out of candidate budget
@@ -526,8 +540,7 @@ export class CalendarStore implements TodoStore {
       const cutShort = Boolean(response['@odata.nextLink']) || state.capped;
       if (cutShort) {
         truncated = true;
-        if (isBacklog) backlogTruncated = true;
-        else freshTruncated = true;
+        if (!isBacklog) freshTruncated = true;
         break;
       }
       if (isBacklog) backlogExhausted = true;
@@ -538,7 +551,6 @@ export class CalendarStore implements TodoStore {
       truncated,
       progress: nextAnchorScanProgress(resumeFrom, beforeDateTime, state, {
         freshTruncated,
-        backlogTruncated,
         backlogExhausted,
       }),
     };

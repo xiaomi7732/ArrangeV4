@@ -11,6 +11,9 @@ import {
   refreshAnchorScanProgress,
   sanitizeAnchorScanProgress,
   shouldReadNextAnchorHolePage,
+  isStalledOnTie,
+  tieDrainLimits,
+  ANCHOR_HOLE_SCAN_MAX_TIE_PAGES,
   ANCHOR_SCAN_RECHECK_DAYS,
   type AnchorHolePageEntry,
   type AnchorHoleScanLimits,
@@ -312,7 +315,8 @@ describe('nextAnchorScanProgress', () => {
     assert.equal(next.completedAt, previous.completedAt);
   });
 
-  it('claims nothing new when a cut-short pass read nothing at all', () => {    const previous: AnchorScanProgress = {
+  it('claims nothing new when a cut-short pass read nothing at all', () => {
+    const previous: AnchorScanProgress = {
       from: '2024-01-01T00:00:00.000Z',
       to: '2026-08-01T00:00:00.000Z',
       complete: false,
@@ -327,76 +331,75 @@ describe('nextAnchorScanProgress', () => {
     );
     assert.deepEqual(next, previous);
   });
+});
 
-  it('steps past a wall of events sharing one instant rather than stalling', () => {
-    // Nothing worth collecting came back and the slice still did not reach
-    // past where the last one stopped, so every pass would read the same
-    // prefix of that group forever and the backlog would never move.
-    const previous: AnchorScanProgress = {
-      from: '2024-01-01T00:00:00.000Z',
-      to: CUTOFF,
-      complete: false,
-      completedAt: null,
-    };
+describe('isStalledOnTie', () => {
+  const backlog = { from: null, to: '2024-01-01T00:00:00.001Z' };
+  const resumeFrom: AnchorScanProgress = {
+    from: '2024-01-01T00:00:00.000Z',
+    to: CUTOFF,
+    complete: false,
+    completedAt: null,
+  };
+
+  it('spots a backlog that read nothing older than where it resumed', () => {
+    // Every event in the way ends at the same instant, so the next pass would
+    // read the same prefix of them again and never get past it.
     const state = accumulateAnchorHolePage(
       initialAnchorHoleScanState,
       ends('2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z'),
       LIMITS,
     );
-    const next = nextAnchorScanProgress(
-      previous,
-      CUTOFF,
-      state,
-      { freshTruncated: false, backlogTruncated: true, backlogExhausted: false },
-      NOW,
-    );
-    assert.equal(next.from, '2023-12-31T23:59:59.999Z');
-  });
-
-  it('waits rather than stepping past while the group still yields work', () => {
-    // Those candidates are swept forward and leave the group, so the next
-    // pass gets further into it; stepping past now would abandon the rest.
-    const previous: AnchorScanProgress = {
-      from: '2024-01-01T00:00:00.000Z',
-      to: CUTOFF,
-      complete: false,
-      completedAt: null,
-    };
-    const state = accumulateAnchorHolePage(
-      initialAnchorHoleScanState,
-      [{ item: item('a'), end: '2024-01-01T00:00:00.000Z' }],
-      LIMITS,
-    );
-    const next = nextAnchorScanProgress(
-      previous,
-      CUTOFF,
-      state,
-      { freshTruncated: false, backlogTruncated: true, backlogExhausted: false },
-      NOW,
-    );
-    assert.equal(next.from, previous.from);
+    assert.equal(isStalledOnTie(resumeFrom, backlog, state), true);
   });
 
   it('leaves a backlog that is making headway alone', () => {
-    const previous: AnchorScanProgress = {
-      from: '2024-01-01T00:00:00.000Z',
-      to: CUTOFF,
-      complete: false,
-      completedAt: null,
-    };
     const state = accumulateAnchorHolePage(
       initialAnchorHoleScanState,
       ends('2023-06-01T00:00:00.000Z'),
       LIMITS,
     );
-    const next = nextAnchorScanProgress(
-      previous,
-      CUTOFF,
-      state,
-      { freshTruncated: false, backlogTruncated: true, backlogExhausted: false },
-      NOW,
+    assert.equal(isStalledOnTie(resumeFrom, backlog, state), false);
+  });
+
+  it('is not stalled while the budget is still filling with work', () => {
+    // These are collected and swept forward, so they leave the group and the
+    // next pass gets further into it on its own.
+    const state = accumulateAnchorHolePage(
+      initialAnchorHoleScanState,
+      [
+        { item: item('a'), end: '2024-01-01T00:00:00.000Z' },
+        { item: item('b'), end: '2024-01-01T00:00:00.000Z' },
+        { item: item('c'), end: '2024-01-01T00:00:00.000Z' },
+        { item: item('d'), end: '2024-01-01T00:00:00.000Z' },
+      ],
+      LIMITS,
     );
-    assert.equal(next.from, '2023-06-01T00:00:00.000Z');
+    assert.equal(state.capped, true);
+    assert.equal(isStalledOnTie(resumeFrom, backlog, state), false);
+  });
+
+  it('says nothing about the newly-drifted slice or a first pass', () => {
+    const state = accumulateAnchorHolePage(
+      initialAnchorHoleScanState,
+      ends('2024-01-01T00:00:00.000Z'),
+      LIMITS,
+    );
+    assert.equal(isStalledOnTie(resumeFrom, { from: CUTOFF, to: CUTOFF }, state), false);
+    assert.equal(isStalledOnTie(null, backlog, state), false);
+  });
+});
+
+describe('tieDrainLimits', () => {
+  it('buys enough pages to read through the wall', () => {
+    const drain = tieDrainLimits(LIMITS);
+    assert.equal(drain.maxPages, ANCHOR_HOLE_SCAN_MAX_TIE_PAGES);
+    assert.equal(drain.maxCandidates, LIMITS.maxCandidates);
+  });
+
+  it('never shrinks a budget already bigger', () => {
+    const generous = { maxCandidates: 1, maxPages: ANCHOR_HOLE_SCAN_MAX_TIE_PAGES + 10 };
+    assert.equal(tieDrainLimits(generous).maxPages, generous.maxPages);
   });
 });
 

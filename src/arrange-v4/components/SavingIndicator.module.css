@@ -58,6 +58,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .spinner {
-    animation-duration: 2.4s;
+    /* Still a dot, just no longer a moving one: the label beside it already
+       says what is happening, so nothing is lost by holding it still. */
+    animation: none;
   }
 }

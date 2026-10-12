@@ -39,6 +39,14 @@ export const ANCHOR_HOLE_SCAN_MAX_CANDIDATES = 200;
 export const ANCHOR_HOLE_SCAN_MAX_PAGES = 5;
 
 /**
+ * The page budget allowed when the backlog is stuck on a single `end` instant
+ * held by more events than an ordinary pass can read. Large, because it is
+ * spent only in that one unusual case and the only alternative is to leave
+ * part of that instant unread forever.
+ */
+export const ANCHOR_HOLE_SCAN_MAX_TIE_PAGES = 50;
+
+/**
  * How long a fully-scanned book is trusted before its backlog is read again.
  *
  * Reaching the end of the history is not forever: the user can drag an event
@@ -262,8 +270,6 @@ export interface AnchorHoleScanOutcome {
    * becomes backlog again rather than staying covered.
    */
   freshTruncated: boolean;
-  /** True when a backlog slice was cut short before the history ran out. */
-  backlogTruncated?: boolean;
   /** True when a backlog slice ran to the start of the calendar's history. */
   backlogExhausted: boolean;
 }
@@ -296,7 +302,7 @@ export function nextAnchorScanProgress(
 
   const complete = Boolean(previous?.complete) || outcome.backlogExhausted;
   return {
-    from: resumePoint(previous, state, outcome),
+    from: oldestInstant(previous?.from ?? null, state.oldestEndRead),
     to: cutoff,
     complete,
     completedAt: complete ? previous?.completedAt ?? now.toISOString() : null,
@@ -304,28 +310,33 @@ export function nextAnchorScanProgress(
 }
 
 /**
- * How far back the next pass should resume from.
+ * Whether the backlog has stopped moving because of a wall of events sharing
+ * one `end` instant.
  *
- * Normally that is simply the oldest end read, which only ever moves deeper.
- * The exception is a backlog slice that was cut short without reading past
- * where the last one stopped: every event in the way shares a single end
- * instant, and reading the same prefix of them again would stall the scan for
- * good. When none of them was worth collecting — so sweeping will never thin
- * the group out — the resume point steps below that instant instead, giving
- * up any further event sharing it in exchange for the backlog moving at all.
+ * The backlog resumes at the oldest instant already read, inclusively, so an
+ * instant held by more events than one pass can read would otherwise be the
+ * end of the line: every later pass reads the same prefix of them and never
+ * reaches what lies below.
  */
-function resumePoint(
-  previous: AnchorScanProgress | null,
+export function isStalledOnTie(
+  resumeFrom: AnchorScanProgress | null,
+  slice: AnchorHoleSlice,
   state: AnchorHoleScanState,
-  outcome: AnchorHoleScanOutcome,
-): string | null {
-  const deepest = oldestInstant(previous?.from ?? null, state.oldestEndRead);
-  if (!outcome.backlogTruncated || !previous?.from || !deepest) return deepest;
+): boolean {
+  if (slice.from !== null || !resumeFrom?.from || !state.oldestEndRead) return false;
+  // Nothing is stuck while the budget is still filling with work to do.
+  if (state.capped) return false;
+  return new Date(state.oldestEndRead).getTime() >= new Date(resumeFrom.from).getTime();
+}
 
-  const stalled = new Date(deepest).getTime() >= new Date(previous.from).getTime();
-  if (!stalled || state.candidates.length > 0) return deepest;
-
-  return new Date(new Date(deepest).getTime() - 1).toISOString();
+/**
+ * The budget for reading through such a wall. It is deliberately generous:
+ * the alternative — stepping past the instant — would leave events on it
+ * unread for good, and an item hidden forever is the one thing this scan
+ * exists to prevent.
+ */
+export function tieDrainLimits(limits: AnchorHoleScanLimits): AnchorHoleScanLimits {
+  return { ...limits, maxPages: Math.max(limits.maxPages, ANCHOR_HOLE_SCAN_MAX_TIE_PAGES) };
 }
 
 /** Rejects anything read back from storage that is not usable progress. */
