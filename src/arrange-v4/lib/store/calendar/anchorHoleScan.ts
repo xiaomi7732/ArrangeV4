@@ -39,14 +39,6 @@ export const ANCHOR_HOLE_SCAN_MAX_CANDIDATES = 200;
 export const ANCHOR_HOLE_SCAN_MAX_PAGES = 5;
 
 /**
- * The page budget allowed when the backlog is stuck on a single `end` instant
- * held by more events than an ordinary pass can read. Large, because it is
- * spent only in that one unusual case and the only alternative is to leave
- * part of that instant unread forever.
- */
-export const ANCHOR_HOLE_SCAN_MAX_TIE_PAGES = 50;
-
-/**
  * How long a fully-scanned book is trusted before its backlog is read again.
  *
  * Reaching the end of the history is not forever: the user can drag an event
@@ -84,10 +76,17 @@ export interface AnchorHoleSlice {
   to: string;
 }
 
-/** One row of a page: the item it parsed to, if any, and the event's end. */
+/** One row of a page: the item it parsed to, the event's end, and whether the
+ * event carried an Arrange payload at all. */
 export interface AnchorHolePageEntry {
   item: TodoItemWithId | null;
   end: string | null | undefined;
+  /**
+   * Whether the event is one of ours. Taken from the body rather than from a
+   * parsed field, because a partial payload is valid: a task saved with no
+   * explicit status reads back as `new` everywhere else, and must here too.
+   */
+  hasArrangePayload: boolean;
 }
 
 export interface AnchorHoleScanState {
@@ -119,17 +118,22 @@ export const initialAnchorHoleScanState: AnchorHoleScanState = {
  * An event carrying no Arrange data at all is skipped too. The scan reaches
  * the whole of a calendar's history, where such an event is far more likely to
  * be something the user put in the calendar themselves than a task of ours,
- * and sweeping would move it and write a task body into it.
+ * and sweeping would move it and write a task body into it. That is decided
+ * by whether the body held a payload, not by whether a status came out of it:
+ * a partial payload is still ours, and reads back as `new`.
  *
  * The test matches what the sweep itself will act on, down to the dates being
  * usable: an item the sweep would pass over must not spend the budget an item
  * it would repair is waiting for.
  */
-export function isAnchorHoleCandidate(item: TodoItemWithId): boolean {
+export function isAnchorHoleCandidate(
+  item: TodoItemWithId,
+  hasArrangePayload: boolean,
+): boolean {
   return (
     Boolean(item.id) &&
     !item.dataUnreadable &&
-    Boolean(item.status) &&
+    hasArrangePayload &&
     isNonTerminalStatus(item.status) &&
     computeWindowAnchor(item.etsDateTime, item.etaDateTime) !== null
   );
@@ -172,7 +176,7 @@ export function accumulateAnchorHolePage(
     }
     oldestEndRead = oldestInstant(oldestEndRead, entry.end);
     const item = entry.item;
-    if (!item || !isAnchorHoleCandidate(item) || seen.has(item.id)) continue;
+    if (!item || !isAnchorHoleCandidate(item, entry.hasArrangePayload) || seen.has(item.id)) continue;
     seen.add(item.id);
     candidates.push(item);
   }
@@ -256,10 +260,12 @@ export function anchorHoleScanSlices(
 export function anchorHoleFilter(slice: AnchorHoleSlice): string {
   // `le`, not `lt`: the window query is a calendarView starting at this same
   // instant and returns only events that extend past it, so an event ending
-  // exactly on the boundary belongs to neither side under `lt`.
-  const upper = `end/dateTime le '${toGraphFilterDateTime(slice.to)}'`;
+  // exactly on the boundary belongs to neither side under `lt`. Both bounds
+  // round outwards for the same reason — a slightly wider query costs a few
+  // rows, a slightly narrower one loses events for good.
+  const upper = `end/dateTime le '${toGraphFilterDateTime(slice.to, 'up')}'`;
   if (!slice.from) return upper;
-  return `${upper} and end/dateTime ge '${toGraphFilterDateTime(slice.from)}'`;
+  return `${upper} and end/dateTime ge '${toGraphFilterDateTime(slice.from, 'down')}'`;
 }
 
 /** How a pass ended, which decides what it may claim to have read. */
@@ -330,13 +336,16 @@ export function isStalledOnTie(
 }
 
 /**
- * The budget for reading through such a wall. It is deliberately generous:
- * the alternative — stepping past the instant — would leave events on it
- * unread for good, and an item hidden forever is the one thing this scan
- * exists to prevent.
+ * The budget for reading through such a wall: no page limit at all.
+ *
+ * It is bounded in practice by how many events share one exact instant, and
+ * the cost is paid once — the next pass resumes below the whole run. Any
+ * finite cap would simply move the stall rather than remove it: a run longer
+ * than the cap would be re-read from the top every pass, and the history
+ * below it would never be reached.
  */
 export function tieDrainLimits(limits: AnchorHoleScanLimits): AnchorHoleScanLimits {
-  return { ...limits, maxPages: Math.max(limits.maxPages, ANCHOR_HOLE_SCAN_MAX_TIE_PAGES) };
+  return { ...limits, maxPages: Number.POSITIVE_INFINITY };
 }
 
 /** Rejects anything read back from storage that is not usable progress. */

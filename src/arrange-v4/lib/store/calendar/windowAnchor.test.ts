@@ -144,4 +144,10 @@ describe('toGraphFilterDateTime', () => {
   it('refuses a date it cannot read rather than filtering on nonsense', () => {
     assert.throws(() => toGraphFilterDateTime('nonsense'), /Invalid date/);
   });
+
+  it('rounds outwards, so a bound never falls short of what it meant', () => {
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.500Z', 'up'), '2026-09-08T00:00:01');
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.500Z', 'down'), '2026-09-08T00:00:00');
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.000Z', 'up'), '2026-09-08T00:00:00');
+  });
 });

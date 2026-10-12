@@ -40,6 +40,7 @@ import {
 import {
   parseArrangeBody,
   serializeArrangeBody,
+  ARRANGE_DATA_START_MARKER,
   type ArrangePayloadResult,
 } from './body';
 import { TokenAcquisitionCoordinator } from '../tokenAcquisition';
@@ -641,8 +642,20 @@ function foldAnchorHolePage(
   const entries = (response.value || []).map(event => ({
     item: eventToTodoItem(event),
     end: convertGraphDateTimeToISO(event.end),
+    hasArrangePayload: hasArrangePayload(event),
   }));
   return accumulateAnchorHolePage(state, entries, limits);
+}
+
+/**
+ * Whether an event is one of ours, judged on the body alone. A payload with
+ * no explicit status is still a task — it reads back as `new` — so the parsed
+ * fields cannot answer this.
+ */
+function hasArrangePayload(event: CalendarEvent): boolean {
+  const content = event.body?.content;
+  if (!content) return false;
+  return stripHtmlTags(content).includes(ARRANGE_DATA_START_MARKER);
 }
 
 function unwrap(bookId: string): string {

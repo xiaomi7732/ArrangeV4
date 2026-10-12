@@ -13,7 +13,6 @@ import {
   shouldReadNextAnchorHolePage,
   isStalledOnTie,
   tieDrainLimits,
-  ANCHOR_HOLE_SCAN_MAX_TIE_PAGES,
   ANCHOR_SCAN_RECHECK_DAYS,
   type AnchorHolePageEntry,
   type AnchorHoleScanLimits,
@@ -41,40 +40,57 @@ function item(
 }
 
 function rows(...items: TodoItemWithId[]): AnchorHolePageEntry[] {
-  return items.map(value => ({ item: value, end: null }));
+  return items.map(value => ({ item: value, end: null, hasArrangePayload: true }));
 }
 
 function ends(...values: (string | null)[]): AnchorHolePageEntry[] {
-  return values.map(end => ({ item: null, end }));
+  return values.map(end => ({ item: null, end, hasArrangePayload: false }));
+}
+
+/** The common case: an event of ours, with its payload intact. */
+function candidate(value: TodoItemWithId): boolean {
+  return isAnchorHoleCandidate(value, true);
 }
 
 describe('isAnchorHoleCandidate', () => {
   it('collects a drifted open item', () => {
-    assert.equal(isAnchorHoleCandidate(item('a', 'inProgress')), true);
+    assert.equal(candidate(item('a', 'inProgress')), true);
   });
 
   it('skips terminal items, which are never anchored', () => {
-    assert.equal(isAnchorHoleCandidate(item('a', 'finished')), false);
-    assert.equal(isAnchorHoleCandidate(item('a', 'cancelled')), false);
+    assert.equal(candidate(item('a', 'finished')), false);
+    assert.equal(candidate(item('a', 'cancelled')), false);
   });
 
   it('skips an unreadable item, whose write would be refused anyway', () => {
-    assert.equal(isAnchorHoleCandidate(item('a', 'new', { dataUnreadable: true })), false);
+    assert.equal(candidate(item('a', 'new', { dataUnreadable: true })), false);
   });
 
   it('skips an event carrying no Arrange data at all', () => {
     // Deep in a calendar's history these are far more likely to be the user's
     // own appointments than tasks of ours, and sweeping would rewrite them.
-    const noPayload = { id: 'a', subject: 'a' } as TodoItemWithId;
-    assert.equal(isAnchorHoleCandidate(noPayload), false);
+    assert.equal(isAnchorHoleCandidate(item('a'), false), false);
+  });
+
+  it('still collects one of ours whose payload names no status', () => {
+    // A partial payload is valid and reads back as `new` everywhere else, so
+    // judging by the body rather than the parsed status is what keeps such a
+    // task from being passed over here for good.
+    const noStatus = {
+      id: 'a',
+      subject: 'a',
+      etsDateTime: '2025-01-01T09:00:00.000Z',
+      etaDateTime: '2025-01-01T10:00:00.000Z',
+    } as TodoItemWithId;
+    assert.equal(isAnchorHoleCandidate(noStatus, true), true);
   });
 
   it('skips an item the sweep could not re-anchor anyway', () => {
     // Without usable dates the sweep passes it over, so letting it take a
     // place in the budget would starve an item that can actually be repaired.
-    assert.equal(isAnchorHoleCandidate(item('a', 'new', { etaDateTime: undefined })), false);
+    assert.equal(candidate(item('a', 'new', { etaDateTime: undefined })), false);
     assert.equal(
-      isAnchorHoleCandidate(item('a', 'new', { etaDateTime: '2025-01-01T09:00:00.000Z' })),
+      candidate(item('a', 'new', { etaDateTime: '2025-01-01T09:00:00.000Z' })),
       false,
     );
   });
@@ -111,10 +127,10 @@ describe('accumulateAnchorHolePage', () => {
     // Resuming from the bottom of the page would put 'd' below the resume
     // point and lose it for good, which is exactly the hole being closed.
     const page: AnchorHolePageEntry[] = [
-      { item: item('a'), end: '2026-03-04T00:00:00.000Z' },
-      { item: item('b'), end: '2026-03-03T00:00:00.000Z' },
-      { item: item('c'), end: '2026-03-02T00:00:00.000Z' },
-      { item: item('d'), end: '2026-03-01T00:00:00.000Z' },
+      { item: item('a'), end: '2026-03-04T00:00:00.000Z', hasArrangePayload: true },
+      { item: item('b'), end: '2026-03-03T00:00:00.000Z', hasArrangePayload: true },
+      { item: item('c'), end: '2026-03-02T00:00:00.000Z', hasArrangePayload: true },
+      { item: item('d'), end: '2026-03-01T00:00:00.000Z', hasArrangePayload: true },
     ];
     const state = accumulateAnchorHolePage(initialAnchorHoleScanState, page, LIMITS);
     assert.equal(state.oldestEndRead, '2026-03-02T00:00:00.000Z');
@@ -254,6 +270,16 @@ describe('anchorHoleFilter', () => {
       "end/dateTime le '2026-09-08T00:00:00' and end/dateTime ge '2026-09-01T00:00:00'",
     );
   });
+
+  it('widens rather than narrows when the bounds carry milliseconds', () => {
+    // The resumed upper bound is deliberately one millisecond past the oldest
+    // end already read; a literal rounded down would fall short of it and
+    // skip that event for good.
+    assert.equal(
+      anchorHoleFilter({ from: '2026-09-01T00:00:00.500Z', to: '2026-09-08T00:00:00.001Z' }),
+      "end/dateTime le '2026-09-08T00:00:01' and end/dateTime ge '2026-09-01T00:00:00'",
+    );
+  });
 });
 
 describe('nextAnchorScanProgress', () => {
@@ -368,10 +394,10 @@ describe('isStalledOnTie', () => {
     const state = accumulateAnchorHolePage(
       initialAnchorHoleScanState,
       [
-        { item: item('a'), end: '2024-01-01T00:00:00.000Z' },
-        { item: item('b'), end: '2024-01-01T00:00:00.000Z' },
-        { item: item('c'), end: '2024-01-01T00:00:00.000Z' },
-        { item: item('d'), end: '2024-01-01T00:00:00.000Z' },
+        { item: item('a'), end: '2024-01-01T00:00:00.000Z', hasArrangePayload: true },
+        { item: item('b'), end: '2024-01-01T00:00:00.000Z', hasArrangePayload: true },
+        { item: item('c'), end: '2024-01-01T00:00:00.000Z', hasArrangePayload: true },
+        { item: item('d'), end: '2024-01-01T00:00:00.000Z', hasArrangePayload: true },
       ],
       LIMITS,
     );
@@ -391,15 +417,20 @@ describe('isStalledOnTie', () => {
 });
 
 describe('tieDrainLimits', () => {
-  it('buys enough pages to read through the wall', () => {
+  it('lifts the page limit so the wall can be read right through', () => {
     const drain = tieDrainLimits(LIMITS);
-    assert.equal(drain.maxPages, ANCHOR_HOLE_SCAN_MAX_TIE_PAGES);
+    assert.equal(drain.maxPages, Number.POSITIVE_INFINITY);
     assert.equal(drain.maxCandidates, LIMITS.maxCandidates);
   });
 
-  it('never shrinks a budget already bigger', () => {
-    const generous = { maxCandidates: 1, maxPages: ANCHOR_HOLE_SCAN_MAX_TIE_PAGES + 10 };
-    assert.equal(tieDrainLimits(generous).maxPages, generous.maxPages);
+  it('still stops on the candidate budget, which is what bounds the pass', () => {
+    const drain = tieDrainLimits(LIMITS);
+    const state = accumulateAnchorHolePage(
+      initialAnchorHoleScanState,
+      rows(item('a'), item('b'), item('c')),
+      drain,
+    );
+    assert.equal(shouldReadNextAnchorHolePage(state, true, drain), false);
   });
 });
 
