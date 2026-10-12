@@ -15,8 +15,26 @@ import type {
 import { isNonTerminalStatus } from '../types';
 import type { Calendar, CalendarEvent } from './types';
 import { ARRANGE_SUFFIX, ARRANGE_SUFFIX_REGEX, calendarToBook, convertGraphDateTimeToISO, filterArrangeCalendars, getCalendarDisplayName } from './utils';
-import { computeWindowAnchor, isWindowAnchorStale, anchorZoneRanges } from './windowAnchor';
+import {
+  computeWindowAnchor,
+  isWindowAnchorStale,
+  anchorZoneRanges,
+} from './windowAnchor';
 import { resolveIncomingDates, resolveItemDates, resolveStoredDates } from './itemDates';
+import {
+  accumulateAnchorHolePage,
+  anchorHoleFilter,
+  anchorHoleScanSlices,
+  initialAnchorHoleScanState,
+  nextAnchorScanProgress,
+  refreshAnchorScanProgress,
+  shouldReadNextAnchorHolePage,
+  DEFAULT_ANCHOR_HOLE_SCAN_LIMITS,
+  type AnchorHoleScanLimits,
+  type AnchorHoleScanResult,
+  type AnchorHoleScanState,
+  type AnchorScanProgress,
+} from './anchorHoleScan';
 import {
   parseArrangeBody,
   serializeArrangeBody,
@@ -449,6 +467,84 @@ export class CalendarStore implements TodoStore {
   /* ---- Calendar-specific: not on the TodoStore interface ---- */
 
   /**
+   * Items whose event has drifted out of reach of every window the views ask
+   * for, newest first.
+   *
+   * Sweeping repairs stale anchors, but it only ever saw what the boards
+   * fetched, so an item left untouched for over a month fell through: too old
+   * for the window, and therefore never rolled forward out of it. This goes
+   * looking for exactly those, and only those, with a server-side filter — the
+   * alternative, enumerating the whole calendar, re-reads every finished task
+   * a book has ever held.
+   *
+   * Only sweepable items come back, and the pass is budgeted by how many of
+   * those it finds rather than by how much history it reads: old finished
+   * tasks dominate that history and never change, so charging them to the
+   * budget would spend every pass on the same prefix. Pass the `progress` of
+   * the previous pass to carry on where it stopped, and keep the `progress`
+   * returned for the next one.
+   */
+  async listItemsAnchoredBefore(
+    bookId: string,
+    beforeDateTime: string,
+    progress: AnchorScanProgress | null = null,
+    options?: StoreOperationOptions,
+    limits: AnchorHoleScanLimits = DEFAULT_ANCHOR_HOLE_SCAN_LIMITS,
+  ): Promise<AnchorHoleScanResult> {
+    const calendarId = unwrap(bookId);
+    const client = await this.client(options);
+
+    const resumeFrom = refreshAnchorScanProgress(progress);
+    const slices = anchorHoleScanSlices(beforeDateTime, resumeFrom);
+    let state = initialAnchorHoleScanState;
+    let backlogExhausted = false;
+    let backlogTruncated = false;
+    let freshTruncated = false;
+    let truncated = false;
+
+    for (const slice of slices) {
+      // The backlog slice is always the last one, so whether it ran out is
+      // what decides the book is finally fully read.
+      const isBacklog = slice.from === null;
+      let response = await client
+        .api(`/me/calendars/${calendarId}/events`)
+        .filter(anchorHoleFilter(slice))
+        .orderby('end/dateTime desc')
+        .top(100)
+        .select('id,webLink,createdDateTime,lastModifiedDateTime,categories,subject,body,start,end')
+        .get();
+      state = foldAnchorHolePage(state, response, limits);
+
+      while (shouldReadNextAnchorHolePage(state, Boolean(response['@odata.nextLink']), limits)) {
+        response = await client.api(response['@odata.nextLink']).get();
+        state = foldAnchorHolePage(state, response, limits);
+      }
+
+      // A pass that stops short — out of pages, or out of candidate budget
+      // mid-page — has not read all of this slice, and the next one must not
+      // assume it did.
+      const cutShort = Boolean(response['@odata.nextLink']) || state.capped;
+      if (cutShort) {
+        truncated = true;
+        if (isBacklog) backlogTruncated = true;
+        else freshTruncated = true;
+        break;
+      }
+      if (isBacklog) backlogExhausted = true;
+    }
+
+    return {
+      items: state.candidates,
+      truncated,
+      progress: nextAnchorScanProgress(resumeFrom, beforeDateTime, state, {
+        freshTruncated,
+        backlogTruncated,
+        backlogExhausted,
+      }),
+    };
+  }
+
+  /**
    * Rolls the event anchor of stale non-terminal items forward to today so
    * they keep coming back from the ±30-day calendarView window. Returns the
    * IDs of the items whose anchor was moved. The items' ETS/ETA are not
@@ -517,6 +613,25 @@ export class CalendarStore implements TodoStore {
 }
 
 /* ---- Helpers ---- */
+
+/**
+ * Folds one page of the hole scan in, keeping both the items worth sweeping
+ * and how far back the page reached. Each row carries its own event end, so a
+ * page cut short by the candidate budget still reports honestly how far it
+ * read — an event that is not an Arrange task counts as history read, but a
+ * row that was never looked at does not.
+ */
+function foldAnchorHolePage(
+  state: AnchorHoleScanState,
+  response: { value?: CalendarEvent[] },
+  limits: AnchorHoleScanLimits,
+): AnchorHoleScanState {
+  const entries = (response.value || []).map(event => ({
+    item: eventToTodoItem(event),
+    end: convertGraphDateTimeToISO(event.end),
+  }));
+  return accumulateAnchorHolePage(state, entries, limits);
+}
 
 function unwrap(bookId: string): string {
   // Strip the 'cal:' prefix; tolerate already-unprefixed inputs for backward compat.

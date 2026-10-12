@@ -44,6 +44,8 @@ import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import SavingIndicator from '@/components/SavingIndicator';
+import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
 import EmptyListMessage from '@/components/EmptyListMessage';
@@ -106,7 +108,12 @@ function ScrumPageContent() {
   const bookIdRef = useRef(bookId);
   const mutationVersionRef = useRef(0);
   const isSavingOrderRef = useRef(false);
-  const pendingMutationCountRef = useRef(0);
+  const {
+    countRef: pendingMutationCountRef,
+    saving,
+    begin: beginPendingMutation,
+    end: endPendingMutation,
+  } = usePendingMutations();
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
   // Set when a write failed and its optimistic change was rolled back: the view
@@ -343,14 +350,14 @@ function ScrumPageContent() {
         setLoading(false);
       }
     }
-  }, [isAuthenticated, store]);
+  }, [isAuthenticated, store, pendingMutationCountRef]);
 
   const beginMutation = () => {
-    pendingMutationCountRef.current += 1;
+    beginPendingMutation();
   };
 
   const finishMutation = () => {
-    pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+    endPendingMutation();
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
       pendingFetchRef.current = false;
@@ -477,6 +484,7 @@ function ScrumPageContent() {
       </button>
     ) : requiresAuthRecovery ? null : (
       <>
+        <SavingIndicator saving={saving} />
         <AddTodoItem
           onAddTodo={handleAddTodo}
           disabled={loading}
@@ -489,7 +497,7 @@ function ScrumPageContent() {
           disabled={loading || isSavingOrder}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {loading ? 'Loading...' : isSavingOrder ? 'Saving...' : 'Refresh'}
+          {loading ? 'Loading...' : 'Refresh'}
         </button>
       </>
     ),
@@ -499,6 +507,7 @@ function ScrumPageContent() {
       busy,
       loading,
       isSavingOrder,
+      saving,
       bookId,
       books,
       allCategories,

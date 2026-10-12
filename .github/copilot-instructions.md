@@ -85,6 +85,10 @@ Legacy items bumped by the old scheme are migrated on read via `originalEtsDateT
 
 Only backends that page through a window need this. `store.supportsWindowSweep` gates the Matrix sweep; the Sheets backend returns all non-terminal items and is never swept.
 
+An item left untouched for over a month used to fall through the sweep entirely: its anchor was too old for the window, so no read saw it and nothing rolled it forward. The sweep therefore also runs `CalendarStore.listItemsAnchoredBefore(bookId, windowStart, progress)` — a `$filter`ed `/events` query for exactly the events that end at or before the window's own start, newest first — and merges the result with the window read (deduped by id) before sweeping. Pass the *same* instant the window query starts at, so the two cover the timeline between them with no gap. The scan has its own `try`/`catch`: it is a bonus, and a backend that refuses it must not cost the book its ordinary sweep. Its progress is stored only after `sweepStaleItems` returns, since moving past items a failed sweep left behind would put them out of reach for good.
+
+`lib/store/calendar/anchorHoleScan.ts` holds the pure part, and its one invariant is that the stored progress names a single *contiguous* span really read: whenever a pass stops short, the claim is narrowed to what it reached rather than stretched over the gap. The pass is budgeted by *candidates* (terminal, unreadable, non-Arrange and un-anchorable rows cost nothing), because old finished tasks dominate that history and never change, so charging them would spend every pass on the same prefix and starve an open item behind it. How far back a book has been read is remembered in `localStorage` (`getAnchorScanProgress` / `setAnchorScanProgress`), so a later pass reads the days that have newly drifted plus a further slice of the backlog instead of starting from the top again. A book is only marked `complete` when a backlog slice runs out, and that completion expires after `ANCHOR_SCAN_RECHECK_DAYS` — an event can be dragged back into a stretch already read, so nothing is trusted as done forever.
+
 ### Authentication
 
 The active provider is held in `lib/auth/AuthContext.tsx`, persisted in `localStorage` under `arrange_auth_provider`, and published through `useSyncExternalStore` so provider switches propagate without a reload. Google is only offered when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set and `NEXT_PUBLIC_ENABLE_GOOGLE_PROVIDER !== 'false'`; otherwise the app is Microsoft-only.
@@ -107,6 +111,8 @@ Every dialog that holds edits (`AddTodoItem`, `ViewTodoItem` in edit mode, `Crea
 
 User actions immediately update local state, then sync to the backend in the background. On failure, state rolls back to a snapshot captured *before* the optimistic update, using `snapshotItems()` / `restoreSnapshot()` from `lib/optimisticUpdate.ts`. `restoreSnapshot` never resurrects a removed item and returns the original array when nothing changed, keeping state identity stable. This pattern covers drag-and-drop quadrant changes, status updates, field edits, and checklist toggles.
 
+Because the UI runs ahead of the backend, every view that writes also counts its in-flight writes through `lib/hooks/usePendingMutations.ts` and shows the shared `SavingIndicator` in the top bar once they have been outstanding for `SAVING_VISIBLE_AFTER_MS` (a fast save must not flash a spinner). The hook's `countRef` is the same synchronous count those pages already read when deciding whether to defer a refetch, so there is one source of truth. The indicator never blocks: it reports the queue, it does not gate it, and no view should grow a second "saving" affordance beside it.
+
 ## Key modules (src/arrange-v4/lib/)
 
 | Path | Responsibility |
@@ -118,6 +124,7 @@ User actions immediately update local state, then sync to the backend in the bac
 | `store/calendar/body.ts` | Encode/decode the marker-delimited JSON payload in an event body |
 | `store/calendar/windowAnchor.ts` | Rolls a stale window anchor forward; planned dates are never touched |
 | `store/calendar/itemDates.ts` | Resolves stored/legacy/event dates and the anchor patch to write |
+| `store/calendar/anchorHoleScan.ts` | Budgets and resumes the scan for items whose anchor drifted out of every window |
 | `store/sheets/GoogleSheetsStore.ts` | Drive/Sheets CRUD with the append-only mutation queue |
 | `store/sheets/schema.ts` | `TODOs` column schema, row (de)serialization, operation-history resolution |
 | `store/tokenAcquisition.ts` | Deduplicating token coordinator honoring the silent-only policy |
@@ -141,8 +148,9 @@ User actions immediately update local state, then sync to the backend in the bac
 | `books/bookListCache.ts` | Module-level book list cache so the book switcher does not flash between views |
 | `dateUtils.ts` | Local-calendar-date comparisons for Today filters and relative day labels |
 | `checklist.ts` | Parse/format/toggle the stored `-[]` / `-[x]` checklist entries |
-| `bookStorage.ts` | `localStorage`/`sessionStorage` helpers for last-book-id and sweep state |
+| `bookStorage.ts` | `localStorage`/`sessionStorage` helpers for last-book-id, sweep state, and anchor-scan progress |
 | `hooks/useRefreshOnPageActivation.ts` | Refresh when a visible tab resumes or regains focus |
+| `hooks/usePendingMutations.ts` | Counts in-flight writes and decides when to say "Saving…" |
 
 ### Views
 

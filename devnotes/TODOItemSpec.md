@@ -88,7 +88,8 @@ event's `start`/`end` is treated as a **window anchor** rather than as the task'
   of its `originalEtsDateTime`/`originalEtaDateTime` is taken as such a reschedule instead.
 * When an item's anchor is stale, it is rolled forward to today (preserving UTC time-of-day and
   duration) so the event stays inside the fetch window. This happens on edit and in the sweep that
-  runs after a fetch.
+  runs after a fetch. The sweep also looks specifically for items whose anchor has already fallen
+  past the far edge of the window, which no ordinary read can return.
 * Items whose planned dates are current are anchored at those dates, so a normal item's event
   matches its plan exactly.
 

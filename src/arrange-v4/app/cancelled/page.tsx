@@ -15,6 +15,8 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import SavingIndicator from '@/components/SavingIndicator';
+import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
 import ViewTodoItem from '@/components/ViewTodoItem';
@@ -72,7 +74,12 @@ function CancelledPageContent() {
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const bookIdRef = useRef(bookId);
   const fetchSequenceRef = useRef(0);
-  const pendingMoveCountRef = useRef(0);
+  const {
+    countRef: pendingMoveCountRef,
+    saving,
+    begin: beginPendingMutation,
+    end: endPendingMutation,
+  } = usePendingMutations();
   // A move settles after the read it retired, so it replays one through a ref
   // rather than depending on a callback declared further down.
   const fetchEventsRef = useRef<((options?: FetchEventsOptions) => Promise<void>) | null>(null);
@@ -98,10 +105,10 @@ function CancelledPageContent() {
     // both reconciles the list and takes the page out of its loading state.
     beginMutation: () => {
       fetchSequenceRef.current += 1;
-      pendingMoveCountRef.current += 1;
+      beginPendingMutation();
     },
     finishMutation: () => {
-      pendingMoveCountRef.current = Math.max(0, pendingMoveCountRef.current - 1);
+      endPendingMutation();
       if (pendingMoveCountRef.current > 0) return;
       // A read may also have started mid-move and seen the row before the
       // delete landed, so reads are retired at both ends of the move.
@@ -333,6 +340,7 @@ function CancelledPageContent() {
       </button>
     ) : requiresAuthRecovery ? null : (
       <>
+        <SavingIndicator saving={saving} />
         <button
           onClick={handleDeleteSelected}
           disabled={loading || deletableIds.length === 0 || deleting}
@@ -354,6 +362,7 @@ function CancelledPageContent() {
       requiresAuthRecovery,
       busy,
       loading,
+      saving,
       deleting,
       bookId,
       books,

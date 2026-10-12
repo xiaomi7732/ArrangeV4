@@ -137,6 +137,19 @@ export function anchorZoneRanges(
  */
 export const INSTANT_TOLERANCE_MS = 60_000;
 
+/**
+ * An instant in the spelling Graph's `$filter` accepts on `start`/`end`.
+ *
+ * Those are `dateTimeTimeZone` values, not instants, so a filter literal
+ * carries no zone designator; it is read in UTC unless a `Prefer` header says
+ * otherwise, which Arrange never sends.
+ */
+export function toGraphFilterDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) throw new Error(`Invalid date for Graph filter: ${iso}`);
+  return date.toISOString().replace(/\.\d+Z$/, '');
+}
+
 /** True when two instants are the same, tolerating different ISO spellings. */
 export function isSameInstant(
   a: string | null | undefined,
