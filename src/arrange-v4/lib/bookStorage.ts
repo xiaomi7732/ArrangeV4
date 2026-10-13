@@ -1,9 +1,18 @@
 import { parseBookId, type BackendKind } from '@/lib/store/types';
+import {
+  sanitizeAnchorScanProgress,
+  type AnchorScanProgress,
+} from '@/lib/store/calendar/anchorHoleScan';
 
 const LAST_BOOK_ID_KEY = 'arrange_lastBookId';
 const SESSION_SWEEP_KEY = 'arrange_sweepDone';
 const SESSION_SWEEP_IN_PROGRESS_KEY = 'arrange_sweepInProgress';
+const ANCHOR_SCAN_KEY = 'arrange_anchorScan';
 const SWEEP_STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+
+function anchorScanKey(bookId: string): string {
+  return `${ANCHOR_SCAN_KEY}_${bookId}`;
+}
 
 function isLocalStorageAvailable(): boolean {
   try {
@@ -122,5 +131,33 @@ export function markSessionSweepDone(): void {
     sessionStorage.setItem(SESSION_SWEEP_KEY, 'true');
   } catch {
     // Silently ignore
+  }
+}
+
+/**
+ * How far the anchor-hole scan has read back through a book's history.
+ *
+ * Kept in `localStorage`, not `sessionStorage`: the point is that a long
+ * backlog is read a slice at a time across sessions instead of from the top
+ * every time. Losing it costs correctness nothing — the scan simply starts
+ * over from the newest history again.
+ */
+export function getAnchorScanProgress(bookId: string): AnchorScanProgress | null {
+  if (!isLocalStorageAvailable()) return null;
+  try {
+    const raw = localStorage.getItem(anchorScanKey(bookId));
+    if (!raw) return null;
+    return sanitizeAnchorScanProgress(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function setAnchorScanProgress(bookId: string, progress: AnchorScanProgress): void {
+  if (!isLocalStorageAvailable()) return;
+  try {
+    localStorage.setItem(anchorScanKey(bookId), JSON.stringify(progress));
+  } catch {
+    // Storage full or blocked — silently ignore
   }
 }

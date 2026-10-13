@@ -39,14 +39,16 @@ import { countCheckedEntries } from '@/lib/checklist';
 import { describeFailure } from '@/lib/failureMessage';
 import { bannerDerivesFrom, composeReconcileFailure } from '@/lib/reconcileMessage';
 import { statusTimestampUpdates } from '@/lib/statusTimestamps';
-import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone } from '@/lib/bookStorage';
+import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgress, clearSessionSweepInProgress, markSessionSweepDone, getAnchorScanProgress, setAnchorScanProgress } from '@/lib/bookStorage';
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
-import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
+import type { AnchorScanProgress } from '@/lib/store/calendar/anchorHoleScan';import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import SavingIndicator from '@/components/SavingIndicator';
+import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
 import EmptyListMessage from '@/components/EmptyListMessage';
@@ -277,7 +279,12 @@ function MatrixPageContent() {
   const sweepAttemptedRef = useRef(false);
   const mutationVersionRef = useRef(0);
   const isSavingOrderRef = useRef(false);
-  const pendingMutationCountRef = useRef(0);
+  const {
+    countRef: pendingMutationCountRef,
+    saving,
+    begin: beginPendingMutation,
+    end: endPendingMutation,
+  } = usePendingMutations();
   const pendingFetchRef = useRef(false);
   const pendingFetchPreserveErrorRef = useRef(false);
   // Set when a write failed and its optimistic change was rolled back: the view
@@ -548,9 +555,39 @@ function MatrixPageContent() {
                     toDate: endDate.toISOString(),
                     interaction: 'silent-only',
                   });
-                  await store.calendar.sweepStaleItems(book.id, calItems, {
+                  // The window cannot show an item whose event drifted out of
+                  // it, and those are precisely the ones most in need of
+                  // sweeping, so they are fetched separately and swept too.
+                  // Its own try/catch: this scan is a bonus, and a backend
+                  // that refuses it must not cost the book its ordinary sweep.
+                  const sweepItems = [...calItems];
+                  let scanned: { progress: AnchorScanProgress } | null = null;
+                  try {
+                    // The cutoff is the window's own start, so the two cover
+                    // the timeline between them with no gap either way.
+                    const drifted = await store.calendar.listItemsAnchoredBefore(
+                      book.id,
+                      startDate.toISOString(),
+                      getAnchorScanProgress(book.id),
+                      { interaction: 'silent-only' },
+                    );
+                    scanned = drifted;
+                    const seen = new Set(calItems.map(item => item.id));
+                    for (const item of drifted.items) {
+                      if (seen.has(item.id)) continue;
+                      seen.add(item.id);
+                      sweepItems.push(item);
+                    }
+                  } catch (scanError) {
+                    console.error(`Error scanning drifted items in book ${book.id}:`, scanError);
+                  }
+                  await store.calendar.sweepStaleItems(book.id, sweepItems, {
                     interaction: 'silent-only',
                   });
+                  // Only once the sweep has been through them: a failed sweep
+                  // leaves those items still in the hole, and moving the scan
+                  // past them would put them out of reach for good.
+                  if (scanned) setAnchorScanProgress(book.id, scanned.progress);
                 } catch (calError) {
                   hasFailure = true;
                   console.error(`Error sweeping book ${book.id}:`, calError);
@@ -624,11 +661,11 @@ function MatrixPageContent() {
   };
 
   const beginMutation = () => {
-    pendingMutationCountRef.current += 1;
+    beginPendingMutation();
   };
 
   const finishMutation = () => {
-    pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+    endPendingMutation();
     if (pendingMutationCountRef.current === 0 && pendingFetchRef.current) {
       const preserveError = pendingFetchPreserveErrorRef.current;
       pendingFetchRef.current = false;
@@ -1149,13 +1186,14 @@ function MatrixPageContent() {
       </button>
     ) : requiresAuthRecovery ? null : (
       <>
+        <SavingIndicator saving={saving} />
         <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
         <button
           onClick={() => void fetchEvents()}
           disabled={loading || isSavingOrder}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
-          {loading ? 'Loading...' : isSavingOrder ? 'Saving...' : 'Refresh'}
+          {loading ? 'Loading...' : 'Refresh'}
         </button>
       </>
     ),
@@ -1165,6 +1203,7 @@ function MatrixPageContent() {
       busy,
       loading,
       isSavingOrder,
+      saving,
       bookId,
       books,
       allCategories,

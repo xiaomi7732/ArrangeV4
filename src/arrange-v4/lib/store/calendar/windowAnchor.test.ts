@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeWindowAnchor, isWindowAnchorStale, isSameInstant, isNearlySameInstant, anchorZoneRanges } from './windowAnchor';
+import { computeWindowAnchor, isWindowAnchorStale, isSameInstant, isNearlySameInstant, anchorZoneRanges, toGraphFilterDateTime } from './windowAnchor';
 
 const NOW = new Date('2026-10-08T12:00:00.000Z');
 
@@ -129,5 +129,25 @@ describe('isNearlySameInstant', () => {
       isNearlySameInstant('2026-10-08T09:00:00.000Z', '2026-10-08T15:00:00.000Z'),
       false,
     );
+  });
+});
+
+describe('toGraphFilterDateTime', () => {
+  it('drops the zone designator Graph will not accept', () => {
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.000Z'), '2026-09-08T00:00:00');
+  });
+
+  it('normalizes an offset instant to UTC', () => {
+    assert.equal(toGraphFilterDateTime('2026-09-08T02:00:00.000+02:00'), '2026-09-08T00:00:00');
+  });
+
+  it('refuses a date it cannot read rather than filtering on nonsense', () => {
+    assert.throws(() => toGraphFilterDateTime('nonsense'), /Invalid date/);
+  });
+
+  it('rounds outwards, so a bound never falls short of what it meant', () => {
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.500Z', 'up'), '2026-09-08T00:00:01');
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.500Z', 'down'), '2026-09-08T00:00:00');
+    assert.equal(toGraphFilterDateTime('2026-09-08T00:00:00.000Z', 'up'), '2026-09-08T00:00:00');
   });
 });

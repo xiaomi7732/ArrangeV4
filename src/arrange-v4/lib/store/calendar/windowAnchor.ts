@@ -137,6 +137,30 @@ export function anchorZoneRanges(
  */
 export const INSTANT_TOLERANCE_MS = 60_000;
 
+/**
+ * An instant in the spelling Graph's `$filter` accepts on `start`/`end`.
+ *
+ * Those are `dateTimeTimeZone` values, not instants, so a filter literal
+ * carries no zone designator; it is read in UTC unless a `Prefer` header says
+ * otherwise, which Arrange never sends. Sub-second precision is dropped for
+ * the same reason — it is not dependably honoured — so the caller says which
+ * way to round, and every bound rounds *outwards*: a query that takes in a
+ * fraction of a second more than it meant to costs a few extra rows, while
+ * one that takes in less silently skips events.
+ */
+export function toGraphFilterDateTime(
+  iso: string,
+  rounding: 'up' | 'down' = 'down',
+): string {
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) throw new Error(`Invalid date for Graph filter: ${iso}`);
+  const second = 1000;
+  const rounded = rounding === 'up'
+    ? Math.ceil(date.getTime() / second) * second
+    : Math.floor(date.getTime() / second) * second;
+  return new Date(rounded).toISOString().replace(/\.\d+Z$/, '');
+}
+
 /** True when two instants are the same, tolerating different ISO spellings. */
 export function isSameInstant(
   a: string | null | undefined,

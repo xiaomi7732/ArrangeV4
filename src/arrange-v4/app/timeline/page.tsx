@@ -16,6 +16,8 @@ import { useBookId } from '@/lib/hooks/useBookId';
 import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
+import SavingIndicator from '@/components/SavingIndicator';
+import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
 import AuthRecoveryPanel from '@/components/AuthRecoveryPanel';
 import ErrorBanner from '@/components/ErrorBanner';
 import ViewTodoItem from '@/components/ViewTodoItem';
@@ -103,7 +105,12 @@ function TimelinePageContent() {
   // Counts local edits. A read that started before one must not commit: its
   // reply predates the edit and would put the old row back on screen.
   const mutationVersionRef = useRef(0);
-  const pendingMutationCountRef = useRef(0);
+  const {
+    countRef: pendingMutationCountRef,
+    saving,
+    begin: beginPendingMutation,
+    end: endPendingMutation,
+  } = usePendingMutations();
   // A read discarded for that reason is replayed once the writes settle,
   // otherwise the window would stay on whatever was loaded before.
   const pendingReplayRef = useRef<{ preserveError: boolean } | null>(null);
@@ -121,7 +128,7 @@ function TimelinePageContent() {
       preserveError: pending.preserveError,
       interaction: 'silent-only',
     });
-  }, []);
+  }, [pendingMutationCountRef]);
 
   bookIdRef.current = bookId;
 
@@ -132,10 +139,10 @@ function TimelinePageContent() {
     beginMutation: () => {
       // Reads already in flight hold a copy of the row this move removes.
       mutationVersionRef.current += 1;
-      pendingMutationCountRef.current += 1;
+      beginPendingMutation();
     },
     finishMutation: () => {
-      pendingMutationCountRef.current = Math.max(0, pendingMutationCountRef.current - 1);
+      endPendingMutation();
       // A read may also have started mid-move and seen the row before the
       // delete landed, so reads are retired at both ends of the move. This
       // runs unconditionally: another pending mutation's finalizer will not
@@ -377,7 +384,7 @@ function TimelinePageContent() {
     ));
     // Anything already in flight now holds a pre-edit copy of this row.
     mutationVersionRef.current += 1;
-    pendingMutationCountRef.current += 1;
+    beginPendingMutation();
 
     try {
       const updated = await store.updateItem(operationBookId, targetId, persistedFields);
@@ -397,7 +404,7 @@ function TimelinePageContent() {
       pendingReplayRef.current = { preserveError: true };
       throw err;
     } finally {
-      pendingMutationCountRef.current -= 1;
+      endPendingMutation();
       flushPendingReplay();
     }
   };
@@ -447,15 +454,18 @@ function TimelinePageContent() {
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
     ) : requiresAuthRecovery ? null : (
-      <button
-        onClick={() => void fetchEvents(timelineWindowRef.current)}
-        disabled={loading}
-        className={`${styles.button} ${styles.buttonSecondary}`}
-      >
-        {loading ? 'Loading...' : 'Refresh'}
-      </button>
+      <>
+        <SavingIndicator saving={saving} />
+        <button
+          onClick={() => void fetchEvents(timelineWindowRef.current)}
+          disabled={loading}
+          className={`${styles.button} ${styles.buttonSecondary}`}
+        >
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </>
     ),
-    [isAuthenticated, requiresAuthRecovery, busy, loading, bookId, books,
+    [isAuthenticated, requiresAuthRecovery, busy, loading, saving, bookId, books,
       handleBookSwitch, handleLogin, fetchEvents],
   );
 
