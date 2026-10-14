@@ -68,6 +68,8 @@
     "lib/store/moveItem.test.ts",
     "lib/modalOverlay.ts",
     "lib/modalOverlay.test.ts",
+    "lib/loadingPlaceholder.ts",
+    "lib/loadingPlaceholder.test.ts",
     "lib/store/sheets/schema.ts",
     "lib/store/sheets/schema.test.ts",
     "lib/store/sheets/GoogleSheetsStore.ts",
