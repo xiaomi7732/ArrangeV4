@@ -43,8 +43,11 @@ import { hasSessionSweepRun, isSessionSweepInProgress, markSessionSweepInProgres
 import { useAuthClient } from '@/lib/auth/useAuthClient';
 import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
-import type { AnchorScanProgress } from '@/lib/store/calendar/anchorHoleScan';import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
+import type { AnchorScanProgress } from '@/lib/store/calendar/anchorHoleScan';
+import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useModalPresence } from '@/components/ModalPresenceProvider';
+import { shouldShowLoadingPlaceholder } from '@/lib/loadingPlaceholder';
 import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import SavingIndicator from '@/components/SavingIndicator';
@@ -376,6 +379,13 @@ function MatrixPageContent() {
   // Merge book-level errors into the page error state
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
+  const { anyOpen: anyModalOpen } = useModalPresence();
+  // The recovery panel replaces the entire page, taking any dialog over it --
+  // and the half-written item inside -- down with it. A token that expired
+  // while the user was away can wait until they have finished typing.
+  const showAuthRecovery = requiresAuthRecovery && !anyModalOpen;
+  // The user cannot be left guessing why saving fails while the panel waits.
+  const showAuthRecoveryNotice = requiresAuthRecovery && anyModalOpen;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -1147,6 +1157,8 @@ function MatrixPageContent() {
     }
   }, [isAuthenticated, busy, bookId]);
 
+  const showLoadingPlaceholder = shouldShowLoadingPlaceholder({ loading, bookId, itemsBookId });
+
   useRefreshOnPageActivation(
     () => void fetchEvents({
       preserveError: true,
@@ -1158,11 +1170,12 @@ function MatrixPageContent() {
       !!bookId &&
       !loading &&
       !isSavingOrder,
+    { suspended: anyModalOpen },
   );
 
   // Push page actions into the shared top bar
   useSetTopBarActions(
-    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
+    isAuthenticated && !showAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -1184,10 +1197,10 @@ function MatrixPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : requiresAuthRecovery ? null : (
+    ) : showAuthRecovery ? null : (
       <>
         <SavingIndicator saving={saving} />
-        <AddTodoItem onAddTodo={handleAddTodo} disabled={loading} availableCategories={allCategories} />
+        <AddTodoItem onAddTodo={handleAddTodo} disabled={showLoadingPlaceholder} availableCategories={allCategories} />
         <button
           onClick={() => void fetchEvents()}
           disabled={loading || isSavingOrder}
@@ -1199,9 +1212,10 @@ function MatrixPageContent() {
     ),
     [
       isAuthenticated,
-      requiresAuthRecovery,
+      showAuthRecovery,
       busy,
       loading,
+      showLoadingPlaceholder,
       isSavingOrder,
       saving,
       bookId,
@@ -1223,7 +1237,7 @@ function MatrixPageContent() {
     );
   }
 
-  if (!isAuthenticated || requiresAuthRecovery) {
+  if (!isAuthenticated || showAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -1252,13 +1266,18 @@ function MatrixPageContent() {
           />
         )}
 
-        {loading && (
+        {showAuthRecoveryNotice && (
+          <div className={styles.warning} role="status">
+            Your sign-in expired. Finish or close this item to sign in again.
+          </div>
+        )}
+        {showLoadingPlaceholder && (
           <div className={styles.loading}>
             <div className={styles.spinner}></div>
           </div>
         )}
 
-        {!loading && (
+        {!showLoadingPlaceholder && (
             <div className={styles.matrixSection}>
               <TaskSearchBar
                 query={query}
@@ -1408,7 +1427,7 @@ function MatrixPageContent() {
                           <div className={styles.quadrantHeaderActions}>
                             <AddTodoItem
                               onAddTodo={handleAddTodo}
-                              disabled={loading}
+                              disabled={showLoadingPlaceholder}
                               defaultUrgent={q.urgent}
                               defaultImportant={q.important}
                               addLabel={`Add item to ${q.title}`}

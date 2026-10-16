@@ -15,6 +15,8 @@ import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useModalPresence } from '@/components/ModalPresenceProvider';
+import { shouldShowLoadingPlaceholder } from '@/lib/loadingPlaceholder';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import SavingIndicator from '@/components/SavingIndicator';
 import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
@@ -165,6 +167,13 @@ function TimelinePageContent() {
 
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
+  const { anyOpen: anyModalOpen } = useModalPresence();
+  // The recovery panel replaces the entire page, taking any dialog over it --
+  // and the half-written item inside -- down with it. A token that expired
+  // while the user was away can wait until they have finished typing.
+  const showAuthRecovery = requiresAuthRecovery && !anyModalOpen;
+  // The user cannot be left guessing why saving fails while the panel waits.
+  const showAuthRecoveryNotice = requiresAuthRecovery && anyModalOpen;
 
   // Search only: the chart has no room for tag or priority controls, so its
   // presets are kept in their own scope rather than silently stripping criteria
@@ -310,12 +319,15 @@ function TimelinePageContent() {
     return () => clearTimeout(timer);
   }, [isAuthenticated, busy, bookId, timelineWindow, loadedRange, fetchEvents]);
 
+  const showLoadingPlaceholder = shouldShowLoadingPlaceholder({ loading, bookId, itemsBookId });
+
   useRefreshOnPageActivation(
     () => void fetchEvents(timelineWindowRef.current, {
       preserveError: true,
       interaction: 'silent-only',
     }),
     isAuthenticated && !requiresAuthRecovery && !busy && !!bookId && !loading,
+    { suspended: anyModalOpen },
   );
 
   const handleLogin = useCallback(async () => {
@@ -433,7 +445,7 @@ function TimelinePageContent() {
   }, []);
 
   useSetTopBarActions(
-    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
+    isAuthenticated && !showAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -453,7 +465,7 @@ function TimelinePageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : requiresAuthRecovery ? null : (
+    ) : showAuthRecovery ? null : (
       <>
         <SavingIndicator saving={saving} />
         <button
@@ -465,7 +477,7 @@ function TimelinePageContent() {
         </button>
       </>
     ),
-    [isAuthenticated, requiresAuthRecovery, busy, loading, saving, bookId, books,
+    [isAuthenticated, showAuthRecovery, busy, loading, saving, bookId, books,
       handleBookSwitch, handleLogin, fetchEvents],
   );
 
@@ -481,7 +493,7 @@ function TimelinePageContent() {
     );
   }
 
-  if (!isAuthenticated || requiresAuthRecovery) {
+  if (!isAuthenticated || showAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -509,6 +521,11 @@ function TimelinePageContent() {
           />
         )}
 
+        {showAuthRecoveryNotice && (
+          <div className={styles.warning} role="status">
+            Your sign-in expired. Finish or close this item to sign in again.
+          </div>
+        )}
         <div className={styles.card}>
           <TaskSearchBar
             query={query}
@@ -578,7 +595,7 @@ function TimelinePageContent() {
             </div>
           </div>
 
-          {loading && itemsBookId !== bookId ? (
+          {showLoadingPlaceholder ? (
             <div className={styles.loading}><div className={styles.spinner}></div></div>
           ) : (
             <TimelineChart

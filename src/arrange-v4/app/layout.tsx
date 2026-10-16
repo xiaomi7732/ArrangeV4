@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { TopBarProvider } from "@/components/TopBarProvider";
+import { ModalPresenceProvider } from "@/components/ModalPresenceProvider";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const geistSans = Geist({
@@ -42,10 +43,12 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>
-          <TopBarProvider>
-            <HamburgerMenu />
-            {children}
-          </TopBarProvider>
+          <ModalPresenceProvider>
+            <TopBarProvider>
+              <HamburgerMenu />
+              {children}
+            </TopBarProvider>
+          </ModalPresenceProvider>
         </AuthProvider>
       </body>
     </html>

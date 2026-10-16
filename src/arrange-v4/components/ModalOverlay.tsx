@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { shouldDismissOnBackdrop } from '@/lib/modalOverlay';
+import { useModalRegistration } from './ModalPresenceProvider';
 
 interface ModalOverlayProps {
   /** Backdrop class from the owning dialog's CSS module. */
@@ -21,6 +22,12 @@ interface ModalOverlayProps {
  */
 export default function ModalOverlay({ className, onDismiss, children }: ModalOverlayProps) {
   const pressedOnBackdropRef = useRef(false);
+  const registerModal = useModalRegistration();
+
+  // Every dialog goes through this backdrop, so this is the one place that
+  // knows one is up — which is what lets pages hold background redraws back
+  // until the user is done.
+  useEffect(() => registerModal(), [registerModal]);
 
   return (
     <div

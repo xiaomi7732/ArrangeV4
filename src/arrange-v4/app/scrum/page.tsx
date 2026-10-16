@@ -42,6 +42,8 @@ import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useModalPresence } from '@/components/ModalPresenceProvider';
+import { shouldShowLoadingPlaceholder } from '@/lib/loadingPlaceholder';
 import { useDismissiblePanel } from '@/lib/hooks/useDismissiblePanel';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import SavingIndicator from '@/components/SavingIndicator';
@@ -175,6 +177,13 @@ function ScrumPageContent() {
 
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
+  const { anyOpen: anyModalOpen } = useModalPresence();
+  // The recovery panel replaces the entire page, taking any dialog over it --
+  // and the half-written item inside -- down with it. A token that expired
+  // while the user was away can wait until they have finished typing.
+  const showAuthRecovery = requiresAuthRecovery && !anyModalOpen;
+  // The user cannot be left guessing why saving fails while the panel waits.
+  const showAuthRecoveryNotice = requiresAuthRecovery && anyModalOpen;
 
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
@@ -394,6 +403,8 @@ function ScrumPageContent() {
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
+  const showLoadingPlaceholder = shouldShowLoadingPlaceholder({ loading, bookId, itemsBookId });
+
   useRefreshOnPageActivation(
     () => void fetchEvents({
       preserveError: true,
@@ -405,6 +416,7 @@ function ScrumPageContent() {
       !!bookId &&
       !loading &&
       !isSavingOrder,
+    { suspended: anyModalOpen },
   );
 
   const handleAddTodo = async (todoItem: TodoItem) => {
@@ -460,7 +472,7 @@ function ScrumPageContent() {
   };
 
   useSetTopBarActions(
-    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
+    isAuthenticated && !showAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -482,12 +494,12 @@ function ScrumPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : requiresAuthRecovery ? null : (
+    ) : showAuthRecovery ? null : (
       <>
         <SavingIndicator saving={saving} />
         <AddTodoItem
           onAddTodo={handleAddTodo}
-          disabled={loading}
+          disabled={showLoadingPlaceholder}
           defaultUrgent
           defaultImportant
           availableCategories={allCategories}
@@ -503,9 +515,10 @@ function ScrumPageContent() {
     ),
     [
       isAuthenticated,
-      requiresAuthRecovery,
+      showAuthRecovery,
       busy,
       loading,
+      showLoadingPlaceholder,
       isSavingOrder,
       saving,
       bookId,
@@ -856,7 +869,7 @@ function ScrumPageContent() {
     );
   }
 
-  if (!isAuthenticated || requiresAuthRecovery) {
+  if (!isAuthenticated || showAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -885,13 +898,18 @@ function ScrumPageContent() {
           />
         )}
 
-        {loading && (
+        {showAuthRecoveryNotice && (
+          <div className={styles.warning} role="status">
+            Your sign-in expired. Finish or close this item to sign in again.
+          </div>
+        )}
+        {showLoadingPlaceholder && (
           <div className={styles.loading}>
             <div className={styles.spinner}></div>
           </div>
         )}
 
-        {!loading && (
+        {!showLoadingPlaceholder && (
           <div className={styles.boardSection}>
             <TaskSearchBar
               query={query}
@@ -1048,7 +1066,7 @@ function ScrumPageContent() {
                         <span className={styles.laneCount}>{items.length}</span>
                         <AddTodoItem
                           onAddTodo={handleAddTodo}
-                          disabled={loading}
+                          disabled={showLoadingPlaceholder}
                           defaultStatus={status}
                           addLabel={`Add item to ${STATUS_LABELS[status]}`}
                           compact

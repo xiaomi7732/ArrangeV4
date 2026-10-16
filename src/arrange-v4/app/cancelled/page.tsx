@@ -14,6 +14,8 @@ import { isInteractiveAuthenticationRequiredError } from '@/lib/auth/errors';
 import { useBookId } from '@/lib/hooks/useBookId';
 import { useMoveTodo } from '@/lib/hooks/useMoveTodo';
 import { useRefreshOnPageActivation } from '@/lib/hooks/useRefreshOnPageActivation';
+import { useModalPresence } from '@/components/ModalPresenceProvider';
+import { shouldShowLoadingPlaceholder } from '@/lib/loadingPlaceholder';
 import { useSetTopBarActions } from '@/components/TopBarProvider';
 import SavingIndicator from '@/components/SavingIndicator';
 import { usePendingMutations } from '@/lib/hooks/usePendingMutations';
@@ -127,6 +129,13 @@ function CancelledPageContent() {
 
   const displayError = error || bookError;
   const requiresAuthRecovery = authRecoveryRequired || bookAuthRecoveryRequired;
+  const { anyOpen: anyModalOpen } = useModalPresence();
+  // The recovery panel replaces the entire page, taking any dialog over it --
+  // and the half-written item inside -- down with it. A token that expired
+  // while the user was away can wait until they have finished typing.
+  const showAuthRecovery = requiresAuthRecovery && !anyModalOpen;
+  // The user cannot be left guessing why saving fails while the panel waits.
+  const showAuthRecoveryNotice = requiresAuthRecovery && anyModalOpen;
 
   // Every item on this page is already cancelled, so the shared status filters
   // (which hide cancelled items by default) must not be applied here. This view
@@ -271,6 +280,8 @@ function CancelledPageContent() {
     }
   }, [isAuthenticated, busy, bookId, fetchEvents]);
 
+  const showLoadingPlaceholder = shouldShowLoadingPlaceholder({ loading, bookId, itemsBookId });
+
   useRefreshOnPageActivation(
     () => void fetchEvents({
       preserveError: true,
@@ -284,6 +295,7 @@ function CancelledPageContent() {
       !loading &&
       !deleting &&
       !showConfirm,
+    { suspended: anyModalOpen },
   );
 
   const handleDeleteSelected = () => {
@@ -316,7 +328,7 @@ function CancelledPageContent() {
   };
 
   useSetTopBarActions(
-    isAuthenticated && !requiresAuthRecovery && books.length > 1 ? (
+    isAuthenticated && !showAuthRecovery && books.length > 1 ? (
       <select
         className={styles.bookSwitcher}
         value={bookId || ''}
@@ -338,7 +350,7 @@ function CancelledPageContent() {
       >
         {busy ? 'Signing in...' : 'Sign In'}
       </button>
-    ) : requiresAuthRecovery ? null : (
+    ) : showAuthRecovery ? null : (
       <>
         <SavingIndicator saving={saving} />
         <button
@@ -349,7 +361,9 @@ function CancelledPageContent() {
           Delete ({deletableIds.length})
         </button>
         <button
-          onClick={() => void fetchEvents()}
+          // The list stays interactive during a read, so ticks made while it
+          // runs must survive it; ids that have since gone are dropped.
+          onClick={() => void fetchEvents({ preserveSelection: true })}
           disabled={loading}
           className={`${styles.button} ${styles.buttonSecondary}`}
         >
@@ -359,7 +373,7 @@ function CancelledPageContent() {
     ),
     [
       isAuthenticated,
-      requiresAuthRecovery,
+      showAuthRecovery,
       busy,
       loading,
       saving,
@@ -441,7 +455,7 @@ function CancelledPageContent() {
     );
   }
 
-  if (!isAuthenticated || requiresAuthRecovery) {
+  if (!isAuthenticated || showAuthRecovery) {
     return (
       <div className={styles.container}>
         <div className={styles.inner}>
@@ -470,13 +484,18 @@ function CancelledPageContent() {
           />
         )}
 
-        {loading && (
+        {showAuthRecoveryNotice && (
+          <div className={styles.warning} role="status">
+            Your sign-in expired. Finish or close this item to sign in again.
+          </div>
+        )}
+        {showLoadingPlaceholder && (
           <div className={styles.loading}>
             <div className={styles.spinner}></div>
           </div>
         )}
 
-        {!loading && (
+        {!showLoadingPlaceholder && (
           <div className={styles.card}>
             {cancelledItems.length === 0 ? (
               <div className={styles.empty}>

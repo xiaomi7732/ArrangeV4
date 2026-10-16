@@ -113,6 +113,14 @@ User actions immediately update local state, then sync to the backend in the bac
 
 Because the UI runs ahead of the backend, every view that writes also counts its in-flight writes through `lib/hooks/usePendingMutations.ts` and shows the shared `SavingIndicator` in the top bar once they have been outstanding for `SAVING_VISIBLE_AFTER_MS` (a fast save must not flash a spinner). The hook's `countRef` is the same synchronous count those pages already read when deciding whether to defer a refetch, so there is one source of truth. The indicator never blocks: it reports the queue, it does not gate it, and no view should grow a second "saving" affordance beside it.
 
+### Background refresh must not disturb the user
+
+A refresh the user did not ask for — the one `useRefreshOnPageActivation` fires when a tab is focused again — must leave whatever they are part-way through alone. Two rules keep that true, and a new view needs both:
+
+- **Never unmount the content to show a loading state.** `lib/loadingPlaceholder.ts` decides: the spinner stands in only when there is nothing to show yet (`loading && itemsBookId !== bookId`), so a first load or a book switch gets it and a background refresh does not. Swapping a mounted board for a spinner takes every dialog open over it down too, and an `AddTodoItem` dialog that unmounts loses the task being written — the bug behind #137. For the same reason the add buttons are disabled by that placeholder flag, not by `loading`.
+- **Hold the refresh while a dialog is up.** `ModalOverlay` registers with `components/ModalPresenceProvider.tsx`, so any page can ask `useModalPresence()` whether a dialog is on screen and pass `{ suspended: anyModalOpen }` to `useRefreshOnPageActivation`. A refresh that arrives then is remembered, not dropped, and runs once the dialog closes (and the page is visible again). The whole decision lives in the pure `reduceActivationRefresh` so it can be tested without a DOM.
+- **Hold the full-page auth recovery panel too.** A refresh already in flight cannot be recalled, and a silent read that comes back needing interactive sign-in would otherwise swap the entire page for `AuthRecoveryPanel` — unmounting the dialog and the draft in it. Each view therefore renders on `showAuthRecovery` (`requiresAuthRecovery && !anyModalOpen`) while still *disabling* refreshes on `requiresAuthRecovery`: the panel waits for the dialog to close.
+
 ## Key modules (src/arrange-v4/lib/)
 
 | Path | Responsibility |
@@ -149,7 +157,8 @@ Because the UI runs ahead of the backend, every view that writes also counts its
 | `dateUtils.ts` | Local-calendar-date comparisons for Today filters and relative day labels |
 | `checklist.ts` | Parse/format/toggle the stored `-[]` / `-[x]` checklist entries |
 | `bookStorage.ts` | `localStorage`/`sessionStorage` helpers for last-book-id, sweep state, and anchor-scan progress |
-| `hooks/useRefreshOnPageActivation.ts` | Refresh when a visible tab resumes or regains focus |
+| `hooks/useRefreshOnPageActivation.ts` | Refresh when a visible tab resumes or regains focus, deferred while a dialog is open |
+| `loadingPlaceholder.ts` | Whether a view may replace its content with a spinner (first load only, never a background refresh) |
 | `hooks/usePendingMutations.ts` | Counts in-flight writes and decides when to say "Saving…" |
 
 ### Views
