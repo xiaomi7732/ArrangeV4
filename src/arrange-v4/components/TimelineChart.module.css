@@ -214,7 +214,7 @@
 
 /* Urgency reads as the cards' urgent badge red, not a palette of its own. */
 .barUrgent {
-  box-shadow: 0 0 0 2px var(--urgent-fg);
+  box-shadow: 0 0 0 1px var(--status-on-solid), 0 0 0 3px var(--urgent-fg);
 }
 
 /*
