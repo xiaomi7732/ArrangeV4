@@ -200,16 +200,20 @@
   min-width: 0;
 }
 
-.clippedStart {
+.bar.clippedStart {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
   border-left-style: dashed;
+  border-left-width: 2px;
+  border-left-color: var(--status-on-solid);
 }
 
-.clippedEnd {
+.bar.clippedEnd {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
   border-right-style: dashed;
+  border-right-width: 2px;
+  border-right-color: var(--status-on-solid);
 }
 
 /* Urgency reads as the cards' urgent badge red, not a palette of its own. */
