@@ -9,6 +9,29 @@
   --timeline-handle-width: 10px;
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 8px 16px;
+  padding: 8px 0;
+  list-style: none;
+  color: #374151;
+  font-size: 0.8rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendSwatch {
+  width: 16px;
+  height: 12px;
+  border-radius: 3px;
+}
+
 /* Axis */
 .axis {
   /*
@@ -252,37 +275,37 @@
 }
 
 /*
- * Bars wear the same tinted fill, border and text colour as the status badges
- * on the boards, rather than a saturated block that belongs to no other view.
+ * Use the palette's saturated foreground tones as fills so even short bars
+ * remain distinguishable, with the same hues as status badges on the boards.
  */
 .status_new {
-  background-color: var(--status-new-bg);
-  border-color: var(--status-new-border);
-  color: var(--status-new-fg);
+  background-color: var(--status-new-fg);
+  border-color: var(--status-new-fg);
+  color: var(--status-on-solid);
 }
 
 .status_inProgress {
-  background-color: var(--status-inProgress-bg);
-  border-color: var(--status-inProgress-border);
-  color: var(--status-inProgress-fg);
+  background-color: var(--status-inProgress-fg);
+  border-color: var(--status-inProgress-fg);
+  color: var(--status-on-solid);
 }
 
 .status_blocked {
-  background-color: var(--status-blocked-bg);
-  border-color: var(--status-blocked-border);
-  color: var(--status-blocked-fg);
+  background-color: var(--status-blocked-fg);
+  border-color: var(--status-blocked-fg);
+  color: var(--status-on-solid);
 }
 
 .status_finished {
-  background-color: var(--status-finished-bg);
-  border-color: var(--status-finished-border);
-  color: var(--status-finished-fg);
+  background-color: var(--status-finished-fg);
+  border-color: var(--status-finished-fg);
+  color: var(--status-on-solid);
 }
 
 .status_cancelled {
-  background-color: var(--status-cancelled-bg);
-  border-color: var(--status-cancelled-border);
-  color: var(--status-cancelled-fg);
+  background-color: var(--status-cancelled-fg);
+  border-color: var(--status-cancelled-fg);
+  color: var(--status-on-solid);
 }
 
 .empty {

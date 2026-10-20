@@ -17,11 +17,8 @@ import { TodoItem, TodoItemWithId, TodoStatus, ALL_STATUSES, STATUS_LABELS } fro
 import type { AuthInteraction, StoreOperationOptions } from '@/lib/store/types';
 import { formatRelativeDate } from '@/lib/dateUtils';
 import {
-  FILTER_MODE_LABELS,
-  FILTER_MODES,
   filterTasks,
   isCategoryFilterActive,
-  isStatusFilterActive,
 } from '@/lib/search/taskQuery';
 import { summarizeHiddenByStatus } from '@/lib/search/hiddenSummary';
 import { useTaskQuery } from '@/lib/search/useTaskQuery';
@@ -327,16 +324,9 @@ function MatrixPageContent() {
   // explain or undo it.
   const taskQuery = useTaskQuery(bookId, { presetScope: 'matrix' });
   const { query } = taskQuery;
-  const [showFilters, setShowFilters] = useState(false);
   const [showTags, setShowTags] = useState(true);
-  const statusPanelId = useId();
   const tagsPanelId = useId();
-  const closeStatusPanel = useCallback(() => setShowFilters(false), []);
   const closeTagsPanel = useCallback(() => setShowTags(false), []);
-  const statusPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
-    showFilters,
-    closeStatusPanel,
-  );
   const tagsPanel = useDismissiblePanel<HTMLDivElement, HTMLButtonElement>(
     showTags,
     closeTagsPanel,
@@ -1301,6 +1291,7 @@ function MatrixPageContent() {
                 showPriorityFilters={taskQuery.supportsPriorityFilters}
                 onToggleUrgentOnly={taskQuery.toggleUrgentOnly}
                 onToggleImportantOnly={taskQuery.toggleImportantOnly}
+                onSetStatusFilter={taskQuery.setStatusFilter}
               />
               <div className={styles.matrixHeader}>
                 <span className={styles.filterCount} />
@@ -1328,47 +1319,8 @@ function MatrixPageContent() {
                       </button>
                     </div>
                   )}
-                  <button
-                    ref={statusPanel.triggerRef}
-                    className={`${styles.button} ${styles.buttonSecondary} ${styles.filterToggle}`}
-                    onClick={() => setShowFilters(prev => !prev)}
-                    aria-expanded={showFilters}
-                    aria-haspopup="true"
-                    aria-controls={statusPanelId}
-                  >
-                    {showFilters ? '▲ Status' : '▼ Status'}{isStatusFilterActive(query) ? ' ●' : ''}
-                  </button>
                 </div>
               </div>
-              {showFilters && (
-                <div className={styles.filterBar} id={statusPanelId} ref={statusPanel.panelRef}>
-                  {ALL_STATUSES.map(status => (
-                    <div key={status} className={styles.filterGroup}>
-                      <span className={`${styles.filterLabel} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>
-                      <div className={styles.filterModes}>
-                        {FILTER_MODES.map(mode => (
-                          <button
-                            key={mode}
-                            className={`${styles.filterMode} ${query.statusFilters[status] === mode ? styles.filterModeActive : ''}`}
-                            onClick={() => taskQuery.setStatusFilter(status, mode)}
-                            aria-pressed={query.statusFilters[status] === mode}
-                          >
-                            {FILTER_MODE_LABELS[mode]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {isStatusFilterActive(query) && (
-                    <button
-                      className={`${styles.filterMode} ${styles.categoryFilterClear}`}
-                      onClick={taskQuery.resetStatusFilters}
-                    >
-                      ✕ Reset
-                    </button>
-                  )}
-                </div>
-              )}
               {showTags && allCategories.length > 0 && (
                 <div className={styles.tagBar} id={tagsPanelId} ref={tagsPanel.panelRef}>
                   <div className={styles.categoryFilterChips}>
@@ -1512,4 +1464,3 @@ function MatrixPageContent() {
     </div>
   );
 }
-

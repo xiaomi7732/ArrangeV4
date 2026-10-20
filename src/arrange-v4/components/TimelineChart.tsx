@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TodoItemWithId } from '@/lib/store/types';
+import { ALL_STATUSES, STATUS_LABELS, type TodoItemWithId } from '@/lib/store/types';
 import {
   type TimelineWindow,
   buildTimeAxisTicks,
@@ -633,6 +633,14 @@ export default function TimelineChart({
 
   return (
     <div className={styles.chart}>
+      <ul className={styles.legend} aria-label="Task status colours">
+        {ALL_STATUSES.map(status => (
+          <li key={status}>
+            <span className={`${styles.legendSwatch} ${styles[`status_${status}`]}`} aria-hidden="true" />
+            {STATUS_LABELS[status]}
+          </li>
+        ))}
+      </ul>
       <div
         ref={trackRef}
         className={styles.surface}

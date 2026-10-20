@@ -7,6 +7,8 @@ description: Automates the PR review cycle — requests Copilot review, waits fo
 
 This skill automates the iterative PR review cycle with the Copilot pull-request reviewer. It requests a review, waits for comments, fixes valid issues, replies with explanations, resolves threads, and repeats until the PR is clean.
 
+When invoked by `fix-all-issues`, retain its issue inventory and two-model review gate. Any repository-content changes made here must pass that gate again before pushing. A request to create or improve skills does not itself request execution of a PR review loop.
+
 ### Procedure
 
 #### Step 1: Identify the PR
@@ -42,6 +44,8 @@ query {
 ```
 
 - Filter for threads where `isResolved == false`.
+- Paginate `reviewThreads` using `pageInfo { hasNextPage endCursor }` and an `after` cursor; 50 threads is not a completeness limit. Fetch all comment pages for each unresolved thread, not just its first comment. Inspect top-level review bodies and PR comments for actionable feedback too.
+- Do not silently ignore unresolved outdated threads: verify whether the current code addresses them.
 - If **unresolved threads exist** → skip to Step 5 (evaluate and fix them).
 - If **all threads are resolved** (or no threads at all) → proceed to Step 3.
 
@@ -52,7 +56,7 @@ Request a review from the Copilot pull-request reviewer:
 gh pr edit <PR_NUMBER> --add-reviewer "copilot-pull-request-reviewer"
 ```
 
-If that fails (not a collaborator), try the GraphQL approach or inform the user that Copilot reviewer needs to be enabled for the repository.
+Before the request, record the current head SHA, request time, and existing matching Copilot workflow run IDs and attempt numbers. If the request fails, inspect the error and supported reviewer/API configuration. Report unavailable Copilot access as a blocker rather than inventing an unsupported GraphQL mutation or claiming a review was requested.
 
 #### Step 4: Wait for Review Results
 
@@ -68,7 +72,8 @@ gh pr view <PR_NUMBER> --json headRefOid --jq '.headRefOid'
 Then poll the workflow runs for that SHA using the GitHub Actions MCP tools:
 - Use `github-mcp-server-actions_list` with `method: "list_workflow_runs"` to find runs matching the PR's head SHA.
 - Look for a run with `name: "Copilot code review"` and the matching `head_sha`.
-- Wait until `status === "completed"`.
+- Paginate workflow runs. Require a new run associated with this request, or an existing run whose attempt number has increased; an older completed review on the same SHA does not count.
+- Wait until `status === "completed"` and require a successful conclusion. Failed, cancelled, skipped, and timed-out runs are not clean reviews.
 
 Alternatively, poll via CLI:
 ```bash
@@ -79,9 +84,9 @@ gh api repos/<OWNER>/<REPO>/actions/runs \
 **Polling strategy:**
 1. After requesting the review, wait **10 seconds** for the workflow to be triggered.
 2. Poll every **30 seconds** checking for the "Copilot code review" workflow run matching the PR's head SHA.
-3. Wait until the run's `status` is `"completed"`.
+3. Wait until the run's `status` is `"completed"` with a successful conclusion.
 4. Once completed, query review threads for unresolved comments (same as Step 2).
-5. Timeout after **15 minutes** if the workflow doesn't complete.
+5. Timeout after **15 minutes** if no corresponding successful workflow completes. Report the blocker, preserving the PR and work completed; do not count the timeout as a clean round.
 
 **Important:** Do NOT rely on counting `copilot-pull-request-reviewer[bot]` reviews — the bot posts an initial summary comment almost immediately (before finishing the actual code review), which causes false positives. Always wait for the Actions workflow to complete.
 
@@ -101,7 +106,7 @@ For each unresolved review comment:
 For each valid issue:
 
 1. Make the code fix using edit tools.
-2. Run the project's build and lint to verify no regressions.
+2. Run relevant tests plus the project's required build and lint to verify no regressions. If this loop is part of `fix-all-issues`, also obtain its two consecutive clean dual-model review rounds on the changed candidate before pushing.
 3. Stage and commit with a descriptive message referencing the fix:
    ```
    fix: <brief description of what was fixed>
@@ -119,11 +124,19 @@ For each addressed comment, reply with how it was resolved and resolve the threa
 ```bash
 gh api graphql -f query='
 mutation {
-  reply: addPullRequestReviewThreadReply(input: {
+  addPullRequestReviewThreadReply(input: {
     pullRequestReviewThreadId: "<THREAD_ID>",
     body: "<EXPLANATION>"
   }) { comment { id } }
-  resolve: resolveReviewThread(input: {
+}'
+```
+
+After checking that the reply succeeded:
+
+```bash
+gh api graphql -f query='
+mutation {
+  resolveReviewThread(input: {
     threadId: "<THREAD_ID>"
   }) { thread { isResolved } }
 }'
@@ -134,7 +147,7 @@ Reply format guidelines:
 - Briefly describe what was changed and why.
 - For non-issues, explain why no code change is needed.
 
-**Batch multiple reply+resolve mutations into a single GraphQL call** for efficiency.
+Reply before resolving. Prefer separate requests so a failed reply cannot leave a thread resolved without its explanation. Batch independent replies when useful, check both HTTP and GraphQL errors, then resolve only threads whose replies succeeded.
 
 #### Step 8: Check for Remaining Issues
 
@@ -155,7 +168,9 @@ Then go back to **Step 4** to wait for the new review.
 
 #### Step 10: Completion
 
-When a review cycle produces **zero new unresolved comments**, the loop is complete.
+The loop is complete only after a newly requested Copilot review successfully finishes on the latest PR head, produces no remaining valid actionable feedback, and all conversations are addressed. An empty thread list before review completion or manually resolving threads is not sufficient.
+
+Check required CI results, mergeability, draft status, branch protection, and required approvals separately before saying the PR is ready for merge. A clean Copilot review is not a substitute for required human approval. Report pending checks or missing approvals explicitly and never merge automatically.
 
 Report to the user:
 - Total number of review rounds completed.
@@ -171,7 +186,7 @@ After the loop completes, post a summary comment on the PR for the record:
 gh pr comment <PR_NUMBER> --body "## PR Review Loop Summary
 
 - **N review rounds** completed
-- **M issues** raised across all rounds — all fixed with code changes:
+- **M findings** raised across all rounds, with fixes and evidence-based non-issue dispositions:
   - **Round 1** (X issues): <brief description of issues and fixes>
   - **Round 2** (Y issues): <brief description>
   - ...
@@ -193,13 +208,15 @@ This provides a permanent record of the review process on the PR itself.
 
 **Get unresolved review threads:**
 ```graphql
-query {
-  repository(owner: "$OWNER", name: "$REPO") {
+query($OWNER: String!, $REPO: String!, $PR: Int!, $CURSOR: String) {
+  repository(owner: $OWNER, name: $REPO) {
     pullRequest(number: $PR) {
-      reviewThreads(first: 50) {
+      reviewThreads(first: 50, after: $CURSOR) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id, isResolved, isOutdated
-          comments(first: 1) {
+          comments(first: 100) {
+            pageInfo { hasNextPage endCursor }
             nodes { body, path, line, author { login } }
           }
         }
@@ -209,13 +226,18 @@ query {
 }
 ```
 
-**Reply to thread and resolve:**
+**Reply to a thread, verify success, then resolve in a separate request:**
 ```graphql
 mutation {
   addPullRequestReviewThreadReply(input: {
     pullRequestReviewThreadId: "$THREAD_ID",
     body: "$REPLY"
   }) { comment { id } }
+}
+```
+
+```graphql
+mutation {
   resolveReviewThread(input: {
     threadId: "$THREAD_ID"
   }) { thread { isResolved } }
