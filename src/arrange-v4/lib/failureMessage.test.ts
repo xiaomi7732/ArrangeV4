@@ -24,4 +24,13 @@ describe('describeFailure', () => {
       'Could not load the board.',
     );
   });
+
+  it('safely reports non-Error rejections from dialog callbacks', () => {
+    for (const rejection of [null, undefined, 'network failure', 503]) {
+      assert.equal(
+        describeFailure('Failed to create TODO item.', rejection),
+        'Failed to create TODO item.',
+      );
+    }
+  });
 });
