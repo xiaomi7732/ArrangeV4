@@ -60,30 +60,29 @@ Before the request, record the current head SHA, request time, and existing matc
 
 #### Step 4: Wait for Review Results
 
-Instead of counting reviews (which can give false positives due to early summary comments), **poll the GitHub Actions workflow run** for the Copilot code review to reach `completed` status.
+Instead of counting reviews (which can give false positives due to early summary comments), **poll the GitHub Actions workflow run** for the Copilot code review to reach `completed` status. Discover the actual run name: GitHub currently uses **"Running Copilot Code Review"** in this repository; older runs or installations may use **"Copilot code review"**. Do not hard-code only the older name and falsely time out.
 
-**Strategy: Poll the "Copilot code review" workflow run status:**
+**Strategy: Poll the discovered Copilot review workflow run:**
 
 First, get the PR's head SHA:
 ```bash
 gh pr view <PR_NUMBER> --json headRefOid --jq '.headRefOid'
 ```
 
-Then poll the workflow runs for that SHA using the GitHub Actions MCP tools:
-- Use `github-mcp-server-actions_list` with `method: "list_workflow_runs"` to find runs matching the PR's head SHA.
-- Look for a run with `name: "Copilot code review"` and the matching `head_sha`.
+Use `gh api` to discover and poll runs for that SHA:
+- Inspect run names and identities for the matching head SHA, accepting the known Copilot review names above rather than unrelated CI jobs.
 - Paginate workflow runs. Require a new run associated with this request, or an existing run whose attempt number has increased; an older completed review on the same SHA does not count.
 - Wait until `status === "completed"` and require a successful conclusion. Failed, cancelled, skipped, and timed-out runs are not clean reviews.
 
-Alternatively, poll via CLI:
+For example, poll via CLI (adapt quoting and line continuation to the host shell):
 ```bash
-gh api repos/<OWNER>/<REPO>/actions/runs \
-  --jq '.workflow_runs[] | select(.name == "Copilot code review" and .head_sha == "<HEAD_SHA>") | .status'
+gh api --paginate "repos/<OWNER>/<REPO>/actions/runs?head_sha=<HEAD_SHA>&per_page=100" \
+  --jq '.workflow_runs[] | select(.name == "Running Copilot Code Review" or .name == "Copilot code review") | {id, name, head_sha, run_attempt, created_at, status, conclusion}'
 ```
 
 **Polling strategy:**
 1. After requesting the review, wait **10 seconds** for the workflow to be triggered.
-2. Poll every **30 seconds** checking for the "Copilot code review" workflow run matching the PR's head SHA.
+2. Poll every **30 seconds** checking for the discovered Copilot review workflow run matching the PR's head SHA and this request.
 3. Wait until the run's `status` is `"completed"` with a successful conclusion.
 4. Once completed, query review threads for unresolved comments (same as Step 2).
 5. Timeout after **15 minutes** if no corresponding successful workflow completes. Report the blocker, preserving the PR and work completed; do not count the timeout as a clean round.

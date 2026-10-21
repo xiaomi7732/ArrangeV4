@@ -105,7 +105,7 @@ Invoke the repository's `pr-review-loop` skill for the PR, following its comment
    ```text
    gh pr edit <PR_NUMBER> --add-reviewer "copilot-pull-request-reviewer"
    ```
-3. Wait for a **new** Copilot review workflow run associated with that request and head SHA, or a new attempt of an existing run with an increased attempt number. Paginate run discovery as needed. Never accept an older completed run for the same SHA as a new review.
+3. Wait for a **new** Copilot review workflow run associated with that request and head SHA, or a new attempt of an existing run with an increased attempt number. Paginate run discovery as needed. Discover the actual run identity: this repository currently uses "Running Copilot Code Review", not only the older "Copilot code review" name. Never accept an older completed run for the same SHA as a new review.
 4. Follow `pr-review-loop`'s bounded polling. A completed run must have a successful conclusion before its review counts. An early summary, an empty thread list before completion, a failed run, or merely requesting a reviewer is not proof of a clean review.
 5. If Copilot is unavailable, the request fails, no corresponding run can be verified, or the wait times out, report the exact blocker. Do not claim Copilot approved or invent a successful fallback.
 6. Evaluate findings, make surgical fixes, and run required checks. **Before pushing any changed candidate**, rerun the two-model gate until it again has two consecutive clear rounds.
