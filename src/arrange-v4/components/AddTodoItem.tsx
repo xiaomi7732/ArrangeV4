@@ -5,7 +5,6 @@ import { TodoItem, TodoStatus } from '@/lib/store/types';
 import { useModalDialog } from '@/lib/hooks/useModalDialog';
 import { useDiscardGuard } from '@/lib/hooks/useDiscardGuard';
 import { hasUnsavedChanges, type FormSnapshot } from '@/lib/unsavedChanges';
-import { describeFailure } from '@/lib/failureMessage';
 import {
   TODO_DIALOG_TABS,
   tabElementId,
@@ -204,7 +203,7 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
       resetForm();
       setIsOpen(false);
     } catch (err) {
-      setError(describeFailure('Failed to create TODO item.', err));
+      setError(err instanceof Error && err.message.trim() ? err.message : 'Failed to create TODO item.');
     } finally {
       setIsSubmitting(false);
     }
