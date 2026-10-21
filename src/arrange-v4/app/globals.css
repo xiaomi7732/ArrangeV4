@@ -33,6 +33,7 @@
   --status-cancelled-border: #a855f7;
   --status-cancelled-bg: #faf5ff;
   --status-cancelled-bg-strong: #f3e8ff;
+  --status-on-solid: #ffffff;
 
   /* The urgent badge's red, so urgency reads the same on a card and on a bar. */
   --urgent-fg: #991b1b;

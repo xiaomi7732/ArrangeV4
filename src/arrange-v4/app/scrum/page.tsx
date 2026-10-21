@@ -1068,6 +1068,8 @@ function ScrumPageContent() {
                           onAddTodo={handleAddTodo}
                           disabled={showLoadingPlaceholder}
                           defaultStatus={status}
+                          defaultUrgent
+                          defaultImportant
                           addLabel={`Add item to ${STATUS_LABELS[status]}`}
                           compact
                           availableCategories={allCategories}
@@ -1151,4 +1153,3 @@ export default function ScrumPage() {
     </Suspense>
   );
 }
-

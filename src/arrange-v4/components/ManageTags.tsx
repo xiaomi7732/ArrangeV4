@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { TodoItem } from '@/lib/store/types';
+import { describeFailure } from '@/lib/failureMessage';
 import ModalOverlay from './ModalOverlay';
 import styles from './ManageTags.module.css';
 
@@ -74,8 +75,8 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
     try {
       await onRenameTag(renamingTag, newTag);
       setRenamingTag(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to rename tag');
+    } catch (err) {
+      setError(describeFailure('Failed to rename tag.', err));
     } finally {
       setBusy(false);
     }
@@ -94,8 +95,8 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
     try {
       await onDeleteTag(deletingTag);
       setDeletingTag(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete tag');
+    } catch (err) {
+      setError(describeFailure('Failed to delete tag.', err));
     } finally {
       setBusy(false);
     }
@@ -116,8 +117,8 @@ export default function ManageTags({ tags, todoItems, onRenameTag, onDeleteTag, 
     try {
       await onMergeTag(mergingTag, mergeTarget);
       setMergingTag(null);
-    } catch (err: any) {
-      setError(err.message || 'Failed to merge tags');
+    } catch (err) {
+      setError(describeFailure('Failed to merge tags.', err));
     } finally {
       setBusy(false);
     }

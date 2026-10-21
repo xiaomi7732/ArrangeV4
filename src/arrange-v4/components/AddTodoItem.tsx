@@ -202,8 +202,8 @@ export default function AddTodoItem({ onAddTodo, disabled, defaultUrgent = false
       await onAddTodo(todoItem);
       resetForm();
       setIsOpen(false);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create TODO item');
+    } catch (err) {
+      setError(err instanceof Error && err.message.trim() ? err.message : 'Failed to create TODO item.');
     } finally {
       setIsSubmitting(false);
     }

@@ -22,6 +22,10 @@ export const FILTER_MODE_LABELS: Record<StatusFilterMode, string> = {
   hide: 'Hide',
 };
 
+export function nextStatusFilterMode(mode: StatusFilterMode): StatusFilterMode {
+  return FILTER_MODES[(FILTER_MODES.indexOf(mode) + 1) % FILTER_MODES.length];
+}
+
 export const DEFAULT_STATUS_FILTERS: Record<TodoStatus, StatusFilterMode> = {
   new: 'showAll',
   inProgress: 'showAll',

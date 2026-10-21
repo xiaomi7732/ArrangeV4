@@ -2,7 +2,8 @@
 
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { MAX_PRESET_NAME_LENGTH, type FilterPreset } from '@/lib/search/filterPresets';
-import type { TaskQuery } from '@/lib/search/taskQuery';
+import { FILTER_MODE_LABELS, nextStatusFilterMode, type StatusFilterMode, type TaskQuery } from '@/lib/search/taskQuery';
+import { ALL_STATUSES, STATUS_LABELS, type TodoStatus } from '@/lib/store/types';
 import styles from './TaskSearchBar.module.css';
 
 type PresetFormMode = 'save' | 'rename';
@@ -42,6 +43,8 @@ export interface TaskSearchBarProps {
   showPriorityFilters?: boolean;
   onToggleUrgentOnly?: () => void;
   onToggleImportantOnly?: () => void;
+  /** Inline status controls, including the board's existing Today mode. */
+  onSetStatusFilter?: (status: TodoStatus, mode: StatusFilterMode) => void;
   disabled?: boolean;
 }
 
@@ -67,6 +70,7 @@ export default function TaskSearchBar({
   showPriorityFilters = false,
   onToggleUrgentOnly,
   onToggleImportantOnly,
+  onSetStatusFilter,
   disabled = false,
 }: TaskSearchBarProps) {
   const [formMode, setFormMode] = useState<PresetFormMode | null>(null);
@@ -263,6 +267,26 @@ export default function TaskSearchBar({
       </div>
 
       <div className={styles.controlRow}>
+        {onSetStatusFilter && (
+          <div className={styles.priorityGroup} role="group" aria-label="Status filters">
+            {ALL_STATUSES.map(status => {
+              const mode = query.statusFilters[status];
+              const nextMode = nextStatusFilterMode(mode);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  className={`${styles.chip} ${mode !== 'hide' ? styles.chipActive : ''}`}
+                  title={`Show ${STATUS_LABELS[status]}: ${FILTER_MODE_LABELS[nextMode]} (cycles All, Today, Hide)`}
+                  onClick={() => onSetStatusFilter(status, nextMode)}
+                  disabled={disabled}
+                >
+                  {STATUS_LABELS[status]}: {FILTER_MODE_LABELS[mode]}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {showPriorityFilters && (
           <div className={styles.priorityGroup} role="group" aria-label="Priority filters">
             <button

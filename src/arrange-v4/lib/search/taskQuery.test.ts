@@ -9,6 +9,7 @@ import {
   isStatusFilterActive,
   checklistText,
   matchesSearchTerms,
+  nextStatusFilterMode,
   searchTerms,
   SHOW_ALL_STATUS_FILTERS,
   taskQueriesEqual,
@@ -30,6 +31,31 @@ function isoAt(daysFromNow: number, hour = 9): string {
   date.setHours(hour, 0, 0, 0);
   return date.toISOString();
 }
+
+describe('nextStatusFilterMode', () => {
+  it('cycles through All, Today, and Hide without losing Today mode', () => {
+    assert.equal(nextStatusFilterMode('showAll'), 'todayOnly');
+    assert.equal(nextStatusFilterMode('todayOnly'), 'hide');
+    assert.equal(nextStatusFilterMode('hide'), 'showAll');
+  });
+
+  it('keeps each status independent and preserves other query criteria', () => {
+    const initial = query({ text: 'release', categories: ['Work'] });
+    const updated = {
+      ...initial,
+      statusFilters: {
+        ...initial.statusFilters,
+        finished: nextStatusFilterMode(initial.statusFilters.finished),
+      },
+    };
+    assert.equal(updated.statusFilters.finished, 'hide');
+    assert.equal(updated.statusFilters.new, 'showAll');
+    assert.equal(updated.statusFilters.cancelled, 'hide');
+    assert.equal(updated.text, 'release');
+    assert.deepEqual(updated.categories, ['Work']);
+    assert.equal(initial.statusFilters.finished, 'todayOnly');
+  });
+});
 
 describe('searchTerms', () => {
   it('splits on whitespace and lowercases', () => {
